@@ -1,0 +1,19 @@
+{
+  "name": "sustain-dashboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "dev:clean": "rm -rf node_modules/.vite && vite --force",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.105.4",
+    "xlsx-js-style": "^1.2.0"
+  }
+}

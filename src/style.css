@@ -1,0 +1,375 @@
+/* Restored stable baseline style from previous local build */
+@import url("../dist/assets/index-C-lJTlsV.css");
+
+/* ═══════════════════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════════════════ */
+#dashboard .dash-top {
+  height: 52px;
+  padding: 0 18px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.05) inset,
+    0 8px 24px rgba(26, 8, 8, 0.24);
+}
+#dashboard .dash-logo          { gap: 10px; }
+#dashboard .dash-logo-name     { font-size: 13px; letter-spacing: 0.25px; }
+#dashboard .dash-user-name     { color: rgba(255,255,255,0.62); }
+#dashboard .user-avatar        { width: 30px; height: 30px; font-size: 11px; border-color: rgba(255,255,255,0.28); }
+
+/* ═══════════════════════════════════════════════════════════════
+   SIDEBAR SHELL
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar.sidebar {
+  display: flex;
+  flex-direction: column;
+  /* NEVER use align-items here — it breaks expanded layout */
+  align-items: stretch;
+  flex-shrink: 0;
+  width: 56px;
+  min-width: 56px;
+  overflow: hidden;
+  background: #f7efef;
+  border-right: 1px solid rgba(74,28,28,0.10);
+
+  --sb-dur: 300ms;
+  --sb-ease: cubic-bezier(0.22, 0.92, 0.26, 1);
+  transition: width var(--sb-dur) var(--sb-ease), box-shadow 200ms ease;
+  will-change: width;
+}
+
+#mainSidebar.sidebar.expanded {
+  width: 240px;
+  min-width: 240px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  box-shadow: 6px 0 20px rgba(74,28,28,0.08);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOGGLE BUTTON
+   Always top-left; align-self:flex-start keeps it pinned
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar .sidebar-toggle {
+  /* take it out of the stretch flow */
+  align-self: center;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  margin: 10px auto 6px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  cursor: pointer;
+  color: #9f8c8c;
+  transition: background 150ms ease, color 150ms ease;
+}
+/* In expanded mode, push it left so it aligns with menu items */
+#mainSidebar.sidebar.expanded .sidebar-toggle {
+  align-self: flex-start;
+  margin-left: 10px;
+}
+#mainSidebar .sidebar-toggle:hover         { background: rgba(74,28,28,0.08); color: #4a1c1c; }
+#mainSidebar .sidebar-toggle:focus-visible { outline: 2px solid rgba(139,26,26,0.40); outline-offset: 2px; }
+#mainSidebar .sidebar-toggle svg {
+  width: 16px; height: 16px;
+  stroke: currentColor; stroke-width: 1.9; stroke-linecap: round; fill: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SECTION LABEL
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar .sidebar-section {
+  padding: 12px 16px 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.7px;
+  text-transform: uppercase;
+  color: #b89898;
+  white-space: nowrap;
+  overflow: hidden;
+  /* hide when collapsed via height+opacity */
+  max-height: 40px;
+  opacity: 1;
+  transition: max-height var(--sb-dur) var(--sb-ease), opacity 160ms ease, padding 160ms ease;
+}
+#mainSidebar.sidebar:not(.expanded) .sidebar-section {
+  max-height: 0;
+  opacity: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  pointer-events: none;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAV ICON — 36×36 container, 15×15 SVG
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar .nav-icon {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+}
+#mainSidebar .nav-icon svg {
+  width: 15px; height: 15px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  fill: none;
+  display: block;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   NAV ITEM & GROUP HEADER
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar .nav-item,
+#mainSidebar .nav-group-header {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 40px;
+  padding: 0 10px 0 6px;
+  margin: 1px 8px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #876f6f;
+  text-decoration: none;
+  /* ensure row fills full width (sidebar is align-items:stretch) */
+  width: auto;
+  transition: background 150ms ease, color 150ms ease;
+}
+#mainSidebar .nav-item:hover,
+#mainSidebar .nav-group-header:hover         { background: rgba(74,28,28,0.08); color: #4a1c1c; }
+#mainSidebar .nav-item:focus-visible,
+#mainSidebar .nav-group-header:focus-visible { outline: 2px solid rgba(139,26,26,0.40); outline-offset: -2px; }
+
+/* Active */
+#mainSidebar .nav-item.active {
+  background: rgba(139,26,26,0.09);
+  color: #8b1a1a;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 #8b1a1a;
+}
+#mainSidebar .nav-item.active .nav-icon { background: rgba(139,26,26,0.08); }
+
+/* ── Label ───────────────────────────────────────────────────── */
+#mainSidebar .nav-label {
+  flex: 1 1 0%;
+  min-width: 0;
+  padding-left: 8px;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Chevron ─────────────────────────────────────────────────── */
+#mainSidebar .nav-group-chevron {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+  padding-left: 6px;
+  transition: rotate 220ms ease;
+}
+#mainSidebar .nav-group-chevron svg {
+  width: 13px; height: 13px;
+  stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; fill: none;
+}
+#mainSidebar .nav-group.open > .nav-group-header .nav-group-chevron { rotate: 180deg; }
+
+/* ═══════════════════════════════════════════════════════════════
+   COLLAPSED STATE
+   Override to center items horizontally; use explicit pixel sizes
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Items become 44×44 pills centered in 56px rail */
+#mainSidebar.sidebar:not(.expanded) .nav-item,
+#mainSidebar.sidebar:not(.expanded) .nav-group-header {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  /* center in the 56px-wide sidebar */
+  margin: 2px auto;
+  padding: 0;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+/* nav-group must also center its header */
+#mainSidebar.sidebar:not(.expanded) .nav-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Hide labels and chevron entirely */
+#mainSidebar.sidebar:not(.expanded) .nav-label,
+#mainSidebar.sidebar:not(.expanded) .nav-group-chevron { display: none; }
+
+/* Hide children */
+#mainSidebar.sidebar:not(.expanded) .nav-group-children { display: none !important; }
+
+/* Active ring (no left-border — would look off on pill) */
+#mainSidebar.sidebar:not(.expanded) .nav-item.active {
+  box-shadow: 0 0 0 2px rgba(139,26,26,0.22), 0 2px 8px rgba(74,28,28,0.10);
+}
+#mainSidebar.sidebar:not(.expanded) .nav-item.active .nav-icon {
+  background: rgba(139,26,26,0.09);
+  border-radius: 10px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   GROUP CHILDREN — expanded only
+   Visual indent via padding-left; no margin so label has full width
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar.sidebar.expanded .nav-group-children .nav-item {
+  padding-left: 16px;   /* shifts icon right for hierarchy feel */
+  margin-left: 0;
+  margin-right: 8px;
+}
+#mainSidebar.sidebar.expanded .nav-group-children .nav-item .nav-label {
+  font-size: 12.5px;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   TOOLTIP — collapsed only, fixed position escapes overflow:hidden
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar.sidebar:not(.expanded) [data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: fixed;
+  left: 68px;
+  margin-top: -10px;
+  background: #2a0e0e;
+  color: #f5eeee;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease 60ms;
+  z-index: 9999;
+}
+#mainSidebar.sidebar:not(.expanded) [data-tooltip]:hover::after { opacity: 1; }
+#mainSidebar.sidebar.expanded [data-tooltip]::after             { display: none; }
+
+/* ═══════════════════════════════════════════════════════════════
+   SIGN OUT — pinned to bottom
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar .sidebar-signout {
+  margin-top: auto;
+  flex-shrink: 0;
+  border-top: 1px solid rgba(74,28,28,0.08);
+  padding: 6px 0 10px;
+  /* stretch to full width so button fills properly */
+  align-self: stretch;
+  display: flex;
+  justify-content: center;
+}
+
+/* Expanded: full-width button matching nav-item style */
+#mainSidebar .sidebar-signout-btn {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-height: 40px;
+  padding: 0 10px 0 6px;
+  margin: 0 8px;
+  width: calc(100% - 16px);
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #9f8080;
+  font-size: 13px;
+  text-align: left;
+  transition: background 150ms ease, color 150ms ease;
+}
+#mainSidebar .sidebar-signout-btn .nav-label { padding-left: 8px; white-space: nowrap; }
+#mainSidebar .sidebar-signout-btn:hover         { background: rgba(139,26,26,0.09); color: #8b1a1a; }
+#mainSidebar .sidebar-signout-btn:focus-visible { outline: 2px solid rgba(139,26,26,0.40); outline-offset: -2px; }
+
+/* Collapsed: 44×44 pill */
+#mainSidebar.sidebar:not(.expanded) .sidebar-signout-btn {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  margin: 0;
+  justify-content: center;
+  border-radius: 12px;
+}
+#mainSidebar.sidebar:not(.expanded) .sidebar-signout-btn .nav-label { display: none; }
+
+/* Sign Out tooltip */
+#mainSidebar.sidebar:not(.expanded) #btn-logout::after {
+  content: "Sign Out";
+  position: fixed;
+  left: 68px;
+  margin-top: -10px;
+  background: #2a0e0e;
+  color: #f5eeee;
+  font-size: 11.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  padding: 5px 10px;
+  border-radius: 6px;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.22);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 120ms ease 60ms;
+  z-index: 9999;
+}
+#mainSidebar.sidebar:not(.expanded) #btn-logout:hover::after { opacity: 1; }
+
+/* ═══════════════════════════════════════════════════════════════
+   EXPANDED — staggered item reveal
+   ═══════════════════════════════════════════════════════════════ */
+#mainSidebar.sidebar.expanded .nav-item,
+#mainSidebar.sidebar.expanded .nav-group-header {
+  animation: sbIn 260ms var(--sb-ease, ease) both;
+}
+#mainSidebar.sidebar.expanded .nav-item:nth-of-type(1) { animation-delay: 16ms; }
+#mainSidebar.sidebar.expanded .nav-item:nth-of-type(2) { animation-delay: 32ms; }
+#mainSidebar.sidebar.expanded .nav-item:nth-of-type(3) { animation-delay: 48ms; }
+#mainSidebar.sidebar.expanded .nav-item:nth-of-type(4) { animation-delay: 64ms; }
+#mainSidebar.sidebar.expanded .nav-item:nth-of-type(5) { animation-delay: 80ms; }
+
+@keyframes sbIn {
+  from { opacity: 0.5; transform: translateX(-4px); }
+  to   { opacity: 1;   transform: translateX(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ═══════════════════════════════════════════════════════════════ */
+@media (prefers-reduced-motion: reduce) {
+  #mainSidebar.sidebar,
+  #mainSidebar .sidebar-section,
+  #mainSidebar .nav-label,
+  #mainSidebar .nav-group-chevron,
+  #mainSidebar .nav-item,
+  #mainSidebar .nav-group-header,
+  #mainSidebar .sidebar-signout-btn,
+  #mainSidebar .sidebar-toggle {
+    transition: none !important;
+    animation: none !important;
+  }
+}

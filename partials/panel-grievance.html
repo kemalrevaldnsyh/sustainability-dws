@@ -1,0 +1,53 @@
+      <!-- ── GRIEVANCE PANEL ── -->
+      <div class="panel" id="panel-grievance">
+        <div class="breadcrumb">Dashboard <span>/ Grievance Monitoring</span></div>
+        <div class="page-header">
+          <h1>Grievance Monitoring</h1>
+          <p>Track and manage supply chain grievances and resolutions</p>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card"><div class="stat-card-num" id="grv-stat-total">—</div><div class="stat-card-label">Total</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="grv-stat-open">—</div><div class="stat-card-label">Open</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="grv-stat-closed">—</div><div class="stat-card-label">Closed</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="grv-stat-high">—</div><div class="stat-card-label">High Risk</div></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <h3>Grievance Registry</h3>
+            <div class="table-actions">
+              <button class="btn-sm btn-outline" id="btn-export-grv">Export CSV</button>
+              <button class="btn-sm btn-filled" id="btn-add-grv">+ Add Grievance</button>
+            </div>
+          </div>
+          <div class="search-bar">
+            <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg></span>
+            <input type="text" id="grvSearch" placeholder="Search grievance ID, subject, category..." />
+            <button class="search-clear" id="grvSearchClear">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="grv-loading" style="padding:40px;text-align:center;color:#9C8A8A;font-size:14px;">Loading data...</div>
+          <div style="overflow-x:auto;">
+            <table id="grvTable" style="display:none;">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Date</th>
+                  <th>Category</th>
+                  <th>Subject</th>
+                  <th>Group</th>
+                  <th>Risk</th>
+                  <th>Status</th>
+                  <th>Date Closed</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="grvTableBody"></tbody>
+            </table>
+          </div>
+          <div id="grv-error" style="display:none;padding:32px;text-align:center;color:#c0392b;font-size:14px;"></div>
+        </div>
+      </div>
+      </div>

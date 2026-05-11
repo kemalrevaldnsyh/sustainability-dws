@@ -1,0 +1,383 @@
+<!-- ── TRACEABILITY SCREENING MODALS ─────────────────── -->
+
+<!-- Modal 1: Type Selector -->
+<div id="tml-type-overlay" style="display:none;position:fixed;inset:0;z-index:999;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;width:480px;max-width:94vw;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Start Screening</div>
+      <button onclick="document.getElementById('tml-type-overlay').style.display='none'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div style="font-size:13px;color:#9C8080;margin-bottom:24px;">Pilih jenis screening yang akan dilakukan</div>
+    <div style="display:flex;flex-direction:column;gap:12px;margin-bottom:24px;">
+      <label id="type-card-trace" onclick="window._tmlScreeningType='traceability';window.tmlSelectTypeCard('trace')" style="display:flex;align-items:flex-start;gap:14px;cursor:pointer;padding:16px 18px;border-radius:10px;border:1.5px solid rgba(74,28,28,0.15);transition:all 0.18s;position:relative;">
+        <div style="width:38px;height:38px;border-radius:8px;background:rgba(139,26,26,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B1A1A" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><polyline points="15 11 11 11 11 7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#1A0A0A;margin-bottom:3px;">Traceability</div>
+          <div style="font-size:12px;color:#9C8080;line-height:1.5;">Screening berdasarkan <strong>Mill Name</strong> — koordinat, kawasan hutan, gambut, moratorium, deforestasi</div>
+        </div>
+        <div id="type-check-trace" style="display:none;position:absolute;top:12px;right:14px;width:20px;height:20px;border-radius:50%;background:#8B1A1A;display:flex;align-items:center;justify-content:center;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </label>
+      <label id="type-card-ffb" onclick="window._tmlScreeningType='ffb';window.tmlSelectTypeCard('ffb')" style="display:flex;align-items:flex-start;gap:14px;cursor:pointer;padding:16px 18px;border-radius:10px;border:1.5px solid rgba(74,28,28,0.15);transition:all 0.18s;position:relative;">
+        <div style="width:38px;height:38px;border-radius:8px;background:rgba(139,26,26,0.08);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8B1A1A" stroke-width="2" stroke-linecap="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:600;color:#1A0A0A;margin-bottom:3px;">FFB Supplier List</div>
+          <div style="font-size:12px;color:#9C8080;line-height:1.5;">Screening berdasarkan <strong>Supplier Name</strong> — koordinat, kawasan hutan, gambut, moratorium, jarak ke mill, deforestasi, burn area, village risk</div>
+        </div>
+        <div id="type-check-ffb" style="display:none;position:absolute;top:12px;right:14px;width:20px;height:20px;border-radius:50%;background:#8B1A1A;display:flex;align-items:center;justify-content:center;">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+        </div>
+      </label>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="document.getElementById('tml-type-overlay').style.display='none'" style="padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);background:white;color:#5F4A48;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;">Batal</button>
+      <button onclick="window.tmlTypeNext()" style="padding:9px 20px;border-radius:8px;border:none;background:#8B1A1A;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Lanjut →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 1b: Pick Mill (Traceability) -->
+<div id="tml-pick-overlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;width:460px;max-width:94vw;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Screening Traceability</div>
+        <div style="font-size:13px;color:#9C8080;margin-top:3px;">Pilih Mill yang akan di-screening. Draft/Submitted akan ditandai dan bisa dibuka kembali.</div>
+      </div>
+      <button onclick="document.getElementById('tml-pick-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="tml-mill-list" style="max-height:240px;overflow-y:auto;border:1.5px solid rgba(74,28,28,0.12);border-radius:10px;margin-bottom:20px;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="document.getElementById('tml-pick-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);background:white;color:#5F4A48;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;">← Kembali</button>
+      <button onclick="window.openTmlScreeningForm()" style="padding:9px 20px;border-radius:8px;border:none;background:#8B1A1A;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Lanjut →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 1c: Pick Supplier (FFB Supplier List) -->
+<div id="ffb-pick-overlay" style="display:none;position:fixed;inset:0;z-index:1000;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:16px;width:460px;max-width:94vw;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;">
+      <div>
+        <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Screening FFB Supplier List</div>
+        <div style="font-size:13px;color:#9C8080;margin-top:3px;">Pilih Supplier yang akan di-screening. Draft/Submitted akan ditandai dan bisa dibuka kembali.</div>
+      </div>
+      <button onclick="document.getElementById('ffb-pick-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="ffb-supplier-list" style="max-height:240px;overflow-y:auto;border:1.5px solid rgba(74,28,28,0.12);border-radius:10px;margin-bottom:20px;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="document.getElementById('ffb-pick-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);background:white;color:#5F4A48;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;">← Kembali</button>
+      <button onclick="window.openFfbScreeningForm()" style="padding:9px 20px;border-radius:8px;border:none;background:#8B1A1A;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Lanjut →</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 2: Screening Form -->
+<div id="tml-form-overlay" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:16px;width:600px;max-width:96vw;max-height:90vh;overflow-y:auto;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Form Screening Traceability</div>
+      <button onclick="document.getElementById('tml-form-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="tml-form-mill-label" style="font-size:13px;color:#8B1A1A;font-weight:600;margin-bottom:8px;padding:8px 12px;background:rgba(139,26,26,0.06);border-radius:7px;border-left:3px solid #8B1A1A;"></div>
+  <div id="tml-form-status" style="font-size:12px;color:#8B1A1A;font-weight:600;margin-bottom:20px;"></div>
+
+    <!-- 1. Valid Coordinate -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">1. Valid Coordinate</div>
+      <div style="display:flex;gap:10px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.tmlSetYN('coord','Yes',this)">
+          <input type="radio" name="tml-coord" value="Yes" style="display:none;"> <span style="font-weight:600;">Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.tmlSetYN('coord','No',this)">
+          <input type="radio" name="tml-coord" value="No" style="display:none;"> <span style="font-weight:600;">No</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 2. Forest Area -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">2. Forest Area</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="fa-apl" onchange="window.tmlToggleHa(this,'fa-apl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">APL</span>
+          <input type="number" id="fa-apl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="fa-hpk" onchange="window.tmlToggleHa(this,'fa-hpk-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HPK</span>
+          <input type="number" id="fa-hpk-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="fa-hp" onchange="window.tmlToggleHa(this,'fa-hp-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HP</span>
+          <input type="number" id="fa-hp-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="fa-hl" onchange="window.tmlToggleHa(this,'fa-hl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HL</span>
+          <input type="number" id="fa-hl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="fa-ksa" onchange="window.tmlToggleHa(this,'fa-ksa-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">KSA/KPA</span>
+          <input type="number" id="fa-ksa-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 3. Peatland -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">3. Peatland</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="pl-no" onchange="window.tmlToggleHa(this,'pl-no-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">No</span>
+          <input type="number" id="pl-no-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="pl-prot" onchange="window.tmlToggleHa(this,'pl-prot-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">Protected Peat</span>
+          <input type="number" id="pl-prot-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="pl-cult" onchange="window.tmlToggleHa(this,'pl-cult-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">Cultivated Peat</span>
+          <input type="number" id="pl-cult-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 4. Moratorium -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">4. Moratorium</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.tmlSetYN('mora','Yes',this);document.getElementById('mora-ha-wrap').style.display='flex'">
+          <input type="radio" name="tml-mora" value="Yes" style="display:none;"><span style="font-weight:600;">Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.tmlSetYN('mora','No',this);document.getElementById('mora-ha-wrap').style.display='none';document.getElementById('mora-ha').value=''">
+          <input type="radio" name="tml-mora" value="No" style="display:none;"><span style="font-weight:600;">No</span>
+        </label>
+      </div>
+      <div id="mora-ha-wrap" style="display:none;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);background:#fdfafa;">
+        <span style="font-size:13px;color:#5F4A48;font-weight:500;flex:1;">Luas area moratorium</span>
+        <input type="number" id="mora-ha" placeholder="Ha" min="0" step="0.01" style="width:100px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+        <span style="font-size:12px;color:#9C8080;">ha</span>
+      </div>
+    </div>
+
+    <!-- 5. Deforestation Buffer -->
+    <div style="margin-bottom:28px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">5. Deforestation Buffer 50KM</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+        <span style="font-size:13px;color:#5F4A48;font-weight:500;flex:1;">Luas area buffer</span>
+        <input type="number" id="defbuf-ha" placeholder="Ha" min="0" step="0.01" style="width:120px;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+        <span style="font-size:12px;color:#9C8080;">ha</span>
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:#9C8080;margin-bottom:12px;padding:8px 12px;background:rgba(74,28,28,0.04);border-radius:6px;border-left:2px solid rgba(74,28,28,0.2);">
+      💡 Data screening akan dikirim ke Sheets saat Anda klik <strong>Save as Draft / Submit</strong> di form utama.
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;border-top:1px solid rgba(74,28,28,0.08);padding-top:20px;">
+      <button onclick="document.getElementById('tml-form-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:10px 20px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);background:white;color:#5F4A48;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;">← Kembali</button>
+      <button onclick="window.deleteTmlScreening()" style="padding:10px 24px;border-radius:8px;border:none;background:#EF4444;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Delete</button>
+      <button onclick="window.saveTmlScreening()" style="padding:10px 24px;border-radius:8px;border:none;background:#10B981;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Simpan &amp; Kembali</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal 3: Result -->
+<div id="tml-result-overlay" style="display:none;position:fixed;inset:0;z-index:1002;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:16px;width:540px;max-width:96vw;max-height:85vh;overflow-y:auto;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Hasil Screening Traceability</div>
+      <button onclick="document.getElementById('tml-result-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="tml-result-body"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;border-top:1px solid rgba(74,28,28,0.08);padding-top:20px;">
+      <button onclick="document.getElementById('tml-result-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:10px 24px;border-radius:8px;border:none;background:#8B1A1A;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Tutup</button>
+    </div>
+  </div>
+</div>
+
+<!-- FFB Screening Form Modal -->
+<div id="ffb-form-overlay" style="display:none;position:fixed;inset:0;z-index:1001;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:16px;width:620px;max-width:96vw;max-height:90vh;overflow-y:auto;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Form Screening FFB Supplier List</div>
+      <button onclick="document.getElementById('ffb-form-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="ffb-form-supplier-label" style="font-size:13px;color:#8B1A1A;font-weight:600;margin-bottom:8px;padding:8px 12px;background:rgba(139,26,26,0.06);border-radius:7px;border-left:3px solid #8B1A1A;"></div>
+    <div id="ffb-form-status" style="font-size:12px;color:#8B1A1A;font-weight:600;margin-bottom:20px;"></div>
+
+    <!-- 1. Valid Coordinate -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">1. Valid Coordinate</div>
+      <div style="display:flex;gap:10px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.ffbSetYN('coord','Yes',this)">
+          <input type="radio" name="ffb-coord" value="Yes" style="display:none;"> <span style="font-weight:600;">Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.ffbSetYN('coord','No',this)">
+          <input type="radio" name="ffb-coord" value="No" style="display:none;"> <span style="font-weight:600;">No</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 2. Forest Area -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">2. Forest Area</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-fa-apl" onchange="window.ffbToggleHa(this,'ffb-fa-apl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">APL</span>
+          <input type="number" id="ffb-fa-apl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-fa-hpk" onchange="window.ffbToggleHa(this,'ffb-fa-hpk-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HPK</span>
+          <input type="number" id="ffb-fa-hpk-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-fa-hp" onchange="window.ffbToggleHa(this,'ffb-fa-hp-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HP</span>
+          <input type="number" id="ffb-fa-hp-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-fa-hl" onchange="window.ffbToggleHa(this,'ffb-fa-hl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">HL</span>
+          <input type="number" id="ffb-fa-hl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-fa-ksa" onchange="window.ffbToggleHa(this,'ffb-fa-ksa-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">KSA/KPA</span>
+          <input type="number" id="ffb-fa-ksa-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 3. Peatland -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">3. Peatland</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-pl-no" onchange="window.ffbToggleHa(this,'ffb-pl-no-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">No</span>
+          <input type="number" id="ffb-pl-no-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-pl-prot" onchange="window.ffbToggleHa(this,'ffb-pl-prot-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">Protected Peat</span>
+          <input type="number" id="ffb-pl-prot-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
+          <input type="checkbox" id="ffb-pl-cult" onchange="window.ffbToggleHa(this,'ffb-pl-cult-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <span style="flex:1;font-weight:500;">Cultivated Peat</span>
+          <input type="number" id="ffb-pl-cult-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- 4. Moratorium -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">4. Moratorium</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.ffbSetYN('mora','Yes',this)">
+          <input type="radio" name="ffb-mora" value="Yes" style="display:none;"> <span style="font-weight:600;">Yes</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:7px;cursor:pointer;padding:9px 18px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);font-size:13px;flex:1;justify-content:center;" onclick="window.ffbSetYN('mora','No',this)">
+          <input type="radio" name="ffb-mora" value="No" style="display:none;"> <span style="font-weight:600;">No</span>
+        </label>
+      </div>
+      <div id="ffb-mora-ha-wrap" style="display:none;">
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+          <span style="font-size:13px;color:#5F4A48;font-weight:500;flex:1;">Luas moratorium</span>
+          <input type="number" id="ffb-mora-ha" placeholder="Ha" min="0" step="0.01" style="width:120px;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+          <span style="font-size:12px;color:#9C8080;">ha</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. Distance to Mill -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">5. Distance to Mill</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+        <input type="number" id="ffb-dist-km" placeholder="Jarak ke mill" min="0" step="0.1" style="flex:1;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+        <span style="font-size:12px;color:#9C8080;white-space:nowrap;">km</span>
+      </div>
+    </div>
+
+    <div style="height:1px;background:rgba(74,28,28,0.08);margin:20px 0;"></div>
+
+    <!-- 6. Deforestation -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">6. Deforestation</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+        <input type="number" id="ffb-defor" placeholder="Ha" min="0" step="0.01" style="flex:1;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+        <span style="font-size:12px;color:#9C8080;">ha</span>
+      </div>
+    </div>
+
+    <!-- 7. Burn Area -->
+    <div style="margin-bottom:20px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">7. Burn Area</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+        <input type="number" id="ffb-burn" placeholder="Ha" min="0" step="0.01" style="flex:1;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+        <span style="font-size:12px;color:#9C8080;">ha</span>
+      </div>
+    </div>
+
+    <!-- 8. Village Risk -->
+    <div style="margin-bottom:28px;">
+      <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">8. Village Risk</div>
+      <div style="display:flex;align-items:center;gap:10px;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);">
+        <input type="text" id="ffb-village-risk" placeholder="e.g. Low / Medium / High" style="flex:1;padding:8px 12px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:13px;font-family:Inter,sans-serif;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
+      </div>
+    </div>
+
+    <div style="font-size:11px;color:#9C8080;margin-bottom:12px;padding:8px 12px;background:rgba(74,28,28,0.04);border-radius:6px;border-left:2px solid rgba(74,28,28,0.2);">
+      💡 Data screening akan dikirim ke Sheets saat Anda klik <strong>Save as Draft / Submit</strong> di form utama.
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;justify-content:flex-end;border-top:1px solid rgba(74,28,28,0.08);padding-top:20px;">
+      <button onclick="document.getElementById('ffb-form-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:10px 20px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.15);background:white;color:#5F4A48;font-family:Inter,sans-serif;font-size:13px;cursor:pointer;">← Kembali</button>
+      <button onclick="window.deleteFfbScreening()" style="padding:10px 24px;border-radius:8px;border:none;background:#EF4444;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Delete</button>
+      <button onclick="window.saveFfbScreening()" style="padding:10px 24px;border-radius:8px;border:none;background:#10B981;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Simpan &amp; Kembali</button>
+    </div>
+  </div>
+</div>
+
+<!-- FFB Result Modal -->
+<div id="ffb-result-overlay" style="display:none;position:fixed;inset:0;z-index:1002;background:rgba(10,4,4,0.55);backdrop-filter:blur(5px);align-items:center;justify-content:center;padding:20px;">
+  <div style="background:white;border-radius:16px;width:540px;max-width:96vw;max-height:85vh;overflow-y:auto;padding:32px;box-shadow:0 24px 72px rgba(10,4,4,0.28);animation:modalIn 0.28s cubic-bezier(.16,1,.3,1);">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <div style="font-size:18px;font-weight:700;color:#1A0A0A;font-family:Playfair Display,serif;">Hasil Screening FFB Supplier List</div>
+      <button onclick="document.getElementById('ffb-result-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="width:30px;height:30px;border-radius:50%;border:none;background:rgba(74,28,28,0.08);cursor:pointer;font-size:16px;color:#5F4A48;display:flex;align-items:center;justify-content:center;">✕</button>
+    </div>
+    <div id="ffb-result-body"></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:20px;border-top:1px solid rgba(74,28,28,0.08);padding-top:20px;">
+      <button onclick="document.getElementById('ffb-result-overlay').style.display='none';document.getElementById('tml-type-overlay').style.display='flex'" style="padding:10px 24px;border-radius:8px;border:none;background:#8B1A1A;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Tutup</button>
+    </div>
+  </div>
+</div>

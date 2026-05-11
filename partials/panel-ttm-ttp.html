@@ -1,0 +1,115 @@
+      <!-- ── TTM & TTP PANEL ── -->
+      <div class="panel" id="panel-ttm-ttp">
+        <div class="breadcrumb">Dashboard <span>/ Monitoring TTM/TTP</span></div>
+        <div class="page-header">
+          <h1>Monitoring TTM/TTP</h1>
+          <p>Trade partner and trade point monitoring data</p>
+        </div>
+
+        <div class="stats-row">
+          <div class="stat-card">
+            <div class="stat-card-num" id="ttp-stat-total">—</div>
+            <div class="stat-card-label">Total Records</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-card-num" id="ttp-stat-loaded">—</div>
+            <div class="stat-card-label">Loaded</div>
+          </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <h3>TTM/TTP Registry</h3>
+            <div class="table-actions">
+              <button class="btn-sm btn-filled" id="btn-add-ttp">+ Add Record</button>
+            </div>
+          </div>
+          <!-- ── TTP TOOLBAR ── -->
+          <div class="ttp-toolbar">
+            <!-- Select by Column (dynamic) -->
+            <div class="ttp-dropdown-wrap" id="ttpSelectWrap">
+              <button class="ttp-btn-select" id="ttpBtnSelect">
+                <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></span>
+                <span id="ttpBtnSelectLabel">Select</span>
+                <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </button>
+              <div class="ttp-dropdown-panel" id="ttpSelectPanel" style="min-width:320px;">
+                <div class="ttp-dropdown-head">
+                  <span class="ttp-dropdown-title">Filter by Kolom</span>
+                  <div class="ttp-dropdown-actions">
+                    <button id="ttpSelectAll">All</button>
+                    <button id="ttpSelectNone">None</button>
+                  </div>
+                </div>
+                <div style="padding:8px 12px 4px;border-bottom:1px solid rgba(74,28,28,0.08);">
+                  <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#9C8A8A;margin-bottom:6px;">Pilih Kolom</div>
+                  <div id="ttpColPickerList" style="display:flex;flex-wrap:wrap;gap:4px;max-height:80px;overflow-y:auto;"></div>
+                </div>
+                <div class="ttp-dropdown-search">
+                  <input type="text" id="ttpCompanySearch" placeholder="Cari nilai..." />
+                </div>
+                <div class="ttp-dropdown-list" id="ttpCompanyList"></div>
+              </div>
+            </div>
+
+            <!-- Filter Columns -->
+            <div class="ttp-dropdown-wrap" id="ttpFilterWrap">
+              <button class="ttp-btn-filter" id="ttpBtnFilter">
+                <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg></span>
+                Filter Kolom
+                <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+              </button>
+              <div class="ttp-dropdown-panel" id="ttpFilterPanel" style="left:0;">
+                <div class="ttp-dropdown-head">
+                  <span class="ttp-dropdown-title">Tampilkan Kolom</span>
+                  <div class="ttp-dropdown-actions">
+                    <button id="ttpColAll">Semua</button>
+                    <button id="ttpColNone">Kosong</button>
+                  </div>
+                </div>
+                <div class="ttp-dropdown-list" id="ttpColumnList"></div>
+              </div>
+            </div>
+
+            <!-- Export XLSX -->
+            <button class="ttp-btn-export-xlsx" id="btn-export-ttp-xlsx" disabled>
+              <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span>
+              Export XLSX
+            </button>
+
+            <div class="ttp-selection-info" id="ttpSelectionInfo" style="display:none;">
+              <span id="ttpSelectionText"></span>
+            </div>
+          </div>
+
+          <!-- View toggle: Grouped / Flat -->
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 6px;border-bottom:1px solid rgba(74,28,28,0.06);">
+            <div class="ttp-view-toggle">
+              <button class="ttp-view-btn active" id="ttpViewGrouped" title="Grouped by Mill Name">
+                <svg viewBox="0 0 24 24"><path d="M3 6h7v7H3z"/><path d="M14 6h7v7h-7z"/><path d="M3 17h7v4H3z"/><path d="M14 17h7v4h-7z"/></svg>
+                Grouped by Mill
+              </button>
+              <button class="ttp-view-btn" id="ttpViewFlat" title="Flat / original view">
+                <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                Flat (All Rows)
+              </button>
+            </div>
+            <div style="font-size:11px;color:#B09A9A;" id="ttpGroupInfo"></div>
+          </div>
+          <div class="search-bar">
+            <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg></span>
+            <input type="text" id="ttpSearch" placeholder="Search..." />
+            <button class="search-clear" id="ttpSearchClear">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="ttp-loading" style="padding:40px;text-align:center;color:#9C8A8A;font-size:14px;">Loading data...</div>
+          <div style="overflow-x:auto;">
+            <table id="ttpTable" style="display:none;">
+              <thead id="ttpTableHead"></thead>
+              <tbody id="ttpTableBody"></tbody>
+            </table>
+          </div>
+          <div id="ttp-error" style="display:none;padding:32px;text-align:center;color:#c0392b;font-size:14px;"></div>
+        </div>
+      </div>
