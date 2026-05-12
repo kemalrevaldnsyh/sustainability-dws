@@ -1382,6 +1382,10 @@ import { getSupabase } from './supabase-client.js';
         + '<input id="traceAttachmentInput" type="url" placeholder="Paste Drive / image / PDF link here" style="flex:1;min-width:0;border:1px solid rgba(74,28,28,0.15);border-radius:12px;padding:12px 14px;background:#f9fafb;color:#111;font-size:13px;outline:none;">'
         + '<button type="button" onclick="window._addTraceAttachmentLink && window._addTraceAttachmentLink()" style="padding:9px 20px;border-radius:8px;border:none;background:#1F2937;color:white;cursor:pointer;font-size:13px;font-weight:600;font-family:Inter,sans-serif;box-shadow:0 2px 6px rgba(0,0,0,0.15);">Add link</button>'
         + '</div>'
+        + '<div style="display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;">'
+        + '<button type="button" data-sdd-save="draft" onclick="window._saveScrScreening(\'draft\')" style="padding:9px 20px;border-radius:8px;border:none;background:#F59E0B;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(245,158,11,0.3);">Save as Draft</button>'
+        + '<button type="button" data-sdd-save="submit" onclick="window._saveScrScreening(\'submit\')" style="padding:9px 20px;border-radius:8px;border:none;background:#10B981;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(16,185,129,0.3);">Submit</button>'
+        + '</div>'
         + '<div style="font-size:12px;color:#6b7280;">Use Google Drive share link or direct image/PDF URL.</div>'
         + '<div id="traceAttachmentPreview" style="display:grid;gap:12px;color:#6b7280;font-size:13px;">No attachment yet.</div>'
         + '</div>'
@@ -1399,11 +1403,9 @@ import { getSupabase } from './supabase-client.js';
         + '<button type="button" id="sdd-approver-hold" disabled style="padding:8px 16px;border-radius:8px;border:none;background:#D97706;color:#fff;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;opacity:0.5;">On Hold</button>'
         + '<button type="button" id="sdd-approver-reject" disabled style="padding:8px 16px;border-radius:8px;border:1.5px solid #B91C1C;background:#fff;color:#B91C1C;font-size:12px;font-weight:600;cursor:pointer;font-family:Inter,sans-serif;opacity:0.5;">Reject</button>'
         + '</div></div>'
-        + '<div style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center;">'
+        + '<div id="sdd-bottom-actions-row" style="display:flex;justify-content:flex-end;flex-wrap:wrap;gap:10px;margin-top:14px;align-items:center;">'
         + '<button type="button" data-sdd-save="delete" onclick="window._saveScrScreening(\'delete\')" style="padding:9px 20px;border-radius:8px;border:1.5px solid rgba(239,68,68,0.4);background:#fff;color:#EF4444;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(239,68,68,0.08);margin-right:auto;">Delete</button>'
         + '<button type="button" id="sdd-cancel-to-draft-btn" data-sdd-save="cancel" style="display:none;padding:9px 20px;border-radius:8px;border:1.5px solid rgba(217,119,6,0.4);background:#fff7ed;color:#9a3412;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 1px 4px rgba(217,119,6,0.12);">Cancel</button>'
-        + '<button type="button" data-sdd-save="draft" onclick="window._saveScrScreening(\'draft\')" style="padding:9px 20px;border-radius:8px;border:none;background:#F59E0B;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(245,158,11,0.3);">Save as Draft</button>'
-        + '<button type="button" data-sdd-save="submit" onclick="window._saveScrScreening(\'submit\')" style="padding:9px 20px;border-radius:8px;border:none;background:#10B981;color:white;font-family:Inter,sans-serif;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 8px rgba(16,185,129,0.3);">Submit</button>'
         + '</div>'
         + '</div>'
         + '<p id="scr-save-ok" style="display:none;margin-top:12px;text-align:right;font-size:13px;color:#059669;font-weight:600;"></p>'
@@ -1692,31 +1694,13 @@ import { getSupabase } from './supabase-client.js';
     container.innerHTML = html || '<p style="color:#9C8080;font-size:13px;padding:16px;">No data found.</p>';
     if (opts.appendScrForm !== false) {
       initScrForm();
-      // Fresh Excel import: no submission_id yet, status = Draft.
-      // syncSddApproverDecisionUI never fires on this path, so manually show
-      // the decision buttons so the user can pick Approve/Hold/Reject before saving.
+      // Fresh Excel import is Draft: decision buttons must stay hidden
+      // until SCR is Submitted.
       // Use setTimeout(0) so all synchronous initScrForm internal calls finish first,
       // and the DOM is fully flushed before we try to show sdd-staff-decision-wrap.
       setTimeout(function() {
-        var fn = (typeof _refreshDecisionChromeForDraft === 'function')
-          ? _refreshDecisionChromeForDraft
-          : window._refreshDecisionChromeForDraft;
-        if (typeof fn === 'function') fn();
-        // Belt-and-suspenders: directly show the wrap in case fn is not accessible
         var wrap = document.getElementById('sdd-staff-decision-wrap');
-        if (wrap) {
-          wrap.style.display = 'block';
-          // Enable all three decision buttons (they start as disabled in buildScrForm HTML)
-          ['sdd-approver-approve', 'sdd-approver-hold', 'sdd-approver-reject'].forEach(function(id) {
-            var b = document.getElementById(id);
-            if (!b) return;
-            b.disabled = false;
-            b.style.opacity = '1';
-            b.style.cursor = 'pointer';
-            b.style.filter = '';
-            b.title = '';
-          });
-        }
+        if (wrap) wrap.style.display = 'none';
       }, 0);
     }
   }
@@ -1892,25 +1876,26 @@ import { getSupabase } from './supabase-client.js';
     if (bossViewer) bossViewer.style.display = 'none';
   };
 
-  /** Submitted lock: show decision badge, keep note read-only, disable decision buttons. */
+  /** Submitted mode: keep form locked, but allow decision action for tasklist gating. */
   window.refreshSddPostSubmitDecisionChrome = function() {
     var nb = document.getElementById('noteBossDecision');
     if (nb) {
-      nb.readOnly = true;
+      nb.readOnly = false;
       nb.disabled = false;
-      nb.style.background = '#f5f1f1';
-      nb.style.color = '#5F4A48';
-      nb.style.cursor = 'default';
+      nb.style.background = '#fff';
+      nb.style.color = '#1A0A0A';
+      nb.style.cursor = 'text';
     }
     var wrap = document.getElementById('sdd-staff-decision-wrap');
     if (wrap) wrap.style.display = 'block';
     ['sdd-approver-approve', 'sdd-approver-hold', 'sdd-approver-reject'].forEach(function(id) {
       var b = document.getElementById(id);
       if (!b) return;
-      b.disabled = true;
-      b.style.opacity = '0.38';
-      b.style.cursor = 'not-allowed';
-      b.title = 'Screening sudah Submitted — keputusan terkunci. Gunakan Cancel to Draft untuk mengubah.';
+      b.disabled = false;
+      b.style.opacity = '1';
+      b.style.cursor = 'pointer';
+      b.style.filter = '';
+      b.title = 'Keputusan ini menentukan masuk/tidaknya ke Task List Mill Onboarding.';
     });
     _syncDecisionBadge();
   };
@@ -2435,61 +2420,241 @@ import { getSupabase } from './supabase-client.js';
       return;
     }
 
-    function fmtDate(r) {
-      const upd = String(r['updated_at'] || r['SCR - Last Updated'] || '').trim();
-      if (!upd) return '';
-      const d = new Date(upd);
-      if (isNaN(d.getTime())) return upd.slice(0,10);
+    function fmtDate(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return '—';
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return s.slice(0, 10) || '—';
       return d.toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' });
     }
 
-    // Sort by updated_at descending (newest first), then render all — container scrolls
-    const sorted = entries.slice().sort(function(a, b) {
-      const ta = new Date(String((a.primary||{})['updated_at'] || (a.primary||{})['SCR - Last Updated'] || 0)).getTime() || 0;
-      const tb = new Date(String((b.primary||{})['updated_at'] || (b.primary||{})['SCR - Last Updated'] || 0)).getTime() || 0;
-      return tb - ta;
+    function fmtStatus(r) {
+      const scrStatus = String(r['SCR - Screening Status'] || '').trim().toLowerCase();
+      if (scrStatus !== 'submitted') return 'Draft';
+      const decRaw = String(
+        r['statusSDD'] || r['statusSdd'] || r['Status SDD'] ||
+        r['statusBossDecision'] || r['Status Boss Decision'] || ''
+      ).trim();
+      if (!decRaw) return 'Submitted';
+      return 'Submitted · ' + _normalizeDecisionLabel(decRaw);
+    }
+
+    function parseDateTs(raw) {
+      const s = String(raw || '').trim();
+      if (!s) return 0;
+      const t = new Date(s).getTime();
+      return isNaN(t) ? 0 : t;
+    }
+
+    if (!window._scrSavedListSort || typeof window._scrSavedListSort !== 'object') {
+      window._scrSavedListSort = { col: 'lastUpdate', dir: 'desc' };
+    }
+    if (!window._scrSavedColumnFilters || typeof window._scrSavedColumnFilters !== 'object') {
+      window._scrSavedColumnFilters = {};
+    }
+    var sortState = window._scrSavedListSort;
+    var sortCol = sortState.col || 'lastUpdate';
+    var sortDir = (sortState.dir === 'asc' || sortState.dir === 'desc') ? sortState.dir : 'desc';
+    var sortMul = sortDir === 'asc' ? 1 : -1;
+    var colFilters = window._scrSavedColumnFilters;
+
+    function compareText(a, b) {
+      return String(a || '').localeCompare(String(b || ''), 'id', { sensitivity: 'base' });
+    }
+
+    var cols = [
+      { key: 'dateImport',  label: 'Date Import' },
+      { key: 'companyName', label: 'Company Name' },
+      { key: 'category',    label: 'Category' },
+      { key: 'status',      label: 'Status' },
+      { key: 'lastUpdate',  label: 'Last Update' },
+    ];
+
+    function toRowItem(entry) {
+      const r = entry.primary || {};
+      return {
+        entry: entry,
+        key: entry.key,
+        row: r,
+        dateImport: fmtDate(r['Date Imported']),
+        companyName: String(r['Company Name'] || r['Group Name'] || r['Grup Name'] || r['Mill Name'] || '—').trim() || '—',
+        category: normalizeSddSupplierType(r['Supplier Type'] || r['SUPPLIER_TYPE'] || r['SupplierType'] || r['supplier_type']) || '—',
+        status: fmtStatus(r),
+        lastUpdate: fmtDate(r['updated_at'] || r['SCR - Last Updated']),
+        dateImportTs: parseDateTs(r['Date Imported']),
+        lastUpdateTs: parseDateTs(r['updated_at'] || r['SCR - Last Updated']),
+      };
+    }
+
+    var rowItems = entries.map(toRowItem);
+    var uniqueByCol = {};
+    cols.forEach(function(c) {
+      uniqueByCol[c.key] = Array.from(new Set(rowItems.map(function(it) { return String(it[c.key] || '—'); })))
+        .sort(function(a, b) { return compareText(a, b); });
+      if (!Array.isArray(colFilters[c.key])) colFilters[c.key] = [];
     });
 
-    holder.innerHTML = sorted.map(function(entry) {
-      const active  = selectedKey && selectedKey === entry.key;
-      const r       = entry.primary || {};
-      const st      = String(r['SCR - Screening Status'] || '').trim();
-      const tp      = normalizeSddSupplierType(r['Supplier Type'] || r['SUPPLIER_TYPE'] || r['SupplierType'] || r['supplier_type']);
-      const grp     = String(r['Group Name'] || r['Grup Name'] || '').trim();
-      const mill    = String(r['Mill Name'] || '').trim();
-      const dateStr = fmtDate(r);
+    const filtered = rowItems.filter(function(it) {
+      return cols.every(function(c) {
+        var active = colFilters[c.key];
+        if (!Array.isArray(active) || !active.length) return true;
+        return active.indexOf(String(it[c.key] || '—')) !== -1;
+      });
+    });
 
-      const isDraft     = st.toLowerCase() === 'draft';
-      const statusClass = isDraft ? 'scr-status-draft' : 'scr-status-submitted';
-      const statusLabel = isDraft ? 'Draft' : 'Submitted';
+    const sorted = filtered.slice().sort(function(a, b) {
+      var cmp = 0;
+      if (sortCol === 'dateImport') {
+        cmp = a.dateImportTs - b.dateImportTs;
+      } else if (sortCol === 'companyName') {
+        cmp = compareText(a.companyName, b.companyName);
+      } else if (sortCol === 'category') {
+        cmp = compareText(a.category, b.category);
+      } else if (sortCol === 'status') {
+        cmp = compareText(a.status, b.status);
+      } else {
+        cmp = a.lastUpdateTs - b.lastUpdateTs;
+      }
+      if (cmp === 0) {
+        cmp = a.lastUpdateTs - b.lastUpdateTs;
+      }
+      return cmp * sortMul;
+    });
 
-      return '<button type="button" data-scr-key="' + escHtml(entry.key) + '" class="scr-saved-item' + (active ? ' selected' : '') + '">'
+    function headLabel(colKey, text) {
+      if (sortCol !== colKey) return text;
+      return text + (sortDir === 'asc' ? ' ▲' : ' ▼');
+    }
 
-        // Row 1: status badge + type chip + date
-        + '<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;">'
-        + '<span class="scr-saved-status ' + statusClass + '"><span class="scr-status-dot"></span>' + statusLabel + '</span>'
-        + (tp ? '<span style="font-size:10.5px;font-weight:700;color:#9C8A8A;letter-spacing:0.07em;text-transform:uppercase;">' + escHtml(tp) + '</span>' : '')
-        + '<span style="margin-left:auto;font-size:11px;color:#B09090;white-space:nowrap;">' + (dateStr ? escHtml(dateStr) : '') + '</span>'
-        + '</div>'
+    function hasActiveFilter(colKey) {
+      var vals = colFilters[colKey];
+      return Array.isArray(vals) && vals.length > 0;
+    }
 
-        // Row 2: group name (bold)
-        + '<div style="font-size:13px;font-weight:' + (active ? '700' : '600') + ';color:#1A0A0A;line-height:1.35;' + (mill ? 'margin-bottom:2px;' : '') + '">'
-        + (grp ? escHtml(grp) : '<span style="color:#C4BAB4;font-weight:400;">—</span>')
-        + '</div>'
+    holder.innerHTML =
+      '<div class="scr-saved-search-wrap"><span class="scr-saved-search-count">' + sorted.length + ' result(s)</span></div>'
+      + '<div class="scr-saved-table-wrap"><table class="scr-saved-table">'
+      + '<thead><tr>'
+      + cols.map(function(c) {
+        return '<th>'
+          + '<div class="scr-th-wrap">'
+          + '<span class="scr-th-sort" data-sort-col="' + escHtml(c.key) + '">' + escHtml(headLabel(c.key, c.label)) + '</span>'
+          + '<button type="button" class="scr-th-filter-btn' + (hasActiveFilter(c.key) ? ' is-active' : '') + '" data-filter-col="' + escHtml(c.key) + '" title="Filter ' + escHtml(c.label) + '">▾</button>'
+          + '</div>'
+          + '</th>';
+      }).join('')
+      + '</tr></thead><tbody>'
+      + sorted.map(function(entry) {
+        const active = selectedKey && selectedKey === entry.key;
+        return '<tr data-scr-key="' + escHtml(entry.key) + '" class="' + (active ? 'is-active' : '') + '">'
+          + '<td>' + escHtml(entry.dateImport) + '</td>'
+          + '<td>' + escHtml(entry.companyName) + '</td>'
+          + '<td>' + escHtml(entry.category) + '</td>'
+          + '<td>' + escHtml(entry.status) + '</td>'
+          + '<td>' + escHtml(entry.lastUpdate) + '</td>'
+          + '</tr>';
+      }).join('')
+      + '</tbody></table></div>';
 
-        // Row 3: mill name (muted)
-        + (mill ? '<div style="font-size:11.5px;color:#9C8A8A;">' + escHtml(mill) + '</div>' : '')
-
-        + '</button>';
-    }).join('');
-
-    // hover handled by CSS .scr-saved-item:hover — no inline override needed
-    holder.querySelectorAll('button[data-scr-key]').forEach(function(btn) {
-      btn.addEventListener('click', function() {
-        const key = btn.getAttribute('data-scr-key') || '';
+    holder.querySelectorAll('tr[data-scr-key]').forEach(function(row) {
+      row.addEventListener('click', function() {
+        const key = row.getAttribute('data-scr-key') || '';
         const sel = document.getElementById('scr-saved-select');
         if (sel) sel.value = key;
         if (typeof window.loadSavedScrByKeyGlobal === 'function') window.loadSavedScrByKeyGlobal(key);
+      });
+    });
+    holder.querySelectorAll('.scr-th-sort[data-sort-col]').forEach(function(th) {
+      th.addEventListener('click', function() {
+        var col = th.getAttribute('data-sort-col') || '';
+        if (!col) return;
+        if (window._scrSavedListSort && window._scrSavedListSort.col === col) {
+          window._scrSavedListSort.dir = window._scrSavedListSort.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+          window._scrSavedListSort = { col: col, dir: 'asc' };
+        }
+        renderSavedScreeningListView(entries, selectedKey);
+      });
+    });
+    holder.querySelectorAll('.scr-th-filter-btn[data-filter-col]').forEach(function(btn) {
+      btn.addEventListener('click', function(ev) {
+        ev.stopPropagation();
+        var col = btn.getAttribute('data-filter-col') || '';
+        if (!col) return;
+        holder.querySelectorAll('.scr-filter-menu').forEach(function(m) { m.remove(); });
+        var options = uniqueByCol[col] || [];
+        var current = Array.isArray(colFilters[col]) ? colFilters[col].slice() : [];
+        var selectedVals = current.length ? current : options.slice();
+        var menu = document.createElement('div');
+        menu.className = 'scr-filter-menu';
+        menu.innerHTML =
+          '<div class="scr-filter-menu-head">' + escHtml((cols.find(function(c) { return c.key === col; }) || {}).label || col) + '</div>'
+          + '<input type="text" class="scr-filter-menu-search" placeholder="Search value...">'
+          + '<div class="scr-filter-menu-actions">'
+          + '<button type="button" data-filter-action="all">Select all</button>'
+          + '<button type="button" data-filter-action="none">Clear all</button>'
+          + '</div>'
+          + '<div class="scr-filter-menu-list"></div>'
+          + '<div class="scr-filter-menu-foot">'
+          + '<button type="button" data-filter-action="cancel">Cancel</button>'
+          + '<button type="button" data-filter-action="ok" class="is-primary">OK</button>'
+          + '</div>';
+        holder.appendChild(menu);
+        var rectBtn = btn.getBoundingClientRect();
+        var rectHolder = holder.getBoundingClientRect();
+        menu.style.top = Math.max(0, rectBtn.bottom - rectHolder.top + 4) + 'px';
+        menu.style.left = Math.max(0, rectBtn.right - rectHolder.left - 250) + 'px';
+        var listEl = menu.querySelector('.scr-filter-menu-list');
+        var searchEl = menu.querySelector('.scr-filter-menu-search');
+
+        function renderChecks() {
+          if (!listEl) return;
+          var kw = String((searchEl && searchEl.value) || '').trim().toLowerCase();
+          listEl.innerHTML = options.filter(function(v) {
+            return !kw || String(v || '').toLowerCase().indexOf(kw) !== -1;
+          }).map(function(v) {
+            var checked = selectedVals.indexOf(v) !== -1;
+            return '<label class="scr-filter-menu-item"><input type="checkbox" value="' + escHtml(v) + '"' + (checked ? ' checked' : '') + '> <span>' + escHtml(v) + '</span></label>';
+          }).join('') || '<div class="scr-filter-menu-empty">No values</div>';
+          listEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+            cb.addEventListener('change', function() {
+              var val = cb.value;
+              if (cb.checked) {
+                if (selectedVals.indexOf(val) === -1) selectedVals.push(val);
+              } else {
+                selectedVals = selectedVals.filter(function(x) { return x !== val; });
+              }
+            });
+          });
+        }
+        renderChecks();
+        if (searchEl) searchEl.addEventListener('input', renderChecks);
+        menu.querySelectorAll('[data-filter-action]').forEach(function(actBtn) {
+          actBtn.addEventListener('click', function() {
+            var action = actBtn.getAttribute('data-filter-action');
+            if (action === 'all') { selectedVals = options.slice(); renderChecks(); return; }
+            if (action === 'none') { selectedVals = []; renderChecks(); return; }
+            if (action === 'cancel') { menu.remove(); return; }
+            if (action === 'ok') {
+              if (selectedVals.length === 0 || selectedVals.length === options.length) {
+                colFilters[col] = [];
+              } else {
+                colFilters[col] = selectedVals.slice();
+              }
+              menu.remove();
+              renderSavedScreeningListView(entries, selectedKey);
+            }
+          });
+        });
+        setTimeout(function() {
+          function closeMenuOutside(e) {
+            if (!menu.contains(e.target) && e.target !== btn) {
+              menu.remove();
+              document.removeEventListener('click', closeMenuOutside, true);
+            }
+          }
+          document.addEventListener('click', closeMenuOutside, true);
+        }, 0);
       });
     });
   }
@@ -3166,8 +3331,7 @@ import { getSupabase } from './supabase-client.js';
             pdfBtnD.onmouseenter = function() { this.style.background = '#6e1414'; };
             pdfBtnD.onmouseleave = function() { this.style.background = '#8B1A1A'; };
             pdfBtnD.onclick = function() { sddExportPdf(); };
-            var actionRowD = document.querySelector('[data-sdd-save="draft"]');
-            actionRowD = actionRowD ? actionRowD.parentNode : null;
+            var actionRowD = document.getElementById('sdd-bottom-actions-row');
             if (actionRowD) actionRowD.appendChild(pdfBtnD);
             else {
               var panelBoxD = document.querySelector('#panel-supplier-dd .panel-box');
@@ -3913,15 +4077,15 @@ function _syncDecisionBadge() {
 
 function _refreshDecisionChromeForDraft() {
   var wrap = document.getElementById('sdd-staff-decision-wrap');
-  if (wrap) wrap.style.display = 'block';
+  if (wrap) wrap.style.display = 'none';
   ['sdd-approver-approve', 'sdd-approver-hold', 'sdd-approver-reject'].forEach(function(id) {
     var b = document.getElementById(id);
     if (!b) return;
-    b.disabled = false;
-    b.style.opacity = '1';
-    b.style.cursor = 'pointer';
+    b.disabled = true;
+    b.style.opacity = '0.5';
+    b.style.cursor = 'not-allowed';
     b.style.filter = '';
-    b.title = '';
+    b.title = 'Tombol keputusan aktif setelah status Submitted.';
   });
   var nb = document.getElementById('noteBossDecision');
   if (nb) {
@@ -3945,18 +4109,14 @@ window._syncDecisionBadge = _syncDecisionBadge;
  * gets statusSDD / noteBossDecision when the user clicks Save Draft or Submit (create/update).
  */
 window._submitSddApproverDecision = function(statusSdd) {
+  var sid = window._sddSubmissionId || window._scrLoadedKey || null;
   var scrSt = String(
     (window._scrData && window._scrData.status) ||
     (window._loadedPrimarySddRow && window._loadedPrimarySddRow['SCR - Screening Status']) || ''
   ).trim().toLowerCase();
-
-  if (scrSt === 'submitted') {
+  if (scrSt !== 'submitted') {
     if (typeof window.showSddToast === 'function') {
-      window.showSddToast(
-        '⛔ Screening sudah Submitted — keputusan tidak dapat diubah. ' +
-        'Gunakan "Cancel to Draft" terlebih dahulu jika perlu koreksi.',
-        'error'
-      );
+      window.showSddToast('Keputusan Approve / On Hold / Reject baru bisa dipilih setelah Submit.', 'info');
     }
     return;
   }
@@ -3979,6 +4139,49 @@ window._submitSddApproverDecision = function(statusSdd) {
 
   _syncDecisionBadge();
   _refreshDecisionChromeForDraft();
+  if (scrSt === 'submitted' && sid) {
+    apiSetSubmissionStatus({ submission_id: sid, statusSDD: statusSdd })
+      .then(function() {
+        return apiUpdateSubmission({
+          submission_id: sid,
+          main: {
+            noteSDD: note,
+            noteBossDecision: note,
+            statusBossDecision: statusSdd,
+          }
+        });
+      })
+      .then(function() {
+        if (typeof window.refreshSavedScreeningListGlobal === 'function') {
+          return window.refreshSavedScreeningListGlobal(sid);
+        }
+      })
+      .then(function() {
+        if (typeof renderMillTaskList === 'function') renderMillTaskList();
+        var saveOk = document.getElementById('scr-save-ok');
+        if (saveOk) {
+          saveOk.style.display = 'block';
+          saveOk.style.color = '#059669';
+          saveOk.textContent = '✓ Decision saved: ' + statusSdd + ' · Submission ID: ' + sid;
+        }
+        if (typeof window.showSddToast === 'function') {
+          window.showSddToast('Keputusan Submitted disimpan: ' + statusSdd + ' (SID: ' + sid + ').', 'success');
+        }
+      })
+      .catch(function(e) {
+        var msg = (e && e.message) ? e.message : String(e);
+        var saveErr = document.getElementById('scr-save-ok');
+        if (saveErr) {
+          saveErr.style.display = 'block';
+          saveErr.style.color = '#dc2626';
+          saveErr.textContent = '✗ Decision save failed untuk Submission ID: ' + sid;
+        }
+        if (typeof window.showSddToast === 'function') {
+          window.showSddToast('Gagal menyimpan keputusan Submitted: ' + msg, 'error');
+        }
+      });
+    return;
+  }
   if (typeof window.showSddToast === 'function') {
     window.showSddToast(
       'Keputusan: ' + statusSdd + '. Disimpan ke server saat Save Draft atau Submit.',
@@ -5078,6 +5281,8 @@ function initDashboardApp() {
   let millSortKey = null;
   let millSortAsc = true;
   let millTableDelegationBound = false;
+  let millColumnFilters = {};
+  let millFilterOptions = {};
 
   /** Normalize sheet header key (trim, NBSP → space, lower). */
   function millHeaderNorm_(k) {
@@ -5234,6 +5439,38 @@ function initDashboardApp() {
     return currentFilter === 'Task List' ? 'All' : currentFilter;
   }
 
+  const MILL_TABLE_FILTER_COLS = [
+    'QUARTER','YEAR','GROUP NAME','COMPANY NAME','MILL NAME','PROVINCE',
+    'SUPPLIER STATUS','RISK LEVEL','BUYER NO BUY LIST','CERTIFICATION',
+    'FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'
+  ];
+
+  function getMillFilterCellValue(row, colKey) {
+    if (colKey === 'QUARTER') return String(millQuarterVal(row) || '—');
+    if (colKey === 'YEAR') return String(millYearVal(row) || '—');
+    return String((row && row[colKey]) || '—').trim() || '—';
+  }
+
+  function millRefreshFilterOptions(baseRows) {
+    millFilterOptions = {};
+    MILL_TABLE_FILTER_COLS.forEach(function(col) {
+      millFilterOptions[col] = Array.from(new Set(baseRows.map(function(r) {
+        return getMillFilterCellValue(r, col);
+      }))).sort(function(a, b) {
+        return String(a).localeCompare(String(b), 'id', { sensitivity: 'base' });
+      });
+      if (!Array.isArray(millColumnFilters[col])) millColumnFilters[col] = [];
+    });
+  }
+
+  function millRowMatchesColumnFilters(row) {
+    return MILL_TABLE_FILTER_COLS.every(function(col) {
+      var active = millColumnFilters[col];
+      if (!Array.isArray(active) || !active.length) return true;
+      return active.indexOf(getMillFilterCellValue(row, col)) !== -1;
+    });
+  }
+
   function millRowMatchesChipAndSearch(d) {
     const nbl = d._sddNblLower || (d['BUYER NO BUY LIST'] || '').toString().toLowerCase();
     const chip = millRegistryChipFilter();
@@ -5279,6 +5516,87 @@ function initDashboardApp() {
       });
     }
     return sorted;
+  }
+
+  function bindMillHeaderFiltersOnce() {
+    const table = document.getElementById('millTable');
+    if (!table || table.dataset.millFilterBound === '1') return;
+    table.dataset.millFilterBound = '1';
+    table.addEventListener('click', function(e) {
+      const btn = e.target.closest('[data-mill-filter-btn]');
+      if (!btn || !table.contains(btn)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      document.querySelectorAll('.mill-col-filter-menu').forEach(function(m) { m.remove(); });
+      const col = btn.getAttribute('data-mill-filter-btn') || '';
+      if (!col) return;
+      const options = millFilterOptions[col] || [];
+      let selectedVals = (millColumnFilters[col] && millColumnFilters[col].length) ? millColumnFilters[col].slice() : options.slice();
+      const menu = document.createElement('div');
+      menu.className = 'mill-col-filter-menu';
+      menu.innerHTML =
+        '<div class="mill-col-filter-head">' + col + '</div>'
+        + '<input type="text" class="mill-col-filter-search" placeholder="Search value...">'
+        + '<div class="mill-col-filter-actions">'
+        + '<button type="button" data-act="all">Select all</button>'
+        + '<button type="button" data-act="none">Clear all</button>'
+        + '</div>'
+        + '<div class="mill-col-filter-list"></div>'
+        + '<div class="mill-col-filter-foot">'
+        + '<button type="button" data-act="cancel">Cancel</button>'
+        + '<button type="button" data-act="ok" class="is-primary">OK</button>'
+        + '</div>';
+      document.body.appendChild(menu);
+      const br = btn.getBoundingClientRect();
+      menu.style.top = (br.bottom + 6 + window.scrollY) + 'px';
+      menu.style.left = Math.max(8, br.right - 260 + window.scrollX) + 'px';
+
+      const listEl = menu.querySelector('.mill-col-filter-list');
+      const searchEl = menu.querySelector('.mill-col-filter-search');
+      function renderItems() {
+        if (!listEl) return;
+        const q = String((searchEl && searchEl.value) || '').trim().toLowerCase();
+        const items = options.filter(function(v) { return !q || String(v).toLowerCase().indexOf(q) !== -1; });
+        listEl.innerHTML = items.map(function(v) {
+          const checked = selectedVals.indexOf(v) !== -1;
+          return '<label class="mill-col-filter-item"><input type="checkbox" value="' + String(v).replace(/"/g,'&quot;') + '"' + (checked ? ' checked' : '') + '> <span>' + v + '</span></label>';
+        }).join('') || '<div class="mill-col-filter-empty">No values</div>';
+        listEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
+          cb.addEventListener('change', function() {
+            const val = cb.value;
+            if (cb.checked) {
+              if (selectedVals.indexOf(val) === -1) selectedVals.push(val);
+            } else {
+              selectedVals = selectedVals.filter(function(x) { return x !== val; });
+            }
+          });
+        });
+      }
+      renderItems();
+      if (searchEl) searchEl.addEventListener('input', renderItems);
+      menu.querySelectorAll('[data-act]').forEach(function(ab) {
+        ab.addEventListener('click', function() {
+          const act = ab.getAttribute('data-act');
+          if (act === 'all') { selectedVals = options.slice(); renderItems(); return; }
+          if (act === 'none') { selectedVals = []; renderItems(); return; }
+          if (act === 'cancel') { menu.remove(); return; }
+          if (act === 'ok') {
+            millColumnFilters[col] = (selectedVals.length === 0 || selectedVals.length === options.length) ? [] : selectedVals.slice();
+            menu.remove();
+            scheduleRenderMillTable();
+          }
+        });
+      });
+      setTimeout(function() {
+        function closeOut(ev) {
+          if (!menu.contains(ev.target) && ev.target !== btn) {
+            menu.remove();
+            document.removeEventListener('click', closeOut, true);
+          }
+        }
+        document.addEventListener('click', closeOut, true);
+      }, 0);
+    });
   }
 
   function getMillRowsForPdfExport() {
@@ -5579,6 +5897,7 @@ function initDashboardApp() {
     if (!tr || tr.dataset.millSortBound) return;
     tr.dataset.millSortBound = '1';
     tr.addEventListener('click', function(e) {
+      if (e.target && e.target.closest && e.target.closest('[data-mill-filter-btn]')) return;
       const th = e.target.closest('[data-mill-sort]');
       if (!th || !tr.contains(th)) return;
       const key = th.getAttribute('data-mill-sort');
@@ -5723,7 +6042,10 @@ function initDashboardApp() {
     const body = document.getElementById('millTableBody');
     if (!body) return;
     bindMillTableDelegationOnce();
-    const filtered = allData.filter(d => millRowMatchesChipAndSearch(d));
+    bindMillHeaderFiltersOnce();
+    const baseFiltered = allData.filter(d => millRowMatchesChipAndSearch(d));
+    millRefreshFilterOptions(baseFiltered);
+    const filtered = baseFiltered.filter(millRowMatchesColumnFilters);
     const sorted = sortMillRowsForDisplay(filtered);
     millFilteredRows = sorted;
     updateMillPdfExportScope();
@@ -5735,6 +6057,11 @@ function initDashboardApp() {
         if (millSortKey && th.getAttribute('data-mill-sort') === millSortKey) {
           th.classList.add('is-sorted', millSortAsc ? 'is-sorted-asc' : 'is-sorted-desc');
         }
+      });
+      theadRow.querySelectorAll('[data-mill-filter-btn]').forEach(function(btn) {
+        const key = btn.getAttribute('data-mill-filter-btn') || '';
+        const hasActive = Array.isArray(millColumnFilters[key]) && millColumnFilters[key].length > 0;
+        btn.classList.toggle('is-active', hasActive);
       });
     }
 
@@ -7104,8 +7431,12 @@ function initDashboardApp() {
     const submitted = Object.entries(rows)
       .filter(function([, r]) {
         const status    = String(r['SCR - Screening Status'] || '').toLowerCase();
+        const decision  = String(
+          r['statusSDD'] || r['statusSdd'] || r['Status SDD'] ||
+          r['statusBossDecision'] || r['Status Boss Decision'] || ''
+        ).trim().toLowerCase();
         const millAdded = String(r['mill_added'] || '').toLowerCase();
-        return status === 'submitted' && millAdded !== 'true';
+        return status === 'submitted' && (decision === 'approve' || decision === 'approved') && millAdded !== 'true';
       })
       .sort(function([, a], [, b]) {
         return new Date(b['updated_at'] || 0) - new Date(a['updated_at'] || 0);
