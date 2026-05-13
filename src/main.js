@@ -5453,7 +5453,7 @@ function initDashboardApp() {
 
   const MILL_TABLE_FILTER_COLS = [
     'RESULT RISK LEVEL','GROUP NAME','COMPANY NAME','MILL NAME','PROVINCE',
-    'SUPPLIER STATUS','RISK LEVEL','BUYER NO BUY LIST','CERTIFICATION',
+    'SUPPLIER STATUS','BUYER NO BUY LIST','CERTIFICATION',
     'FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'
   ];
 
@@ -5631,9 +5631,9 @@ function initDashboardApp() {
     const pdfN = getMillRowsForPdfExport().length;
     const tableN = sortMillRowsForDisplay(millRowsAfterRegistryDimFilters().filter(millRowMatchesColumnFilters)).length;
     if (tableN === pdfN) {
-      el.textContent = pdfN + ' baris · tampilan tabel sama dengan yang di-export';
+      el.textContent = pdfN + ' rows · table view matches export';
     } else {
-      el.textContent = pdfN + ' baris di-export · ' + tableN + ' baris tampil di tabel (filter kolom aktif)';
+      el.textContent = pdfN + ' rows exported · ' + tableN + ' rows shown in table (column filters active)';
     }
   }
 
@@ -6108,7 +6108,7 @@ function initDashboardApp() {
     }
 
     body.innerHTML = sorted.length === 0
-      ? `<tr><td colspan="12" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>`
+      ? `<tr><td colspan="11" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>`
       : sorted.map((d, i) => `
         <tr class="mill-row-clickable" data-idx="${i}" title="Klik untuk lihat detail lengkap">
           <td>${resultRiskLevelPill(d['RESULT RISK LEVEL'])}</td>
@@ -6117,7 +6117,6 @@ function initDashboardApp() {
           <td><span class="mill-name">${d['MILL NAME'] || '—'}</span><div class="mill-id">${d['UML ID'] || ''}</div></td>
           <td>${d['PROVINCE'] || '—'}</td>
           <td>${supplierBadge(d['SUPPLIER STATUS'])}</td>
-          <td>${riskBadgeLevel(d['RISK LEVEL'])}</td>
           <td>${nblBadge(d['BUYER NO BUY LIST'])}</td>
           <td>${d['CERTIFICATION'] || '—'}</td>
           <td class="mill-cell-long">${d['FACILITY NAME CPO'] || '—'}</td>
@@ -6382,33 +6381,81 @@ function initDashboardApp() {
     return row || siblings[0];
   }
 
-  function loadScriptOnce_(src, id) {
+  function loadScriptOnce_(src, id, isReadyFn) {
     return new Promise(function(resolve, reject) {
+      if (typeof isReadyFn === 'function' && isReadyFn()) {
+        resolve();
+        return;
+      }
       let s = document.getElementById(id);
       if (s) {
-        if (s.dataset.loaded === '1') { resolve(); return; }
-        s.addEventListener('load', function onLoad() { s.dataset.loaded = '1'; resolve(); }, { once: true });
-        s.addEventListener('error', function onErr() { reject(new Error('Gagal memuat script: ' + src)); }, { once: true });
+        if (s.dataset.loaded === '1' || (typeof isReadyFn === 'function' && isReadyFn())) {
+          resolve();
+          return;
+        }
+        const timeoutId = window.setTimeout(function() {
+          if (typeof isReadyFn === 'function' && isReadyFn()) {
+            s.dataset.loaded = '1';
+            resolve();
+          } else {
+            reject(new Error('Timeout loading script: ' + src));
+          }
+        }, 8000);
+        s.addEventListener('load', function onLoad() {
+          window.clearTimeout(timeoutId);
+          s.dataset.loaded = '1';
+          resolve();
+        }, { once: true });
+        s.addEventListener('error', function onErr() {
+          window.clearTimeout(timeoutId);
+          reject(new Error('Gagal memuat script: ' + src));
+        }, { once: true });
         return;
       }
       s = document.createElement('script');
       s.id = id;
       s.src = src;
       s.async = true;
-      s.onload = function() { s.dataset.loaded = '1'; resolve(); };
-      s.onerror = function() { reject(new Error('Gagal memuat script: ' + src)); };
+      const timeoutId = window.setTimeout(function() {
+        if (typeof isReadyFn === 'function' && isReadyFn()) {
+          s.dataset.loaded = '1';
+          resolve();
+        } else {
+          reject(new Error('Timeout loading script: ' + src));
+        }
+      }, 8000);
+      s.onload = function() {
+        window.clearTimeout(timeoutId);
+        s.dataset.loaded = '1';
+        resolve();
+      };
+      s.onerror = function() {
+        window.clearTimeout(timeoutId);
+        reject(new Error('Gagal memuat script: ' + src));
+      };
       document.head.appendChild(s);
     });
   }
 
   async function ensureMillPdfDeps_() {
     if (!(window.jspdf && window.jspdf.jsPDF) && !window.jsPDF) {
-      await loadScriptOnce_('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf-core');
+      await loadScriptOnce_(
+        'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+        'jspdf-core',
+        function() { return !!((window.jspdf && window.jspdf.jsPDF) || window.jsPDF); }
+      );
     }
     const JsPDFLib = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
     const hasAutoTable = !!(JsPDFLib && JsPDFLib.API && typeof JsPDFLib.API.autoTable === 'function');
     if (!hasAutoTable) {
-      await loadScriptOnce_('https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js', 'jspdf-autotable');
+      await loadScriptOnce_(
+        'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js',
+        'jspdf-autotable',
+        function() {
+          const lib = (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
+          return !!(lib && lib.API && typeof lib.API.autoTable === 'function');
+        }
+      );
     }
     return (window.jspdf && window.jspdf.jsPDF) ? window.jspdf.jsPDF : window.jsPDF;
   }

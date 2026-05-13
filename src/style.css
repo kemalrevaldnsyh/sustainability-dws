@@ -1663,21 +1663,19 @@
      white-space: nowrap;
      vertical-align: middle;
    }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(1) { width: 9%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(1) { width: 8%; }
    #panel-mill-onboarding #millTable :is(th,td):nth-child(2) { width: 8%; }
    #panel-mill-onboarding #millTable :is(th,td):nth-child(3) { width: 8%; }
    #panel-mill-onboarding #millTable :is(th,td):nth-child(4) { width: 9%; }
    #panel-mill-onboarding #millTable :is(th,td):nth-child(5) { width: 8%; }
    #panel-mill-onboarding #millTable :is(th,td):nth-child(6) { width: 8%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(7) { width: 8%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(8) { width: 8%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(9) { width: 9%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(10) { width: 8%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(11) { width: 8%; }
-   #panel-mill-onboarding #millTable :is(th,td):nth-child(12) { width: 9%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(7) { width: 7%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(8) { width: 9%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(9) { width: 12%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(10) { width: 11%; }
+  #panel-mill-onboarding #millTable :is(th,td):nth-child(11) { width: 10%; }
    #panel-mill-onboarding #millTable td:nth-child(6),
-   #panel-mill-onboarding #millTable td:nth-child(7),
-   #panel-mill-onboarding #millTable td:nth-child(8) {
+  #panel-mill-onboarding #millTable td:nth-child(7) {
      white-space: nowrap;
    }
    #panel-mill-onboarding #millTable .mill-name {
