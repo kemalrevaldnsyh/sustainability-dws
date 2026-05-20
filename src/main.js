@@ -3811,7 +3811,7 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL or localStorage SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw66-gDFB4lNr1Qb71pzALzLALzj9361VuYEOIcE1y1Bpfg9bA4cUZEdnlgCAe4DJtN9w/exec';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwXJXN-vATCurs7C_OLEa-z1-i-qTgb6j37HBsL3MbnW7XFCuLL2X5xG26A1H6v5ilxyg/exec';
 
 function getSddApiUrl() {
   var custom = (typeof window !== 'undefined' && window.SDD_WEBAPP_URL) || '';
@@ -5319,6 +5319,8 @@ function initDashboardApp() {
         await loadMillData();
       } else if (modalSheet === 'ttp') {
         ttpLoaded = false; await loadTTPData();
+      } else if (modalSheet === 'contactSupplier') {
+        contactListLoaded = false; await loadContactListData(true);
       } else if (modalSheet === 'grievance') {
         grvLoaded = false; await loadGrvData();
       }
@@ -6305,6 +6307,52 @@ function initDashboardApp() {
     // "mirip" match: one contained in another, but avoid very short false positives
     if (na.length >= 4 && nb.includes(na)) return true;
     if (nb.length >= 4 && na.includes(nb)) return true;
+    // Token-level fuzzy match for small spelling variants (e.g. sumatra/sumatera).
+    var ta = String(a || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function(t) { return t.length >= 3; });
+    var tb = String(b || '').toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(function(t) { return t.length >= 3; });
+    if (!ta.length || !tb.length) return false;
+    function levDist_(x, y) {
+      if (x === y) return 0;
+      var m = x.length, n = y.length;
+      if (!m) return n;
+      if (!n) return m;
+      var prev = [];
+      for (var j = 0; j <= n; j++) prev[j] = j;
+      for (var i = 1; i <= m; i++) {
+        var cur = [i];
+        for (var j2 = 1; j2 <= n; j2++) {
+          var cost = x.charAt(i - 1) === y.charAt(j2 - 1) ? 0 : 1;
+          cur[j2] = Math.min(
+            cur[j2 - 1] + 1,
+            prev[j2] + 1,
+            prev[j2 - 1] + cost
+          );
+        }
+        prev = cur;
+      }
+      return prev[n];
+    }
+    function tokenNear_(x, y) {
+      if (x === y) return true;
+      if (x.length >= 4 && y.includes(x)) return true;
+      if (y.length >= 4 && x.includes(y)) return true;
+      // allow one-char typo on longer tokens
+      if (x.length >= 6 && y.length >= 6 && Math.abs(x.length - y.length) <= 1) {
+        return levDist_(x, y) <= 1;
+      }
+      return false;
+    }
+    var hits = 0;
+    for (var i = 0; i < ta.length; i++) {
+      var t1 = ta[i];
+      var ok = false;
+      for (var j = 0; j < tb.length; j++) {
+        if (tokenNear_(t1, tb[j])) { ok = true; break; }
+      }
+      if (ok) hits++;
+    }
+    // Require at least 2 token hits to reduce false positives.
+    if (hits >= 2) return true;
     return false;
   }
 
@@ -6389,7 +6437,7 @@ function initDashboardApp() {
     if (hasUnilever) {
       return { label: 'NBL by Unilever NBL', risers: [], hasUnilever: true };
     }
-    return { label: 'NBL by manual/legacy flag', risers: [], hasUnilever: false };
+    return { label: 'Yes (source unresolved)', risers: [], hasUnilever: false };
   }
 
   async function millResolveNblByInfo_(row) {
@@ -6426,7 +6474,7 @@ function initDashboardApp() {
       infoEl.innerHTML = '<strong>' + escHtml(info.label) + '</strong>';
     } catch (err) {
       if (reqId !== millProfileNblInfoReqSeq_) return;
-      infoEl.innerHTML = '<strong>NBL by:</strong> Unable to validate from No Buy List.';
+      infoEl.innerHTML = '<strong>Yes (source unresolved)</strong>';
     }
   }
 
@@ -8683,7 +8731,11 @@ function initDashboardApp() {
   // ─── CONTACT LIST SUPPLIER ───────────────────────────────
   const CLS_EXPORT_FIELDS = [
     'Group Name', 'Company Name', 'Supplier Type',
-    'Sustainability PIC', 'Phone Number', 'approved_at', 'submission_id',
+    'Sustainability PIC', 'Phone Number', 'Email', 'approved_at', 'submission_id',
+  ];
+  const CLS_MODAL_FIELDS = [
+    'Group Name', 'Company Name', 'Supplier Type',
+    'Sustainability PIC', 'Phone Number', 'Email',
   ];
   let contactListData = [];
   let contactListLoaded = false;
@@ -8701,7 +8753,7 @@ function initDashboardApp() {
   function prepareContactListRow_(d) {
     const parts = [
       d['Group Name'], d['Company Name'], d['Supplier Type'],
-      d['Sustainability PIC'], d['Phone Number'], d['submission_id'],
+      d['Sustainability PIC'], d['Phone Number'], d['Email'], d['submission_id'],
     ].map(function(x) { return String(x || '').toLowerCase(); });
     d._clsSearchBlob = parts.join(' ');
     return d;
@@ -8738,7 +8790,7 @@ function initDashboardApp() {
       return tb.localeCompare(ta);
     });
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:32px;color:#9C8A8A;">'
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#9C8A8A;">'
         + (q ? 'No results match your search.' : 'No contacts yet. PIC details appear here after an SDD screening is approved.')
         + '</td></tr>';
       return;
@@ -8746,8 +8798,12 @@ function initDashboardApp() {
     body.innerHTML = filtered.map(function(d) {
       const pic = d['Sustainability PIC'] || '—';
       const phone = d['Phone Number'] || '—';
+      const email = String(d['Email'] || '').trim();
       const phoneCell = phone !== '—'
         ? '<a class="cls-phone-link" href="tel:' + escHtml(String(phone).replace(/\s/g, '')) + '">' + escHtml(phone) + '</a>'
+        : '—';
+      const emailCell = email
+        ? '<a class="cls-phone-link" href="mailto:' + escHtml(email) + '">' + escHtml(email) + '</a>'
         : '—';
       return '<tr>'
         + '<td><span class="mill-name">' + escHtml(d['Group Name'] || '—') + '</span></td>'
@@ -8755,9 +8811,21 @@ function initDashboardApp() {
         + '<td><span class="status-badge risk-low"><span class="s-dot"></span>' + escHtml(d['Supplier Type'] || '—') + '</span></td>'
         + '<td><strong>' + escHtml(pic) + '</strong></td>'
         + '<td>' + phoneCell + '</td>'
+        + '<td>' + emailCell + '</td>'
         + '<td>' + escHtml(formatClsApprovedAt_(d['approved_at'])) + '</td>'
+        + '<td style="text-align:right;"><button type="button" class="btn-sm btn-outline cls-edit-btn" data-row="' + Number(d._row || 0) + '" title="Edit contact">Edit</button></td>'
         + '</tr>';
     }).join('');
+
+    body.querySelectorAll('.cls-edit-btn').forEach(function(btn) {
+      btn.addEventListener('click', function() {
+        var rowNum = Number(btn.getAttribute('data-row') || 0);
+        if (!rowNum) return;
+        var hit = contactListData.find(function(it) { return Number(it._row || 0) === rowNum; });
+        if (!hit) return;
+        openModal('contactSupplier', CLS_MODAL_FIELDS, 'edit', hit);
+      });
+    });
   }
 
   function scheduleRenderContactListTable_() {
@@ -8817,7 +8885,8 @@ function initDashboardApp() {
     const clearEl = document.getElementById('clsSearchClear');
     const btnRefresh = document.getElementById('btn-refresh-cls');
     const btnExport = document.getElementById('btn-export-cls');
-    if (!searchEl || !clearEl || !btnRefresh || !btnExport) return;
+    const btnAdd = document.getElementById('btn-add-cls');
+    if (!searchEl || !clearEl || !btnRefresh || !btnExport || !btnAdd) return;
 
     const debouncedRender = debounce(function() {
       scheduleRenderContactListTable_();
@@ -8843,6 +8912,10 @@ function initDashboardApp() {
     btnRefresh.addEventListener('click', function() {
       contactListLoaded = false;
       loadContactListData(true);
+    });
+
+    btnAdd.addEventListener('click', function() {
+      openModal('contactSupplier', CLS_MODAL_FIELDS, 'add', null);
     });
 
     btnExport.addEventListener('click', function() {
