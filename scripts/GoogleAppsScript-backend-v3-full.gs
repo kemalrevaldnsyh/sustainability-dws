@@ -780,9 +780,13 @@ function readTtpRows_() {
     return { ws: ws, headers: TTP_HEADERS.slice(), rows: [] };
   }
 
-  const headers = values[0].map(function(h) { return String(h || '').trim(); });
+  const hdr = detectTtpHeaderRow_(ws);
+  const headerRowNum = hdr ? hdr.headerRow : 1;
+  const headers = (hdr && hdr.headers && hdr.headers.length)
+    ? hdr.headers
+    : values[0].map(function(h) { return String(h || '').trim(); });
   const rows = [];
-  for (let r = 1; r < values.length; r++) {
+  for (let r = headerRowNum; r < values.length; r++) {
     const row = values[r];
     const empty = !row.some(function(c) { return String(c || '').trim() !== ''; });
     if (empty) continue;
@@ -965,7 +969,9 @@ function ensureTtpHeaders_() {
     return sheet;
   }
 
-  const existing    = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+  const hdrRowInfo = detectTtpHeaderRow_(sheet);
+  const headerRow  = hdrRowInfo ? hdrRowInfo.headerRow : 1;
+  const existing    = sheet.getRange(headerRow, 1, 1, lastCol).getValues()[0]
                            .map(function(h) { return String(h || '').trim(); });
   const existingSet = new Set(existing.filter(Boolean));
   const missing     = TTP_HEADERS.filter(function(h) { return !existingSet.has(h); });
@@ -973,9 +979,38 @@ function ensureTtpHeaders_() {
   if (missing.length) {
     const start = existing.length + 1;
     sheet.insertColumnsAfter(existing.length, missing.length);
-    sheet.getRange(1, start, 1, missing.length).setValues([missing]);
+    sheet.getRange(headerRow, start, 1, missing.length).setValues([missing]);
   }
   return sheet;
+}
+
+function detectHeaderRowByKeys_(sheet, requiredKeys, scanMaxRows) {
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (!lastRow || !lastCol) return null;
+  const scanRows = Math.min(Math.max(scanMaxRows || 10, 1), lastRow);
+  const data = sheet.getRange(1, 1, scanRows, lastCol).getValues();
+  const wanted = requiredKeys.map(function(k) { return String(k || '').trim().toLowerCase(); });
+  for (var r = 0; r < data.length; r++) {
+    const row = data[r].map(function(c) { return String(c || '').trim().toLowerCase(); });
+    var hit = 0;
+    for (var i = 0; i < wanted.length; i++) {
+      if (row.indexOf(wanted[i]) !== -1) hit++;
+    }
+    // Consider this row as header if enough key columns are present.
+    if (hit >= Math.min(4, wanted.length)) {
+      return { headerRow: r + 1, headers: data[r].map(function(h) { return String(h || '').trim(); }) };
+    }
+  }
+  return null;
+}
+
+function detectTtpHeaderRow_(sheet) {
+  return detectHeaderRowByKeys_(
+    sheet,
+    ['Quarter', 'Year', 'UML ID', 'FFB SUPPLIER NAME', 'CATEGORY'],
+    15
+  );
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1591,15 +1626,28 @@ function getData(sheetKey) {
   const range = sheet.getDataRange();
   const rows  = range.getValues();
   if (!rows.length) return [];
-  const headers = rows[0];
+  let headerRowNum = 1;
+  let headers = rows[0];
+  let dataRows = rows.slice(1);
+
+  // Monitoring TTP/TTM may keep title/meta rows above headers.
+  if (sheetKey === 'ttp') {
+    const hdr = detectTtpHeaderRow_(sheet);
+    if (hdr && hdr.headers && hdr.headers.length) {
+      headerRowNum = hdr.headerRow;
+      headers = hdr.headers;
+      dataRows = rows.slice(headerRowNum);
+    }
+  }
 
   // For Mill data we need display-preserved numerics (e.g. "66.000")
   // so UI matches the exact visual formatting in Google Sheets.
   const dispRows = sheetKey === 'mill' ? range.getDisplayValues() : null;
+  const dispDataRows = dispRows ? dispRows.slice(headerRowNum) : null;
 
-  return rows.slice(1).map(function(row, i) {
-    const sourceRow = dispRows ? dispRows[i + 1] : row;
-    const obj = { _row: i + 2 };
+  return dataRows.map(function(row, i) {
+    const sourceRow = dispDataRows ? dispDataRows[i] : row;
+    const obj = { _row: headerRowNum + i + 1 };
     headers.forEach(function(h, j) { obj[h] = sourceRow[j]; });
     if (sheetKey === 'mill') mirrorMillQuarterYearOnRead_(obj);
     return obj;
@@ -1608,7 +1656,11 @@ function getData(sheetKey) {
 
 function addRow(sheetKey, data) {
   const sheet   = getSheet(sheetKey);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (sheetKey === 'ttp') {
+    const hdr = detectTtpHeaderRow_(sheet);
+    if (hdr && hdr.headers && hdr.headers.length) headers = hdr.headers;
+  }
   if (sheetKey === 'mill') resolveMillQuarterYearKeys_(data, headers);
   const newRow  = headers.map(function(h) { return data[h] !== undefined ? data[h] : ''; });
   sheet.appendRow(newRow);
@@ -1619,7 +1671,11 @@ function updateRow(sheetKey, rowNum, data) {
   const sheet = getSheet(sheetKey);
   const r     = Number(rowNum);
   if (!r || r < 2) throw new Error('Invalid row number for update: ' + rowNum);
-  const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  let headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  if (sheetKey === 'ttp') {
+    const hdr = detectTtpHeaderRow_(sheet);
+    if (hdr && hdr.headers && hdr.headers.length) headers = hdr.headers;
+  }
   if (sheetKey === 'mill') resolveMillQuarterYearKeys_(data, headers);
   const current = sheet.getRange(r, 1, 1, headers.length).getValues()[0];
   const updated = headers.map(function(h, j) {

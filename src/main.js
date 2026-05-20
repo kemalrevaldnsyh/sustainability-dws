@@ -3811,7 +3811,7 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL or localStorage SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxuyCl33MGhKgnFp2z3KTsvF1knVBgESzE2jfkiX6DyGRahM2o4j4jQoxvxNifOrGcDDw/exec';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw66-gDFB4lNr1Qb71pzALzLALzj9361VuYEOIcE1y1Bpfg9bA4cUZEdnlgCAe4DJtN9w/exec';
 
 function getSddApiUrl() {
   var custom = (typeof window !== 'undefined' && window.SDD_WEBAPP_URL) || '';
