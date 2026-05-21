@@ -2560,6 +2560,8 @@ function listSuppliedCpoSheets_() {
 /**
  * Parse a 2D values array looking for PLANT / SELLER / SUM of Qty Kg columns.
  * Skips subtotal rows (PLANT or SELLER contains "total").
+ * Applies fill-down for PLANT: if a row has a blank PLANT cell, inherits
+ * the last non-blank PLANT value (common in grouped spreadsheet layouts).
  */
 function parseSuppliedCpoValues_(values, sheetLabel, out) {
   if (!values || !values.length) return;
@@ -2590,10 +2592,19 @@ function parseSuppliedCpoValues_(values, sheetLabel, out) {
     if (/sum.*qty.*kg/i.test(h) || (/qty/i.test(h) && /kg/i.test(h))) qtyCol = j;
   });
 
+  var lastPlant = '';
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
     var plant = plantCol >= 0 ? String(row[plantCol] || '').trim() : '';
     var seller = sellerCol >= 0 ? String(row[sellerCol] || '').trim() : '';
+
+    // Fill-down: blank PLANT inherits last non-blank PLANT
+    if (plant) {
+      lastPlant = plant;
+    } else {
+      plant = lastPlant;
+    }
+
     if (!plant || !seller) continue;
     if (/total/i.test(plant) || /total/i.test(seller)) continue;
 
@@ -2663,6 +2674,8 @@ function listSuppliedPkSheets_() {
  * Parse a 2D values array for PK sheets: same columns as CPO
  * (PLANT / SELLER / SUM of Qty Kg). Skips subtotal / empty rows.
  * The GROUP column is intentionally ignored.
+ * Applies fill-down for PLANT: blank PLANT cells inherit the last
+ * non-blank PLANT value (common grouped spreadsheet layout).
  */
 function parseSuppliedPkValues_(values, sheetLabel, out) {
   if (!values || !values.length) return;
@@ -2687,10 +2700,19 @@ function parseSuppliedPkValues_(values, sheetLabel, out) {
     if (/sum.*qty.*kg/i.test(h) || (/qty/i.test(h) && /kg/i.test(h))) qtyCol = j;
   });
 
+  var lastPlant = '';
   for (var i = headerRow + 1; i < values.length; i++) {
     var row = values[i];
     var plant  = plantCol  >= 0 ? String(row[plantCol]  || '').trim() : '';
     var seller = sellerCol >= 0 ? String(row[sellerCol] || '').trim() : '';
+
+    // Fill-down: blank PLANT inherits last non-blank PLANT
+    if (plant) {
+      lastPlant = plant;
+    } else {
+      plant = lastPlant;
+    }
+
     if (!plant || !seller) continue;
     if (/total/i.test(plant) || /total/i.test(seller)) continue;
 

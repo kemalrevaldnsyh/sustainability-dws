@@ -10093,29 +10093,6 @@ function initDashboardApp() {
       const suppliedLookup = pfBuildSuppliedPkLookup_(_pfSuppliedPkData);
       const hasSupplied = Object.keys(suppliedLookup).length > 0;
 
-      // ── DEBUG: log to console so we can diagnose 100% issue ─────────────
-      console.group('[PF-PK DEBUG] pfBuildPkGroups_');
-      console.log('Supplied PK rows loaded:', _pfSuppliedPkData.length);
-      console.log('hasSupplied:', hasSupplied);
-      console.log('TTP PK lookup entries:', Object.keys(ttpPkLookup).length);
-      if (Object.keys(ttpPkLookup).length) {
-        console.log('TTP PK lookup sample (first 10):',
-          Object.entries(ttpPkLookup).slice(0, 10).map(function(kv) {
-            return kv[0] + ' → ' + (kv[1].sum / kv[1].count).toFixed(1) + '%';
-          }).join(' | '));
-      }
-      Object.keys(suppliedLookup).forEach(function(plant) {
-        const sup = suppliedLookup[plant];
-        console.log('\n  Plant:', plant, '| totalQty:', sup.totalQty);
-        Object.keys(sup.sellers).forEach(function(sel) {
-          const qty = sup.sellers[sel];
-          if (!qty) return;
-          const pct = pfTtpPkPctForSeller_(ttpPkLookup, sel);
-          console.log('    seller:', sel, '| qty:', qty, '| TTP PK%:', isNaN(pct) ? 'NOT FOUND' : pct.toFixed(1) + '%');
-        });
-      });
-      console.groupEnd();
-      // ── END DEBUG ─────────────────────────────────────────────────────────
 
       const byFacility = new Map();
       millRows.forEach(function(r) {
