@@ -3810,25 +3810,75 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
     }
   }
 
-/** Fallback web app URL — override with window.SDD_WEBAPP_URL or localStorage SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyhatchpz2uXspS0UAegwBfyJhAJchDG4C3DOHG28Ao_T5fU5XLWjCAfueb_Ax_dDE5ug/exec';
+/** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyn_Rl1geJybTgp9LkNonFT-cVYsv7vGpGons95Bt9XAhwk6PrlVzMAn21lAFKmRiENkw/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbyn_Rl1geJybTgp9LkNonFT-cVYsv7vGpGons95Bt9XAhwk6PrlVzMAn21lAFKmRiENkw';
+
+function normalizeSddWebAppUrl_(raw) {
+  var u = String(raw || '').trim();
+  if (!u || u.indexOf('http') !== 0) return '';
+  if (u.indexOf('/exec') === -1) u = u.replace(/\/?$/, '') + '/exec';
+  return u;
+}
+
+function sddUrlUsesCurrentDeployment_(url) {
+  return String(url || '').indexOf(SDD_WEBAPP_DEPLOYMENT_ID) !== -1;
+}
 
 function getSddApiUrl() {
-  var custom = (typeof window !== 'undefined' && window.SDD_WEBAPP_URL) || '';
-  if (typeof custom === 'string' && custom.indexOf('http') === 0) {
-    var u = custom.trim();
-    if (u.indexOf('/exec') === -1) u = u.replace(/\/?$/, '') + '/exec';
-    return u;
+  if (typeof window !== 'undefined' && window.SDD_LATEST_WEBAPP_URL) {
+    return normalizeSddWebAppUrl_(window.SDD_LATEST_WEBAPP_URL) || SDD_DEFAULT_WEBAPP_URL;
   }
-  try {
-    var ls = localStorage.getItem('SDD_WEBAPP_URL');
-    if (ls && ls.indexOf('http') === 0) {
-      var u2 = ls.trim();
-      if (u2.indexOf('/exec') === -1) u2 = u2.replace(/\/?$/, '') + '/exec';
-      return u2;
-    }
-  } catch (e) {}
+  if (typeof window !== 'undefined' && window.SDD_WEBAPP_URL) {
+    var w = normalizeSddWebAppUrl_(window.SDD_WEBAPP_URL);
+    if (w && sddUrlUsesCurrentDeployment_(w)) return w;
+  }
+  try { localStorage.setItem('SDD_WEBAPP_URL', SDD_DEFAULT_WEBAPP_URL); } catch (e) { /* ignore */ }
   return SDD_DEFAULT_WEBAPP_URL;
+}
+
+/** Ping Apps Script deployment (checks blMonitoring support). */
+async function sddPingApiUrl_(baseUrl) {
+  var url = String(baseUrl || '').trim();
+  if (!url || url.indexOf('http') !== 0) return null;
+  if (url.indexOf('/exec') === -1) url = url.replace(/\/?$/, '') + '/exec';
+  try {
+    var res = await fetch(url + '?action=ping', {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit',
+      redirect: 'follow',
+    });
+    var text = await res.text();
+    return text ? JSON.parse(text) : null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * Browser may still use an old SDD_WEBAPP_URL in localStorage (pre–BL Monitoring deploy).
+ * Auto-switch to SDD_DEFAULT_WEBAPP_URL when the default supports blMonitoring.
+ */
+async function migrateSddApiUrlToLatest_() {
+  var def = SDD_DEFAULT_WEBAPP_URL;
+  var current = getSddApiUrl();
+  if (current === def) {
+    try { localStorage.setItem('SDD_WEBAPP_URL', def); } catch (e) { /* ignore */ }
+    return def;
+  }
+  var pingCurrent = await sddPingApiUrl_(current);
+  if (pingCurrent && pingCurrent.blMonitoring) return current;
+  var pingDef = await sddPingApiUrl_(def);
+  if (pingDef && pingDef.blMonitoring) {
+    try { localStorage.setItem('SDD_WEBAPP_URL', def); } catch (e) { /* ignore */ }
+    if (typeof window.showSddToast === 'function') {
+      window.showSddToast('URL Apps Script diperbarui ke deployment terbaru.', 'success');
+    }
+    console.warn('[SDD] API URL migrated to latest deployment (BL Monitoring enabled).');
+    return def;
+  }
+  return current;
 }
 
 /** Kept for optional checks; do not block saves — use http(s) + text/plain POST for GAS compatibility. */
@@ -3912,8 +3962,9 @@ function normalizeGetArray(data) {
   return [];
 }
 
-async function apiGet(sheet) {
-  var url = getSddApiUrl();
+async function apiGet(sheet, opts) {
+  var url = (opts && opts.baseUrl) ? normalizeSddWebAppUrl_(opts.baseUrl) : getSddApiUrl();
+  if (!url) url = SDD_DEFAULT_WEBAPP_URL;
   var params = new URLSearchParams({ action: 'getAll', sheet: sheet });
   if (sheet === 'sdd') params.set('_ts', String(Date.now()));
   var fullUrl = url + '?' + params.toString();
@@ -3960,8 +4011,9 @@ async function apiGet(sheet) {
   return rows;
 }
 
-async function apiPost(body) {
-  var url = getSddApiUrl();
+async function apiPost(body, opts) {
+  var url = (opts && opts.baseUrl) ? normalizeSddWebAppUrl_(opts.baseUrl) : getSddApiUrl();
+  if (!url) url = SDD_DEFAULT_WEBAPP_URL;
   var payload = JSON.stringify(body);
   console.log('📤 API POST →', url, body);
   /* Google Apps Script: use text/plain so the browser sends a "simple" request (no CORS preflight). doPost still receives JSON in e.postData.contents. */
@@ -4966,6 +5018,9 @@ function initDashboardApp() {
   console.log('🚀 Sustainability Dashboard loaded and connected to Google Sheets backend');
   console.log('ℹ️ SDD Apps Script URL:', typeof getSddApiUrl === 'function' ? getSddApiUrl() : '(n/a)');
   console.log('ℹ️ To use your own deployment: localStorage.setItem("SDD_WEBAPP_URL", "https://script.google.com/macros/s/YOUR_DEPLOYMENT_ID/exec")');
+  migrateSddApiUrlToLatest_().then(function(url) {
+    console.log('ℹ️ SDD Apps Script URL (after migrate check):', url);
+  }).catch(function() { /* ignore */ });
   if (location.protocol === 'file:') {
     console.warn('⚠️ Page is file:// — saving to Google Sheets will not work until you open this HTML via http(s) (e.g. Live Server).');
   }
@@ -5379,7 +5434,10 @@ function initDashboardApp() {
     if (!pendingDelete) return;
     this.textContent = 'Deleting...';
     try {
-      await apiPost({ action: 'delete', sheet: pendingDelete.sheet, row: pendingDelete.row });
+      var delOpts = pendingDelete.sheet === 'blMonitoring'
+        ? { baseUrl: SDD_DEFAULT_WEBAPP_URL }
+        : undefined;
+      await apiPost({ action: 'delete', sheet: pendingDelete.sheet, row: pendingDelete.row }, delOpts);
       document.getElementById('confirmOverlay').classList.remove('active');
       if (pendingDelete.sheet === 'mill') {
         await loadMillData();
@@ -5387,6 +5445,8 @@ function initDashboardApp() {
         ttpLoaded = false; await loadTTPData();
       } else if (pendingDelete.sheet === 'grievance') {
         grvLoaded = false; await loadGrvData();
+      } else if (pendingDelete.sheet === 'blMonitoring') {
+        blLoaded = false; await loadBlData();
       }
       pendingDelete = null;
     } catch(err) {
@@ -8814,6 +8874,1118 @@ function initDashboardApp() {
     });
   })();
 
+  // ─── BL MONITORING ──────────────────────────────────────
+  const BL_FORM_FIELDS = [
+    'NO', 'LOADING PORT', 'NATION', 'BUYER', 'NATION (BUYER)',
+    'BL NO.', 'RECEIVED DATE', 'SENT TO REVIEW (DATE)', 'SEND TO EXIM (DATE)',
+    'BL DATE', 'VESSEL', 'COMODITY', 'VOLUME (TON)', 'REQUEST TYPE', 'STATUS',
+  ];
+  const BL_FIELD_LABELS = {
+    'NATION': 'NATION (Loading Port)',
+    'NATION (BUYER)': 'NATION (Buyer)',
+  };
+  const BL_EXPORT_COLUMN_DEFS = [
+    { id: 'loading_port', label: 'Loading Port', header: 'LOADING PORT', field: 'LOADING PORT' },
+    { id: 'nation_loading', label: 'Nation (Loading Port)', header: 'NATION', field: 'NATION' },
+    { id: 'buyer', label: 'Buyer', header: 'BUYER', field: 'BUYER' },
+    { id: 'nation_buyer', label: 'Nation (Buyer)', header: 'NATION', field: 'NATION (BUYER)' },
+    { id: 'bl_no', label: 'BL No.', header: 'BL NO.', field: 'BL NO.' },
+    { id: 'received_date', label: 'Received Date', header: 'RECEIVED DATE', field: 'RECEIVED DATE' },
+    { id: 'sent_review', label: 'Sent to Review (Date)', header: 'SENT TO REVIEW (DATE)', field: 'SENT TO REVIEW (DATE)' },
+    { id: 'send_exim', label: 'Send to Exim (Date)', header: 'SEND TO EXIM (DATE)', field: 'SEND TO EXIM (DATE)' },
+    { id: 'bl_date', label: 'BL Date', header: 'BL DATE', field: 'BL DATE' },
+    { id: 'vessel', label: 'Vessel', header: 'VESSEL', field: 'VESSEL' },
+    { id: 'comodity', label: 'Comodity', header: 'COMODITY', field: 'COMODITY' },
+    { id: 'volume', label: 'Volume (Ton)', header: 'VOLUME (TON)', field: 'VOLUME (TON)' },
+    { id: 'request_type', label: 'Request Type', header: 'REQUEST TYPE', field: 'REQUEST TYPE' },
+    { id: 'status', label: 'Status', header: 'STATUS', field: 'STATUS' },
+    { id: 'ttm', label: 'TTM', header: 'TTM', kind: 'ttm' },
+    { id: 'ttp', label: 'TTP', header: 'TTP', kind: 'ttp' },
+  ];
+  const BL_EXPORT_DEFAULT_COL_IDS = BL_EXPORT_COLUMN_DEFS.map(function(c) { return c.id; });
+  const BL_REGISTRY_COLUMNS = [
+    { label: 'Loading Port', minWidth: 120, cell: function(d) { return escHtml(d['LOADING PORT'] || '—'); } },
+    { label: 'Nation (Port)', minWidth: 100, cell: function(d) { return escHtml(d['NATION'] || '—'); } },
+    { label: 'Buyer', minWidth: 120, cell: function(d) { return escHtml(d['BUYER'] || '—'); } },
+    { label: 'Nation (Buyer)', minWidth: 100, cell: function(d) { return escHtml(d['NATION (BUYER)'] || '—'); } },
+    { label: 'BL No.', minWidth: 160, cell: function(d) { return '<span class="mill-id">' + escHtml(d['BL NO.'] || '—') + '</span>'; } },
+    { label: 'Received', minWidth: 100, cell: function(d) { return escHtml(d['RECEIVED DATE'] || '—'); } },
+    { label: 'Sent Review', minWidth: 100, cell: function(d) { return escHtml(d['SENT TO REVIEW (DATE)'] || '—'); } },
+    { label: 'Send Exim', minWidth: 100, cell: function(d) { return escHtml(d['SEND TO EXIM (DATE)'] || '—'); } },
+    { label: 'BL Date', minWidth: 100, cell: function(d) { return escHtml(d['BL DATE'] || '—'); } },
+    { label: 'Vessel', minWidth: 120, cell: function(d) { return escHtml(d['VESSEL'] || '—'); } },
+    { label: 'Comodity', minWidth: 90, cell: function(d) { return escHtml(d['COMODITY'] || '—'); } },
+    { label: 'Volume (Ton)', minWidth: 100, cell: function(d) { return escHtml(d['VOLUME (TON)'] || '—'); } },
+    { label: 'Request', minWidth: 90, cell: function(d) { return blRequestBadge_(d['REQUEST TYPE']); } },
+    { label: 'Status', minWidth: 100, cell: function(d) { return blStatusBadge_(d['STATUS']); } },
+    { label: 'TTM', minWidth: 80, cell: function(d) {
+      const ttmCount = (d._ttmLinks || []).length;
+      return blLinkPill_(d['TTM'] || blTtmCountLabel_(ttmCount));
+    } },
+    { label: 'TTP', minWidth: 70, cell: function(d) {
+      const ttpCount = (d._ttpLinks || []).length;
+      return blLinkPill_(d['TTP'] || blTtpCountLabel_(ttpCount));
+    } },
+    { label: '', minWidth: 110, isActions: true, cell: function(d) {
+      return ''
+        + '<div class="row-actions">'
+        + '<button type="button" class="btn-row btn-edit bl-row-edit" data-row="' + d._row + '">Edit</button>'
+        + '<button type="button" class="btn-row btn-delete bl-row-delete" data-rownum="' + d._row + '">Del</button>'
+        + '</div>';
+    } },
+  ];
+  const BL_REQUEST_TYPES = ['TTM', 'TTP'];
+  const BL_STATUS_VALUES = ['Onprogress', 'Done'];
+  const BL_JSON_TTM = 'TTM LINKS JSON';
+  const BL_JSON_TTP = 'TTP LINKS JSON';
+  const BL_TTM_DETAIL_COLS = [
+    { key: 'COMPANY NAME', label: 'Company Name' },
+    { key: 'GROUP NAME', label: 'Group Name' },
+    { key: 'UML ID', label: 'UML ID' },
+    { key: 'LAT', label: 'Lat' },
+    { key: 'LONG', label: 'Long' },
+  ];
+  const BL_TTP_DETAIL_COLS = [
+    { key: 'CATEGORY', label: 'Category' },
+    { key: 'VILLAGE', label: 'Village' },
+    { key: 'SUBDISTRICT', label: 'Subdistrict' },
+    { key: 'DISTRICT', label: 'District' },
+    { key: 'PROVINCE', label: 'Province' },
+    { key: 'NUMBER OD SMALLHOLDERS', label: 'Number of Smallholders' },
+    { key: 'PLANTED AREA', label: 'Planted Area' },
+    { key: 'FFB SUPPLY to MILL (TON)', label: 'FFB Supply to Mill (Ton)' },
+  ];
+
+  let blData = [];
+  let blLoaded = false;
+  let blLoadPromise = null;
+  let blSearch = '';
+  let blFormMode = 'add';
+  let blFormRow = null;
+  let blSelectedTtm = [];
+  let blSelectedTtp = [];
+  let blTtmRowsWithTtp_ = new Set();
+  let blPeriodYear = '';
+  let blPeriodQuarter = '';
+  let blDetailCurrent = null;
+  let blTableDelegationBound = false;
+  let blExportTargetRow = null;
+  let blExportSelectedColIds = BL_EXPORT_DEFAULT_COL_IDS.slice();
+
+  function blField_(row, keys) {
+    if (!row) return '—';
+    const list = Array.isArray(keys) ? keys : [keys];
+    for (let i = 0; i < list.length; i++) {
+      const k = list[i];
+      if (row[k] != null && String(row[k]).trim() !== '') return String(row[k]).trim();
+    }
+    return '—';
+  }
+
+  function parseBlLinksJson_(raw) {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    try {
+      const parsed = JSON.parse(String(raw));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function blTtmKey_(item) {
+    const uml = blField_(item, ['UML ID']);
+    if (uml && uml !== '—') return 'uml:' + uml.toLowerCase();
+    return 'co:' + blField_(item, ['COMPANY NAME']).toLowerCase() + '|' + blField_(item, ['MILL NAME']).toLowerCase();
+  }
+
+  function blTtpKey_(item) {
+    const rowNum = item && item._row;
+    if (rowNum) return 'row:' + rowNum;
+    return 'sup:' + blField_(item, ['FFB SUPPLIER NAME']).toLowerCase() + '|' + blField_(item, ['VILLAGE']).toLowerCase();
+  }
+
+  function buildBlTtmCandidate_(row) {
+    return {
+      _row: row._row,
+      'COMPANY NAME': blField_(row, ['COMPANY NAME']),
+      'GROUP NAME': blField_(row, ['GROUP NAME']),
+      'MILL NAME': blField_(row, ['MILL NAME']),
+      'UML ID': blField_(row, ['UML ID']),
+      'LAT': blField_(row, ['LAT', 'LATITUDE']),
+      'LONG': blField_(row, ['LONG', 'LONGITUDE']),
+      'FFB SUPPLIER NAME': blField_(row, ['FFB SUPPLIER NAME']),
+    };
+  }
+
+  function buildBlTtpCandidate_(row) {
+    return {
+      _row: row._row,
+      'FFB SUPPLIER NAME': blField_(row, ['FFB SUPPLIER NAME']),
+      'CATEGORY': typeof ttpRowCategoryValue_ === 'function' ? ttpRowCategoryValue_(row) : blField_(row, ['CATEGORY']),
+      'VILLAGE': blField_(row, ['VILLAGE']),
+      'SUBDISTRICT': blField_(row, ['SUBDISTRICT', 'SUB DISTRICT']),
+      'DISTRICT': blField_(row, ['DISTRICT']),
+      'PROVINCE': blField_(row, ['PROVINCE']),
+      'NUMBER OD SMALLHOLDERS': blField_(row, ['NUMBER OD SMALLHOLDERS', 'NUMBER OF SMALLHOLDERS']),
+      'PLANTED AREA': blField_(row, ['PLANTED AREA']),
+      'FFB SUPPLY to MILL (TON)': blField_(row, ['FFB SUPPLY to MILL (TON)', 'FFB SUPPLY TO MILL (TON)']),
+    };
+  }
+
+  function blRowPickKey_(item) {
+    const rowNum = item && item._row;
+    return rowNum ? 'row:' + rowNum : blTtpKey_(item);
+  }
+
+  function blUniqueMillCount_(ttmLinks) {
+    const keys = new Set();
+    (ttmLinks || []).forEach(function(item) {
+      keys.add(blTtmKey_(item));
+    });
+    return keys.size;
+  }
+
+  function blDetectLatestPeriod_() {
+    var bestY = 0;
+    var bestQ = 0;
+    (ttpData || []).forEach(function(row) {
+      var y = parseMillYearSort(millYearVal(row));
+      var q = parseMillQuarterSort(millQuarterVal(row));
+      if (!y || !q) return;
+      if (y > bestY || (y === bestY && q > bestQ)) {
+        bestY = y;
+        bestQ = q;
+      }
+    });
+    return {
+      year: bestY ? String(bestY) : '',
+      quarter: bestQ ? ('Q' + bestQ) : '',
+    };
+  }
+
+  function blApplyLatestPeriod_() {
+    var latest = blDetectLatestPeriod_();
+    blPeriodYear = latest.year;
+    blPeriodQuarter = latest.quarter;
+    return latest;
+  }
+
+  function blApplyLatestPeriodFilter_() {
+    blApplyLatestPeriod_();
+    blUpdatePickerPeriodLabel_();
+  }
+
+  function blUpdatePickerPeriodLabel_() {
+    var el = document.getElementById('blPickerPeriodLabel');
+    if (!el) return;
+    if (!blPeriodYear || !blPeriodQuarter) {
+      el.textContent = 'Periode Monitoring: semua data (quarter tidak terdeteksi)';
+      return;
+    }
+    el.textContent = 'Periode Monitoring otomatis: ' + blPeriodQuarter + ' ' + blPeriodYear;
+  }
+
+  function blFilterMonitoringByPeriod_(rows) {
+    if (!blPeriodYear || !blPeriodQuarter) return rows || [];
+    return (rows || []).filter(function(r) {
+      return ttpYearToken_(r) === blPeriodYear && ttpQuarterToken_(r) === blPeriodQuarter;
+    });
+  }
+
+  function blRebuildSelectedTtp_() {
+    const prevByRow = {};
+    (blSelectedTtp || []).forEach(function(t) {
+      if (t && t._row) prevByRow[t._row] = t;
+    });
+    const next = [];
+    blSelectedTtm.forEach(function(ttm) {
+      if (!ttm || !ttm._row || !blTtmRowsWithTtp_.has(ttm._row)) return;
+      const live = (ttpData || []).find(function(r) { return r._row === ttm._row; });
+      next.push(live ? buildBlTtpCandidate_(live) : prevByRow[ttm._row]);
+    });
+    blSelectedTtp = next.filter(Boolean);
+  }
+
+  function blSyncTtpFromTtmRows_() {
+    blRebuildSelectedTtp_();
+  }
+
+  function blAddMonitoringRowPick_(src, includeTtp) {
+    if (!src || !src._row) return false;
+    if (blSelectedTtm.some(function(x) { return x._row === src._row; })) return false;
+    blSelectedTtm.push(buildBlTtmCandidate_(src));
+    if (includeTtp) {
+      blTtmRowsWithTtp_.add(src._row);
+    } else {
+      blTtmRowsWithTtp_.delete(src._row);
+    }
+    blRebuildSelectedTtp_();
+    return true;
+  }
+
+  function blRemoveMonitoringRowPick_(rowNum) {
+    blSelectedTtm = blSelectedTtm.filter(function(x) { return x._row !== rowNum; });
+    blTtmRowsWithTtp_.delete(rowNum);
+    blRebuildSelectedTtp_();
+  }
+
+  function blRenderLinkedPickers_() {
+    renderBlPickerChips_('blTtmSelected', blSelectedTtm, 'ttm');
+    renderBlPickerChips_('blTtpSelected', blSelectedTtp, 'ttp');
+  }
+
+  function getBlRowCandidates_() {
+    return blFilterMonitoringByPeriod_(ttpData || []).map(function(row) {
+      return {
+        _row: row._row,
+        ttm: buildBlTtmCandidate_(row),
+        ttp: buildBlTtpCandidate_(row),
+      };
+    });
+  }
+
+  function filterBlRowResults_(query) {
+    const q = String(query || '').toLowerCase().trim();
+    const selectedRows = new Set(blSelectedTtm.map(function(x) { return x._row; }));
+    return getBlRowCandidates_().filter(function(item) {
+      if (selectedRows.has(item._row)) return false;
+      if (!q) return true;
+      const blob = [
+        item.ttm['COMPANY NAME'], item.ttm['GROUP NAME'], item.ttm['UML ID'], item.ttm['MILL NAME'],
+        item.ttp['FFB SUPPLIER NAME'], item.ttp['CATEGORY'], item.ttp['VILLAGE'],
+        item.ttp['SUBDISTRICT'], item.ttp['DISTRICT'], item.ttp['PROVINCE'],
+      ].join(' ').toLowerCase();
+      return blob.includes(q);
+    }).slice(0, 40);
+  }
+
+  function getBlTtmCandidates_() {
+    return getBlRowCandidates_().map(function(item) { return item.ttm; });
+  }
+
+  function getBlTtpCandidates_() {
+    return getBlRowCandidates_().map(function(item) { return item.ttp; });
+  }
+
+  function blTtmCountLabel_(count) {
+    if (!count) return '';
+    return count + (count === 1 ? ' MILL' : ' MILLS');
+  }
+
+  function blTtpCountLabel_(count) {
+    if (!count) return '';
+    return count + ' TTP';
+  }
+
+  function blNormalizeRowNation_(row) {
+    if (!row) return row;
+    if (!row['NATION'] && row['LOADING NATION']) row['NATION'] = row['LOADING NATION'];
+    if (!row['NATION (BUYER)'] && row['BUYER NATION']) row['NATION (BUYER)'] = row['BUYER NATION'];
+    return row;
+  }
+
+  function blNextNo_() {
+    let max = 0;
+    blData.forEach(function(d) {
+      const n = parseInt(String(d['NO'] || '').replace(/\D/g, ''), 10);
+      if (!isNaN(n) && n > max) max = n;
+    });
+    return String(max + 1);
+  }
+
+  function blParseDateTs_(raw) {
+    const s = String(raw || '').trim();
+    if (!s || s === '—') return 0;
+    const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (slash) {
+      const day = parseInt(slash[1], 10);
+      const month = parseInt(slash[2], 10) - 1;
+      let year = parseInt(slash[3], 10);
+      if (year < 100) year += 2000;
+      const t = new Date(year, month, day).getTime();
+      return isNaN(t) ? 0 : t;
+    }
+    const t = new Date(s).getTime();
+    return isNaN(t) ? 0 : t;
+  }
+
+  function sortBlRowsByReceivedDesc_(rows) {
+    return (rows || []).slice().sort(function(a, b) {
+      const ta = blParseDateTs_(a['RECEIVED DATE']);
+      const tb = blParseDateTs_(b['RECEIVED DATE']);
+      if (tb !== ta) return tb - ta;
+      return (b._row || 0) - (a._row || 0);
+    });
+  }
+
+  function blExportColValue_(d, colDef) {
+    if (!d || !colDef) return '';
+    if (colDef.kind === 'ttm') {
+      const ttmCount = (d._ttmLinks || []).length;
+      return d['TTM'] || blTtmCountLabel_(ttmCount) || '';
+    }
+    if (colDef.kind === 'ttp') {
+      const ttpCount = (d._ttpLinks || []).length;
+      return d['TTP'] || blTtpCountLabel_(ttpCount) || '';
+    }
+    return d[colDef.field] != null ? String(d[colDef.field]) : '';
+  }
+
+  function getBlExportColDefs_(selectedIds) {
+    const ids = selectedIds || blExportSelectedColIds;
+    return BL_EXPORT_COLUMN_DEFS.filter(function(c) { return ids.indexOf(c.id) !== -1; });
+  }
+
+  function blRowToExport_(d, colDefs) {
+    const defs = colDefs || getBlExportColDefs_();
+    return defs.map(function(col) { return blExportColValue_(d, col); });
+  }
+
+  function prepareBlRow_(row) {
+    if (!row || typeof row !== 'object') return row;
+    Object.keys(row).forEach(function(k) {
+      if (k === '_row') return;
+      var norm = String(k).replace(/\s+/g, ' ').trim();
+      if (norm !== k && row[norm] === undefined) row[norm] = row[k];
+    });
+    blNormalizeRowNation_(row);
+    row._ttmLinks = parseBlLinksJson_(row[BL_JSON_TTM]);
+    row._ttpLinks = parseBlLinksJson_(row[BL_JSON_TTP]);
+    row._blSearchBlob = BL_FORM_FIELDS.concat(['TTM', 'TTP']).map(function(f) {
+      return String(row[f] || '').toLowerCase();
+    }).join('|');
+    return row;
+  }
+
+  function blStatusBadge_(val) {
+    if (!val || val === '—') return '—';
+    const v = String(val).toLowerCase();
+    const cls = v.includes('done') ? 'grv-closed' : 'grv-open';
+    return '<span class="status-badge ' + cls + '"><span class="s-dot"></span>' + escHtml(val) + '</span>';
+  }
+
+  function blRequestBadge_(val) {
+    if (!val || val === '—') return '—';
+    const v = String(val).trim().toUpperCase();
+    const cls = v === 'TTP' ? 'risk-med' : 'risk-low';
+    return '<span class="status-badge ' + cls + '"><span class="s-dot"></span>' + escHtml(v) + '</span>';
+  }
+
+  function blLinkPill_(label) {
+    if (!label || label === '—' || !String(label).trim()) {
+      return '<span class="bl-link-pill bl-link-pill--empty">—</span>';
+    }
+    return '<span class="bl-link-pill">' + escHtml(label) + '</span>';
+  }
+
+  function updateBlStats_() {
+    const totalEl = document.getElementById('bl-stat-total');
+    if (!totalEl) return;
+    let ttmSum = 0;
+    let onprogress = 0;
+    let done = 0;
+    blData.forEach(function(d) {
+      ttmSum += (d._ttmLinks || []).length;
+      const st = String(d['STATUS'] || '').toLowerCase();
+      if (st.includes('done')) done++;
+      else if (st.includes('onprogress') || st.includes('progress')) onprogress++;
+    });
+    totalEl.textContent = blData.length;
+    const activeEl = document.getElementById('bl-stat-active');
+    const doneEl = document.getElementById('bl-stat-done');
+    const ttmEl = document.getElementById('bl-stat-ttm');
+    if (activeEl) activeEl.textContent = onprogress || '0';
+    if (doneEl) doneEl.textContent = done || '0';
+    if (ttmEl) ttmEl.textContent = ttmSum || '0';
+  }
+
+  const scheduleRenderBlTable = makeRafScheduler(function() {
+    renderBlTable();
+  });
+
+  function renderBlTableHead_() {
+    const row = document.getElementById('blTableHeadRow');
+    if (!row) return;
+    row.innerHTML = BL_REGISTRY_COLUMNS.map(function(col) {
+      const minW = col.minWidth ? ' style="min-width:' + col.minWidth + 'px"' : '';
+      return '<th' + minW + '>' + escHtml(col.label) + '</th>';
+    }).join('');
+  }
+
+  function renderBlTableRowHtml_(d) {
+    return BL_REGISTRY_COLUMNS.map(function(col) {
+      const minW = col.minWidth ? ' style="min-width:' + col.minWidth + 'px"' : '';
+      return '<td' + minW + '>' + col.cell(d) + '</td>';
+    }).join('');
+  }
+
+  function renderBlTable() {
+    const body = document.getElementById('blTableBody');
+    if (!body) return;
+    bindBlTableDelegationOnce_();
+    renderBlTableHead_();
+    const q = blSearch;
+    const filtered = blData.filter(function(d) {
+      return !q || (d._blSearchBlob || '').includes(q);
+    });
+    if (!filtered.length) {
+      body.innerHTML = '<tr><td colspan="' + BL_REGISTRY_COLUMNS.length + '" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>';
+      return;
+    }
+    body.innerHTML = filtered.map(function(d) {
+      return '<tr class="bl-main-row" data-row="' + d._row + '">' + renderBlTableRowHtml_(d) + '</tr>';
+    }).join('');
+  }
+
+  function bindBlTableDelegationOnce_() {
+    if (blTableDelegationBound) return;
+    const body = document.getElementById('blTableBody');
+    if (!body) return;
+    blTableDelegationBound = true;
+    body.addEventListener('click', function(e) {
+      const editBtn = e.target.closest('.bl-row-edit');
+      if (editBtn && body.contains(editBtn)) {
+        e.stopPropagation();
+        const rowNum = parseInt(editBtn.dataset.row, 10);
+        const row = blData.find(function(d) { return d._row === rowNum; });
+        if (row) openBlFormModal_('edit', row);
+        return;
+      }
+      const delBtn = e.target.closest('.bl-row-delete');
+      if (delBtn && body.contains(delBtn)) {
+        e.stopPropagation();
+        openConfirm('blMonitoring', parseInt(delBtn.dataset.rownum, 10));
+        return;
+      }
+      const mainRow = e.target.closest('.bl-main-row');
+      if (mainRow && body.contains(mainRow) && !e.target.closest('.row-actions')) {
+        const rowNum = parseInt(mainRow.dataset.row, 10);
+        const row = blData.find(function(d) { return d._row === rowNum; });
+        if (row) openBlDetailModal_(row);
+      }
+    });
+  }
+
+  /** BL Monitoring — always hit latest GAS deploy (bypass stale Vite prebundle). */
+  var BL_MONITORING_GAS_URL =
+    'https://script.google.com/macros/s/AKfycbyn_Rl1geJybTgp9LkNonFT-cVYsv7vGpGons95Bt9XAhwk6PrlVzMAn21lAFKmRiENkw/exec';
+
+  async function fetchBlMonitoringRows_() {
+    var base = (typeof window !== 'undefined' && window.SDD_LATEST_WEBAPP_URL)
+      || BL_MONITORING_GAS_URL;
+    var fullUrl = base + '?action=getAll&sheet=blMonitoring&_ts=' + Date.now();
+    var res = await fetch(fullUrl, {
+      method: 'GET',
+      mode: 'cors',
+      credentials: 'omit',
+      redirect: 'follow',
+      cache: 'no-store',
+    });
+    var text = await res.text();
+    var data;
+    try {
+      data = text ? JSON.parse(text) : [];
+    } catch (parseErr) {
+      throw new Error('BL GET: invalid JSON. HTTP ' + res.status + '. ' + text.slice(0, 160));
+    }
+    if (!res.ok) throw new Error((data && data.error) || ('BL GET failed: HTTP ' + res.status));
+    if (data && typeof data === 'object' && !Array.isArray(data) && data.error) {
+      throw new Error(data.error);
+    }
+    return normalizeGetArray(data);
+  }
+
+  async function loadBlDataImpl_() {
+    const loading = document.getElementById('bl-loading');
+    const errorEl = document.getElementById('bl-error');
+    const table = document.getElementById('blTable');
+    if (!loading || !errorEl || !table) {
+      console.warn('[dashboard] BL panel DOM missing; skip loadBlData.');
+      return;
+    }
+    try {
+      loading.style.display = 'block';
+      errorEl.style.display = 'none';
+      table.style.display = 'none';
+      try { localStorage.setItem('SDD_WEBAPP_URL', BL_MONITORING_GAS_URL); } catch (e) { /* ignore */ }
+      blData = await fetchBlMonitoringRows_();
+      blData = sortBlRowsByReceivedDesc_((blData || []).map(prepareBlRow_));
+      blLoaded = true;
+      updateBlStats_();
+      loading.style.display = 'none';
+      table.style.display = 'table';
+      scheduleRenderBlTable();
+    } catch (err) {
+      loading.style.display = 'none';
+      errorEl.style.display = 'block';
+      var blMsg = err.message || String(err);
+      var apiUsed = typeof getSddApiUrl === 'function' ? getSddApiUrl() : '';
+      if (/blMonitoring|BL Monitoring|Sheet key not found/i.test(blMsg)) {
+        blMsg += ' — Browser masih pakai URL Apps Script lama. Buka Console (F12), jalankan: localStorage.setItem("SDD_WEBAPP_URL","' + SDD_DEFAULT_WEBAPP_URL + '"); location.reload();';
+      }
+      if (apiUsed) blMsg += ' [URL: ' + apiUsed.slice(0, 72) + '…]';
+      errorEl.innerHTML = '<p>' + escHtml('Gagal memuat data: ' + blMsg) + '</p>'
+        + '<p style="margin-top:12px;"><button type="button" class="btn-sm btn-filled" id="btn-bl-reset-api-url">Reset URL Apps Script</button></p>';
+      var resetBtn = document.getElementById('btn-bl-reset-api-url');
+      if (resetBtn) {
+        resetBtn.addEventListener('click', function() {
+          try {
+            localStorage.setItem('SDD_WEBAPP_URL', SDD_DEFAULT_WEBAPP_URL);
+          } catch (e) { /* ignore */ }
+          blLoaded = false;
+          loadBlData();
+        }, { once: true });
+      }
+    }
+  }
+
+  async function loadBlData() {
+    if (blLoadPromise) return blLoadPromise;
+    blLoadPromise = loadBlDataImpl_();
+    try {
+      await blLoadPromise;
+    } finally {
+      blLoadPromise = null;
+    }
+  }
+
+  function mountBlOverlay_(id) {
+    const overlay = document.getElementById(id);
+    if (!overlay) return null;
+    if (overlay.parentElement !== document.body) document.body.appendChild(overlay);
+    return overlay;
+  }
+
+  function mountBlExportModal_() {
+    return mountBlOverlay_('bl-export-modal');
+  }
+
+  let blOverlayScrollLock_ = null;
+
+  function lockBlOverlayScroll_() {
+    if (blOverlayScrollLock_) return;
+    const main = document.querySelector('.main-content');
+    blOverlayScrollLock_ = {
+      main: main,
+      mainTop: main ? main.scrollTop : 0,
+      winY: window.scrollY || document.documentElement.scrollTop || 0,
+    };
+    if (main) main.classList.add('bl-overlay-scroll-lock');
+  }
+
+  function unlockBlOverlayScroll_() {
+    if (!blOverlayScrollLock_) return;
+    const lock = blOverlayScrollLock_;
+    blOverlayScrollLock_ = null;
+    if (lock.main) {
+      lock.main.classList.remove('bl-overlay-scroll-lock');
+      lock.main.scrollTop = lock.mainTop;
+    }
+    window.scrollTo(0, lock.winY);
+  }
+
+  function resetBlOverlayScroll_(overlay, bodyEl) {
+    if (overlay) overlay.scrollTop = 0;
+    if (bodyEl) bodyEl.scrollTop = 0;
+  }
+
+  function blExcelStamp_() {
+    const now = new Date();
+    return now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+  }
+
+  function blSafeFilePart_(raw) {
+    return String(raw || 'BL').trim().replace(/[^\w\-]+/g, '_').replace(/_+/g, '_').slice(0, 40) || 'BL';
+  }
+
+  function writeBlExcelFile_(rows, headers, sheetLabel, filename) {
+    if (typeof XLSX === 'undefined') return;
+    if (!headers || !headers.length) return;
+    const wsData = [headers].concat(rows);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = headers.map(function(h) {
+      return { wch: Math.min(Math.max(String(h).length + 4, 12), 36) };
+    });
+
+    const headerFill = '8B1A1A';
+    const headerFont = 'FFFFFF';
+    headers.forEach(function(h, ci) {
+      const cellAddr = XLSX.utils.encode_cell({ r: 0, c: ci });
+      if (!ws[cellAddr]) ws[cellAddr] = { t: 's', v: h };
+      ws[cellAddr].s = {
+        font: { bold: true, color: { rgb: headerFont }, sz: 11 },
+        fill: { fgColor: { rgb: headerFill } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+      };
+    });
+
+    if (!ws['!rows']) ws['!rows'] = [];
+    ws['!rows'][0] = { hpt: 24 };
+
+    if (rows.length) {
+      ws['!autofilter'] = {
+        ref: XLSX.utils.encode_range({
+          s: { r: 0, c: 0 },
+          e: { r: rows.length, c: headers.length - 1 },
+        }),
+      };
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, sheetLabel || 'BL Monitoring');
+    XLSX.writeFile(wb, filename, { cellStyles: true });
+  }
+
+  function exportBlExcelAll_(colDefs) {
+    const defs = colDefs || getBlExportColDefs_();
+    if (!blData.length || !defs.length) return;
+    const headers = defs.map(function(c) { return c.header; });
+    writeBlExcelFile_(
+      blData.map(function(d) { return blRowToExport_(d, defs); }),
+      headers,
+      'BL Monitoring',
+      'bl_monitoring_all_' + blExcelStamp_() + '.xlsx'
+    );
+  }
+
+  function exportBlExcelOne_(row, colDefs) {
+    if (!row) return;
+    const defs = colDefs || getBlExportColDefs_();
+    if (!defs.length) return;
+    const headers = defs.map(function(c) { return c.header; });
+    const blNo = blSafeFilePart_(row['BL NO.']);
+    writeBlExcelFile_(
+      [blRowToExport_(row, defs)],
+      headers,
+      'BL',
+      'bl_' + blNo + '_' + blExcelStamp_() + '.xlsx'
+    );
+  }
+
+  function blRefreshExportColList_() {
+    const listEl = document.getElementById('blExportColList');
+    if (!listEl) return;
+    listEl.innerHTML = BL_EXPORT_COLUMN_DEFS.map(function(col) {
+      const checked = blExportSelectedColIds.indexOf(col.id) !== -1 ? ' checked' : '';
+      return ''
+        + '<label class="pf-export-facility-item">'
+        + '<input type="checkbox" name="blExportCol" value="' + escHtml(col.id) + '"' + checked + ' />'
+        + '<span>' + escHtml(col.label) + '</span>'
+        + '</label>';
+    }).join('');
+  }
+
+  function blReadExportColSelection_() {
+    const checked = Array.from(document.querySelectorAll('#blExportColList input[name="blExportCol"]:checked'))
+      .map(function(cb) { return cb.value; });
+    const ordered = BL_EXPORT_COLUMN_DEFS
+      .map(function(c) { return c.id; })
+      .filter(function(id) { return checked.indexOf(id) !== -1; });
+    blExportSelectedColIds = ordered;
+    return getBlExportColDefs_(ordered);
+  }
+
+  function openBlExportModal_(targetRow) {
+    if (!blData.length && !targetRow) {
+      alert('Belum ada data BL untuk diexport.');
+      return;
+    }
+    const modal = mountBlExportModal_();
+    if (!modal) return;
+    blExportTargetRow = targetRow || null;
+    const titleEl = document.getElementById('blExportModalTitle');
+    if (titleEl) {
+      titleEl.textContent = targetRow
+        ? ('Export BL ' + (targetRow['BL NO.'] || ''))
+        : 'Export BL to Excel';
+    }
+    blRefreshExportColList_();
+    const listEl = document.getElementById('blExportColList');
+    if (listEl) listEl.scrollTop = 0;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeBlExportModal_() {
+    const modal = document.getElementById('bl-export-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+    blExportTargetRow = null;
+  }
+
+  function confirmBlExport_() {
+    const colDefs = blReadExportColSelection_();
+    if (!colDefs.length) {
+      alert('Pilih minimal satu kolom.');
+      return;
+    }
+    if (blExportTargetRow) {
+      exportBlExcelOne_(blExportTargetRow, colDefs);
+    } else {
+      exportBlExcelAll_(colDefs);
+    }
+    closeBlExportModal_();
+  }
+
+  function buildBlFormFields_(row) {
+    const grid = document.getElementById('blFormFieldsGrid');
+    if (!grid) return;
+    const data = row || {};
+    grid.innerHTML = BL_FORM_FIELDS.map(function(f) {
+      const label = BL_FIELD_LABELS[f] || f;
+      const val = data[f] != null ? String(data[f]) : '';
+      if (f === 'REQUEST TYPE') {
+        return buildCustomSelect('REQUEST TYPE', BL_REQUEST_TYPES, val, false, false);
+      }
+      if (f === 'STATUS') {
+        return buildCustomSelect('STATUS', BL_STATUS_VALUES, val || 'Onprogress', false, false);
+      }
+      if (f === 'NO') {
+        const noVal = blFormMode === 'add' ? blNextNo_() : (val || blNextNo_());
+        return ''
+          + '<div class="form-field">'
+          + '<label>' + escHtml(label) + '</label>'
+          + '<input type="text" data-bl-field="NO" value="' + escHtml(noVal) + '" placeholder="Auto" readonly>'
+          + '</div>';
+      }
+      return ''
+        + '<div class="form-field">'
+        + '<label>' + escHtml(label) + '</label>'
+        + '<input type="text" data-bl-field="' + escHtml(f) + '" value="' + escHtml(val) + '" placeholder="' + escHtml(label) + '">'
+        + '</div>';
+    }).join('');
+    initCustomSelects(grid);
+  }
+
+  function readBlFormFields_() {
+    const data = {};
+    document.querySelectorAll('#blFormFieldsGrid [data-bl-field]').forEach(function(el) {
+      data[el.dataset.blField] = el.value.trim();
+    });
+    document.querySelectorAll('#blFormFieldsGrid [data-field]').forEach(function(el) {
+      data[el.dataset.field] = el.value.trim();
+    });
+    return data;
+  }
+
+  function renderBlPickerChips_(containerId, items, type) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    if (!items.length) {
+      const emptyMsg = type === 'ttp'
+        ? 'Belum ada — otomatis muncul saat Anda pilih baris TTM/TTP di atas'
+        : 'Belum ada yang dipilih';
+      el.innerHTML = '<span class="bl-picker-empty" style="padding:0;border:none;background:transparent;">' + escHtml(emptyMsg) + '</span>';
+      return;
+    }
+    el.innerHTML = items.map(function(item, idx) {
+      let label = '';
+      if (type === 'ttm') {
+        label = blField_(item, ['COMPANY NAME']) + ' · ' + blField_(item, ['UML ID']);
+        const sup = blField_(item, ['FFB SUPPLIER NAME']);
+        if (sup && sup !== '—') label += ' → ' + sup;
+        if (item._row && !blTtmRowsWithTtp_.has(item._row)) {
+          label += ' · TTM only';
+        }
+      } else {
+        label = blField_(item, ['FFB SUPPLIER NAME']) + ' · ' + blField_(item, ['VILLAGE']);
+      }
+      const rowAttr = item._row ? ' data-row="' + item._row + '"' : '';
+      const removeType = type === 'ttp' ? 'row' : 'ttm';
+      return ''
+        + '<span class="bl-picker-chip"' + rowAttr + ' data-idx="' + idx + '">'
+        + '<span>' + escHtml(label) + '</span>'
+        + (type === 'ttm'
+          ? '<button type="button" data-type="' + removeType + '" data-row="' + item._row + '" data-idx="' + idx + '" aria-label="Remove">×</button>'
+          : '')
+        + '</span>';
+    }).join('');
+  }
+
+  function renderBlTtmResults_(query) {
+    const panel = document.getElementById('blTtmResults');
+    if (!panel) return;
+    const items = filterBlRowResults_(query);
+    if (!items.length) {
+      panel.innerHTML = '<div class="bl-picker-empty">Tidak ada baris ditemukan</div>';
+      panel.classList.add('open');
+      return;
+    }
+    panel.innerHTML = items.map(function(item) {
+      return ''
+        + '<div class="bl-picker-item">'
+        + '<div class="bl-picker-item-main">'
+        + '<div class="bl-picker-item-title">' + escHtml(blField_(item.ttm, ['COMPANY NAME'])) + ' · UML ' + escHtml(blField_(item.ttm, ['UML ID'])) + '</div>'
+        + '<div class="bl-picker-item-sub">TTP: ' + escHtml(blField_(item.ttp, ['FFB SUPPLIER NAME'])) + ' · ' + escHtml(blField_(item.ttp, ['VILLAGE'])) + ', ' + escHtml(blField_(item.ttp, ['DISTRICT'])) + '</div>'
+        + '</div>'
+        + '<div class="bl-picker-item-actions">'
+        + '<button type="button" class="bl-pick-btn" data-row="' + item._row + '" data-include-ttp="0">+ TTM</button>'
+        + '<button type="button" class="bl-pick-btn bl-pick-btn--both" data-row="' + item._row + '" data-include-ttp="1">+ TTM + TTP</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+    panel.classList.add('open');
+  }
+
+  function closeBlFormModal_() {
+    const overlay = mountBlOverlay_('blFormOverlay');
+    if (overlay) overlay.classList.remove('active');
+    document.body.classList.remove('bl-form-open');
+    unlockBlOverlayScroll_();
+    blFormMode = 'add';
+    blFormRow = null;
+    blSelectedTtm = [];
+    blSelectedTtp = [];
+    blTtmRowsWithTtp_ = new Set();
+    blPeriodYear = '';
+    blPeriodQuarter = '';
+  }
+
+  async function openBlFormModal_(mode, row) {
+    if (!ttpLoaded) await loadTTPData();
+    blApplyLatestPeriodFilter_();
+    const overlay = mountBlOverlay_('blFormOverlay');
+    if (!overlay) return;
+    blFormMode = mode || 'add';
+    blFormRow = row || null;
+    blSelectedTtm = row ? (row._ttmLinks || []).slice() : [];
+    blSelectedTtp = row ? (row._ttpLinks || []).slice() : [];
+    blTtmRowsWithTtp_ = new Set();
+    (blSelectedTtp || []).forEach(function(t) {
+      if (t && t._row) blTtmRowsWithTtp_.add(t._row);
+    });
+
+    const titleEl = document.getElementById('blFormTitle');
+    if (titleEl) titleEl.textContent = mode === 'edit' ? 'Edit Bill of Lading' : 'Add Bill of Lading';
+    buildBlFormFields_(row);
+    blRenderLinkedPickers_();
+
+    const ttmSearch = document.getElementById('blTtmSearch');
+    if (ttmSearch) { ttmSearch.value = ''; }
+    document.getElementById('blTtmResults')?.classList.remove('open');
+
+    lockBlOverlayScroll_();
+    document.body.classList.add('bl-form-open');
+    overlay.classList.add('active');
+    resetBlOverlayScroll_(overlay, document.getElementById('blFormBody'));
+    if (ttmSearch) {
+      try { ttmSearch.focus({ preventScroll: true }); } catch (e) { ttmSearch.focus(); }
+    }
+  }
+
+  async function saveBlForm_() {
+    const btn = document.getElementById('blFormSave');
+    const fields = readBlFormFields_();
+    if (!String(fields['BL NO.'] || '').trim()) {
+      alert('BL NO. wajib diisi.');
+      return;
+    }
+    const payload = Object.assign({}, fields);
+    if (!payload['NO']) payload['NO'] = blNextNo_();
+    payload[BL_JSON_TTM] = JSON.stringify(blSelectedTtm);
+    payload[BL_JSON_TTP] = JSON.stringify(blSelectedTtp);
+    payload['TTM'] = blTtmCountLabel_(blUniqueMillCount_(blSelectedTtm));
+    payload['TTP'] = blTtpCountLabel_(blSelectedTtp.length);
+
+    if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+    try {
+      if (blFormMode === 'edit' && blFormRow && blFormRow._row) {
+        await apiPost({ action: 'update', sheet: 'blMonitoring', row: blFormRow._row, data: payload }, { baseUrl: SDD_DEFAULT_WEBAPP_URL });
+      } else {
+        await apiPost({ action: 'add', sheet: 'blMonitoring', data: payload }, { baseUrl: SDD_DEFAULT_WEBAPP_URL });
+      }
+      closeBlFormModal_();
+      blLoaded = false;
+      await loadBlData();
+    } catch (err) {
+      alert('Error saving BL: ' + err.message);
+    } finally {
+      if (btn) { btn.disabled = false; btn.textContent = 'Save BL'; }
+    }
+  }
+
+  function buildBlLinkedTableHtml_(cols, rows) {
+    if (!rows || !rows.length) {
+      return '<div class="bl-linked-empty">Tidak ada data terhubung</div>';
+    }
+    const head = cols.map(function(c) { return '<th>' + escHtml(c.label) + '</th>'; }).join('');
+    const body = rows.map(function(row) {
+      const tds = cols.map(function(c) {
+        return '<td>' + escHtml(blField_(row, [c.key])) + '</td>';
+      }).join('');
+      return '<tr>' + tds + '</tr>';
+    }).join('');
+    return ''
+      + '<div class="bl-linked-table-wrap"><table class="bl-linked-table"><thead><tr>' + head + '</tr></thead><tbody>'
+      + body + '</tbody></table></div>';
+  }
+
+  function openBlDetailModal_(row) {
+    if (!row) return;
+    const overlay = mountBlOverlay_('blDetailOverlay');
+    if (!overlay) return;
+    blDetailCurrent = row;
+
+    const titleEl = document.getElementById('blDetailTitle');
+    const subEl = document.getElementById('blDetailSubtitle');
+    const bodyEl = document.getElementById('blDetailBody');
+    if (!titleEl || !subEl || !bodyEl) return;
+
+    titleEl.textContent = 'BL ' + (row['BL NO.'] || '—');
+    subEl.textContent = [
+      row['VESSEL'], row['BUYER'], row['LOADING PORT'],
+    ].filter(function(p) { return p && String(p).trim(); }).join(' · ') || 'Bill of Lading';
+
+    const blGrid = BL_FORM_FIELDS.map(function(f) {
+      return ''
+        + '<div class="bl-detail-item">'
+        + '<div class="bl-detail-label">' + escHtml(f) + '</div>'
+        + '<div class="bl-detail-val">' + escHtml(row[f] || '—') + '</div>'
+        + '</div>';
+    }).join('');
+
+    bodyEl.innerHTML = ''
+      + '<div class="bl-detail-section"><div class="bl-detail-section-title">Bill of Lading</div><div class="bl-detail-grid">' + blGrid + '</div></div>'
+      + '<div class="bl-detail-section"><div class="bl-detail-section-title">TTM — ' + escHtml(row['TTM'] || blTtmCountLabel_((row._ttmLinks || []).length) || '—') + '</div>'
+      + buildBlLinkedTableHtml_(BL_TTM_DETAIL_COLS, row._ttmLinks || []) + '</div>'
+      + '<div class="bl-detail-section"><div class="bl-detail-section-title">TTP — ' + escHtml(row['TTP'] || blTtpCountLabel_((row._ttpLinks || []).length) || '—') + '</div>'
+      + buildBlLinkedTableHtml_(BL_TTP_DETAIL_COLS, row._ttpLinks || []) + '</div>';
+
+    document.body.classList.add('bl-detail-open');
+    lockBlOverlayScroll_();
+    overlay.classList.add('active');
+    resetBlOverlayScroll_(overlay, bodyEl);
+  }
+
+  function closeBlDetailModal_() {
+    const overlay = mountBlOverlay_('blDetailOverlay');
+    if (overlay) overlay.classList.remove('active');
+    document.body.classList.remove('bl-detail-open');
+    unlockBlOverlayScroll_();
+    blDetailCurrent = null;
+    const bodyEl = document.getElementById('blDetailBody');
+    if (bodyEl) bodyEl.innerHTML = '';
+  }
+
+  function exportBlExcel_() {
+    openBlExportModal_(null);
+  }
+
+  (function bindBlMonitoringUi_() {
+    const searchEl = document.getElementById('blSearch');
+    const clearEl = document.getElementById('blSearchClear');
+    const btnAdd = document.getElementById('btn-add-bl');
+    const btnExport = document.getElementById('btn-export-bl');
+    if (!searchEl || !clearEl || !btnAdd || !btnExport) {
+      console.warn('[dashboard] BL panel toolbar incomplete; BL controls skipped.');
+      return;
+    }
+
+    const debouncedRenderBl = debounce(function() {
+      scheduleRenderBlTable();
+    }, 120);
+
+    searchEl.addEventListener('input', function() {
+      blSearch = this.value.toLowerCase().trim();
+      clearEl.classList.toggle('show', !!this.value);
+      debouncedRenderBl();
+    });
+    clearEl.addEventListener('click', function() {
+      searchEl.value = '';
+      blSearch = '';
+      this.classList.remove('show');
+      debouncedRenderBl.cancel();
+      scheduleRenderBlTable.flush();
+      searchEl.focus();
+    });
+
+    btnAdd.addEventListener('click', function() { openBlFormModal_('add', null); });
+    btnExport.addEventListener('click', function() { openBlExportModal_(null); });
+
+    const formOverlay = mountBlOverlay_('blFormOverlay');
+    const detailOverlay = mountBlOverlay_('blDetailOverlay');
+    document.getElementById('blFormClose')?.addEventListener('click', closeBlFormModal_);
+    document.getElementById('blFormCancel')?.addEventListener('click', closeBlFormModal_);
+    document.getElementById('blFormSave')?.addEventListener('click', saveBlForm_);
+    formOverlay?.addEventListener('click', function(e) {
+      if (e.target === formOverlay) closeBlFormModal_();
+    });
+
+    document.getElementById('blDetailClose')?.addEventListener('click', closeBlDetailModal_);
+    document.getElementById('blDetailCloseBtn')?.addEventListener('click', closeBlDetailModal_);
+    document.getElementById('blDetailExportBtn')?.addEventListener('click', function() {
+      if (blDetailCurrent) openBlExportModal_(blDetailCurrent);
+    });
+    document.getElementById('blDetailEditBtn')?.addEventListener('click', function() {
+      const row = blDetailCurrent;
+      closeBlDetailModal_();
+      if (row) openBlFormModal_('edit', row);
+    });
+    document.getElementById('blDetailDeleteBtn')?.addEventListener('click', function() {
+      const row = blDetailCurrent;
+      if (!row || !row._row) return;
+      closeBlDetailModal_();
+      openConfirm('blMonitoring', row._row);
+    });
+    detailOverlay?.addEventListener('click', function(e) {
+      if (e.target === detailOverlay) closeBlDetailModal_();
+    });
+
+    ['blExportModalClose', 'blExportCancel', 'blExportModalBackdrop'].forEach(function(id) {
+      document.getElementById(id)?.addEventListener('click', closeBlExportModal_);
+    });
+    document.getElementById('blExportConfirm')?.addEventListener('click', confirmBlExport_);
+    document.getElementById('blExportColAll')?.addEventListener('click', function() {
+      blExportSelectedColIds = BL_EXPORT_DEFAULT_COL_IDS.slice();
+      blRefreshExportColList_();
+    });
+    document.getElementById('blExportColDefault')?.addEventListener('click', function() {
+      blExportSelectedColIds = BL_EXPORT_DEFAULT_COL_IDS.slice();
+      blRefreshExportColList_();
+    });
+    document.getElementById('blExportColNone')?.addEventListener('click', function() {
+      blExportSelectedColIds = [];
+      blRefreshExportColList_();
+    });
+
+    const ttmSearch = document.getElementById('blTtmSearch');
+    ttmSearch?.addEventListener('input', function() { renderBlTtmResults_(this.value); });
+    ttmSearch?.addEventListener('focus', function() { renderBlTtmResults_(this.value); });
+
+    document.getElementById('blTtmResults')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('.bl-pick-btn');
+      if (!btn) return;
+      const rowNum = parseInt(btn.dataset.row, 10);
+      const includeTtp = btn.dataset.includeTtp === '1';
+      const src = (ttpData || []).find(function(r) { return r._row === rowNum; });
+      if (!src) return;
+      if (!blAddMonitoringRowPick_(src, includeTtp)) return;
+      blRenderLinkedPickers_();
+      renderBlTtmResults_(ttmSearch ? ttmSearch.value : '');
+    });
+
+    document.getElementById('blTtmSelected')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('button[data-type="row"]');
+      if (!btn) return;
+      const rowNum = parseInt(btn.dataset.row, 10);
+      blRemoveMonitoringRowPick_(rowNum);
+      blRenderLinkedPickers_();
+      renderBlTtmResults_(ttmSearch ? ttmSearch.value : '');
+    });
+
+    if (!window.__sddBlEscBound) {
+      window.__sddBlEscBound = true;
+      document.addEventListener('keydown', function(e) {
+        if (e.key !== 'Escape') return;
+        if (formOverlay && formOverlay.classList.contains('active')) closeBlFormModal_();
+        if (detailOverlay && detailOverlay.classList.contains('active')) closeBlDetailModal_();
+      });
+    }
+  })();
+
   // ─── CONTACT LIST SUPPLIER ───────────────────────────────
   const CLS_EXPORT_FIELDS = [
     'Group Name', 'Company Name', 'Supplier Type',
@@ -9653,10 +10825,6 @@ function initDashboardApp() {
     if (navItem) navItem.classList.add('active');
     const grp = document.getElementById('navGroupTrace');
     if (grp && !grp.classList.contains('open')) grp.classList.add('open');
-    const grpPrograms = document.getElementById('navGroupPrograms');
-    if (grpPrograms && ['no-buy-list', 'performa-facility', 'eudr-potential', 'contact-list-supplier', 'priority-supplier-engagement'].indexOf(name) !== -1) {
-      if (!grpPrograms.classList.contains('open')) grpPrograms.classList.add('open');
-    }
     if (name === 'mill-onboarding' && allData.length) {
       if (currentFilter === 'Task List') {
         currentFilter = 'All';
@@ -9670,6 +10838,7 @@ function initDashboardApp() {
     }
     if (name === 'ttm-ttp' && !ttpLoaded) loadTTPData();
     if (name === 'grievance' && !grvLoaded) loadGrvData();
+    if (name === 'bl-monitoring' && !blLoaded) loadBlData();
     if (name === 'contact-list-supplier') loadContactListData();
     if (name === 'no-buy-list') loadNoBuyListData();
     if (name === 'performa-facility') initPerformaFacility_();
@@ -11174,15 +12343,10 @@ function initDashboardApp() {
       const panel = this.dataset.panel;
       switchPanel(panel);
       if (panel === 'grievance' && !grvLoaded) loadGrvData();
+      if (panel === 'bl-monitoring' && !blLoaded) loadBlData();
     });
   });
 
-  const btnBlMonitoringBack = document.getElementById('btn-bl-monitoring-back');
-  if (btnBlMonitoringBack) {
-    btnBlMonitoringBack.addEventListener('click', function() {
-      switchPanel('overview');
-    });
-  }
   document.querySelectorAll('.nav-soon-back').forEach(function(btn) {
     btn.addEventListener('click', function() {
       switchPanel('overview');
@@ -11205,14 +12369,6 @@ function initDashboardApp() {
   if (navGroupTraceHeader && navGroupTrace) {
     navGroupTraceHeader.addEventListener('click', function() {
       navGroupTrace.classList.toggle('open');
-    });
-  }
-
-  const navGroupProgramsHeader = document.getElementById('navGroupProgramsHeader');
-  const navGroupPrograms = document.getElementById('navGroupPrograms');
-  if (navGroupProgramsHeader && navGroupPrograms) {
-    navGroupProgramsHeader.addEventListener('click', function() {
-      navGroupPrograms.classList.toggle('open');
     });
   }
 

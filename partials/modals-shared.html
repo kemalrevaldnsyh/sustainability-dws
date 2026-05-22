@@ -85,3 +85,88 @@
     </div>
   </div>
 </div>
+
+<!-- ═══════════════════ BL MONITORING — ADD / EDIT ═══════════════════ -->
+<div class="bl-form-overlay" id="blFormOverlay" role="dialog" aria-modal="true" aria-labelledby="blFormTitle">
+  <div class="bl-form-box">
+    <div class="bl-form-head">
+      <div>
+        <h2 id="blFormTitle">Add Bill of Lading</h2>
+        <p class="bl-form-sub" id="blFormSubtitle">Isi data BL, lalu pilih baris Monitoring TTM/TTP. Tiap baris bisa ditambah sebagai TTM saja atau TTM + TTP.</p>
+      </div>
+      <button type="button" class="bl-form-close" id="blFormClose" aria-label="Close">✕</button>
+    </div>
+    <div class="bl-form-body" id="blFormBody">
+      <section class="bl-form-section">
+        <h3 class="bl-form-section-title">Bill of Lading</h3>
+        <div class="bl-form-grid" id="blFormFieldsGrid"></div>
+      </section>
+      <section class="bl-form-section">
+        <h3 class="bl-form-section-title">Link TTM / TTP</h3>
+        <p class="bl-form-section-desc" id="blPickerPeriodLabel">Memuat periode Monitoring…</p>
+        <div class="bl-picker-wrap">
+          <div class="bl-picker-search">
+            <input type="text" id="blTtmSearch" placeholder="Cari company, UML ID, supplier, desa..." autocomplete="off" />
+          </div>
+          <div class="bl-picker-results" id="blTtmResults"></div>
+          <div class="bl-picker-selected" id="blTtmSelected"></div>
+        </div>
+      </section>
+      <section class="bl-form-section bl-ttp-auto-section">
+        <h3 class="bl-form-section-title">TTP terpilih <span class="bl-form-hint">Hanya baris yang dipilih dengan opsi TTM + TTP</span></h3>
+        <div class="bl-picker-wrap bl-picker-wrap--readonly">
+          <div class="bl-picker-selected" id="blTtpSelected"></div>
+        </div>
+      </section>
+    </div>
+    <div class="bl-form-foot">
+      <button type="button" class="btn-cancel" id="blFormCancel">Cancel</button>
+      <button type="button" class="btn-save" id="blFormSave">Save BL</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ BL MONITORING — DETAIL ═══════════════════ -->
+<div class="bl-detail-overlay" id="blDetailOverlay" role="dialog" aria-modal="true" aria-labelledby="blDetailTitle">
+  <div class="bl-detail-box">
+    <div class="bl-detail-head">
+      <div>
+        <h2 id="blDetailTitle">BL Detail</h2>
+        <p class="bl-detail-sub" id="blDetailSubtitle">—</p>
+      </div>
+      <button type="button" class="bl-detail-close" id="blDetailClose" aria-label="Close">✕</button>
+    </div>
+    <div class="bl-detail-body" id="blDetailBody"></div>
+    <div class="bl-detail-foot">
+      <button type="button" class="btn-sm btn-outline" id="blDetailExportBtn">Export Excel</button>
+      <button type="button" class="btn-sm btn-outline" id="blDetailEditBtn">Edit BL</button>
+      <button type="button" class="btn-sm btn-outline bl-detail-foot-danger" id="blDetailDeleteBtn">Delete</button>
+      <button type="button" class="btn-sm btn-filled" id="blDetailCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════ BL MONITORING — EXPORT COLUMNS ═══════════════════ -->
+<div id="bl-export-modal" class="pf-export-modal bl-export-modal" style="display:none;" aria-hidden="true">
+  <div class="pf-export-modal-backdrop" id="blExportModalBackdrop"></div>
+  <div class="pf-export-modal-dialog" role="dialog" aria-labelledby="blExportModalTitle">
+    <div class="pf-export-modal-head">
+      <h3 id="blExportModalTitle">Export BL to Excel</h3>
+      <button type="button" class="pf-export-modal-close" id="blExportModalClose" aria-label="Close">✕</button>
+    </div>
+    <div class="pf-export-modal-body">
+      <p class="pf-export-hint">Pilih kolom yang ingin disertakan di file Excel. Urutan baris mengikuti tabel (Received Date terbaru di atas).</p>
+      <div class="pf-export-facility-toolbar">
+        <span class="pf-export-label">Columns</span>
+        <button type="button" class="pf-export-link-btn" id="blExportColAll">Select all</button>
+        <button type="button" class="pf-export-link-btn" id="blExportColDefault">Default</button>
+        <button type="button" class="pf-export-link-btn" id="blExportColNone">Clear</button>
+      </div>
+      <div id="blExportColList" class="pf-export-facility-list bl-export-col-list"></div>
+    </div>
+    <div class="pf-export-modal-foot">
+      <button type="button" class="pf-btn pf-btn--ghost" id="blExportCancel">Cancel</button>
+      <button type="button" class="pf-btn pf-btn--primary" id="blExportConfirm">Export Excel</button>
+    </div>
+  </div>
+</div>

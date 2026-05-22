@@ -27,6 +27,17 @@ mountLoginPage(document.getElementById('login'));
 mountOverviewLanding(document.getElementById('overview-root'));
 window.updateOverviewWelcome = updateOverviewWelcomeFromEmail;
 
+// Selalu pakai deployment terbaru (BL Monitoring butuh script v3-bl-monitoring)
+const SDD_LATEST_WEBAPP_URL =
+  'https://script.google.com/macros/s/AKfycbyn_Rl1geJybTgp9LkNonFT-cVYsv7vGpGons95Bt9XAhwk6PrlVzMAn21lAFKmRiENkw/exec';
+try {
+  localStorage.setItem('SDD_WEBAPP_URL', SDD_LATEST_WEBAPP_URL);
+} catch (e) {
+  /* private mode / blocked storage */
+}
+window.SDD_LATEST_WEBAPP_URL = SDD_LATEST_WEBAPP_URL;
+window.SDD_WEBAPP_URL = SDD_LATEST_WEBAPP_URL;
+
 import('./main.js')
   .then(() => import('./modals.js'))
   .catch((err) => {

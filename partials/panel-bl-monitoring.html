@@ -1,13 +1,40 @@
-      <!-- ── SUPPLIER DUE DILIGENCE PANEL ── -->
       <!-- ── BL MONITORING PANEL ── -->
       <div class="panel" id="panel-bl-monitoring">
-        <div class="coming-soon">
-          <div class="cs-icon">🚢</div>
-          <div class="cs-badge">Coming Soon</div>
-          <div class="cs-title">BL Monitoring</div>
-          <div class="cs-sub">Bill of Lading tracking and shipment monitoring module — linking logistics data with your supply chain records.</div>
-          <div class="cs-back-wrap">
-            <button type="button" class="btn-sm btn-outline" id="btn-bl-monitoring-back">← Kembali ke Overview</button>
+        <div class="breadcrumb">Dashboard <span>/ BL Monitoring</span></div>
+        <div class="page-header">
+          <h1>BL Monitoring</h1>
+          <p>Monitor Bill of Lading shipments and linked mill (TTM) &amp; supplier (TTP) data</p>
+        </div>
+
+        <div class="stats-row bl-stats-row">
+          <div class="stat-card"><div class="stat-card-num" id="bl-stat-total">—</div><div class="stat-card-label">Total BL</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="bl-stat-active">—</div><div class="stat-card-label">Onprogress</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="bl-stat-done">—</div><div class="stat-card-label">Done</div></div>
+          <div class="stat-card"><div class="stat-card-num" id="bl-stat-ttm">—</div><div class="stat-card-label">Linked Mills</div></div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-header">
+            <h3>Bill of Lading Registry</h3>
+            <div class="table-actions">
+              <button class="btn-sm btn-outline" type="button" id="btn-export-bl">Export all existing BL</button>
+              <button class="btn-sm btn-filled" type="button" id="btn-add-bl">+ Add BL</button>
+            </div>
           </div>
+          <div class="search-bar">
+            <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg></span>
+            <input type="text" id="blSearch" placeholder="Search BL no., vessel, buyer, port, status..." />
+            <button class="search-clear" type="button" id="blSearchClear">
+              <svg viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="bl-loading" style="padding:40px;text-align:center;color:#9C8A8A;font-size:14px;">Loading data...</div>
+          <div class="bl-table-wrap">
+            <table id="blTable" class="bl-registry-table" style="display:none;">
+              <thead><tr id="blTableHeadRow"></tr></thead>
+              <tbody id="blTableBody"></tbody>
+            </table>
+          </div>
+          <div id="bl-error" style="display:none;padding:32px;text-align:center;color:#c0392b;font-size:14px;"></div>
         </div>
       </div>

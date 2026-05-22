@@ -53,7 +53,57 @@ const SHEETS = {
   nbl             : 'NBL',
   unileverNbl     : 'Unilever NBL',
   supplyDraft     : 'Supply Import Draft',
+  blMonitoring    : 'BL Monitoring',
 };
+
+/** Tab name for BL Monitoring (must match spreadsheet tab exactly). */
+const BL_MONITORING_TAB = 'BL Monitoring';
+
+/** API sheet keys → spreadsheet tab names (includes aliases). */
+const SHEET_TAB_ALIASES = {
+  blMonitoring: BL_MONITORING_TAB,
+  bl: BL_MONITORING_TAB,
+  'BL Monitoring': BL_MONITORING_TAB,
+};
+
+/**
+ * Resolve API sheet key to spreadsheet tab name.
+ * Supports SHEETS map, SHEET_TAB_ALIASES, or direct tab name if it exists.
+ */
+function resolveSheetTabName_(sheetKey) {
+  const key = String(sheetKey || '').trim();
+  if (!key) return '';
+  if (SHEETS[key]) return SHEETS[key];
+  if (SHEET_TAB_ALIASES[key]) return SHEET_TAB_ALIASES[key];
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  if (ss && ss.getSheetByName(key)) return key;
+  return '';
+}
+
+/** Physical sheet columns (matches Excel — two columns both named NATION). */
+const BL_MONITORING_SHEET_HEADERS = [
+  'NO',
+  'LOADING PORT',
+  'NATION',
+  'BUYER',
+  'NATION',
+  'BL NO.',
+  'RECEIVED DATE',
+  'SENT TO REVIEW (DATE)',
+  'SEND TO EXIM (DATE)',
+  'BL DATE',
+  'VESSEL',
+  'COMODITY',
+  'VOLUME (TON)',
+  'REQUEST TYPE',
+  'STATUS',
+  'TTM',
+  'TTP',
+];
+
+const BL_MONITORING_JSON_HEADERS = ['TTM LINKS JSON', 'TTP LINKS JSON'];
+
+const BL_MONITORING_HEADERS = BL_MONITORING_SHEET_HEADERS.concat(BL_MONITORING_JSON_HEADERS);
 
 // ── Supply Import Draft headers ──────────────────────────────
 const SUPPLY_DRAFT_HEADERS = [
@@ -304,10 +354,18 @@ function doGet(e) {
       if (sheetKey === 'nbl') ensureNblHeaders_();
       if (sheetKey === 'unileverNbl') ensureUnileverNblHeaders_();
       if (sheetKey === 'supplyDraft') ensureSupplyDraftHeaders_();
+      if (sheetKey === 'blMonitoring') ensureBlMonitoringHeaders_();
       return respond(getData(sheetKey));
     }
     if (action === 'getByMillId')          return respond(getByMillId(e.parameter.millId));
-    if (action === 'ping')                 return respond({ success: true, message: 'Apps Script is alive' });
+    if (action === 'ping') {
+      return respond({
+        success: true,
+        message: 'Apps Script is alive',
+        version: 'v3-bl-monitoring',
+        blMonitoring: !!resolveSheetTabName_('blMonitoring'),
+      });
+    }
     if (action === 'getSubmissionById')    return respond(getSubmissionById(e.parameter.submission_id));
     if (action === 'listSubmissions')      return respond(listSubmissions(e.parameter));
     if (action === 'listSuppliedCpoSheets') return respond(listSuppliedCpoSheets_());
@@ -327,6 +385,7 @@ function doPost(e) {
     const action   = body.action   || '';
     const sheetKey = body.sheet    || '';
 
+    if (sheetKey === 'blMonitoring') ensureBlMonitoringHeaders_();
     if (action === 'add')    return respond(addRow(sheetKey, body.data || {}));
     if (action === 'update') return respond(updateRow(sheetKey, body.row, body.data || {}));
     if (action === 'delete') {
@@ -650,6 +709,89 @@ function ensureNblHeaders_() {
 
 function ensureUnileverNblHeaders_() {
   return ensureSheetHeadersGeneric_('unileverNbl', UNILEVER_NBL_HEADERS);
+}
+
+function detectBlHeaderRow_(sheet) {
+  return detectHeaderRowByKeys_(
+    sheet,
+    ['LOADING PORT', 'BL NO.', 'VESSEL', 'REQUEST TYPE'],
+    25
+  );
+}
+
+function getBlHeaderInfo_(sheet) {
+  const hdr = detectBlHeaderRow_(sheet);
+  if (hdr && hdr.headers && hdr.headers.length) return hdr;
+  const lastCol = Math.max(sheet.getLastColumn(), 1);
+  const headers = sheet.getRange(1, 1, 1, lastCol).getValues()[0]
+    .map(function(h) { return String(h || '').trim(); });
+  return { headerRow: 1, headers: headers };
+}
+
+/** Map sheet row (duplicate NATION headers) → canonical API keys. */
+function blCanonicalizeRow_(headers, sourceRow) {
+  const obj = {};
+  let nationIdx = 0;
+  headers.forEach(function(h, j) {
+    const key = String(h || '').trim();
+    if (!key) return;
+    if (/^nation$/i.test(key)) {
+      nationIdx++;
+      obj[nationIdx === 1 ? 'NATION' : 'NATION (BUYER)'] = sourceRow[j];
+      return;
+    }
+    obj[key] = sourceRow[j];
+  });
+  return obj;
+}
+
+/** Map canonical API payload → physical sheet row (handles duplicate NATION). */
+function blExpandCanonicalToRow_(headers, data, current) {
+  let nationIdx = 0;
+  return headers.map(function(h, j) {
+    const key = String(h || '').trim();
+    if (/^nation$/i.test(key)) {
+      nationIdx++;
+      const canonKey = nationIdx === 1 ? 'NATION' : 'NATION (BUYER)';
+      if (data && data[canonKey] !== undefined) return data[canonKey];
+      if (data && nationIdx === 1 && data['LOADING NATION'] !== undefined) return data['LOADING NATION'];
+      if (data && nationIdx === 2 && data['BUYER NATION'] !== undefined) return data['BUYER NATION'];
+      return current ? current[j] : '';
+    }
+    if (data && data[key] !== undefined) return data[key];
+    return current ? current[j] : '';
+  });
+}
+
+function blRowHasContent_(obj) {
+  if (!obj || typeof obj !== 'object') return false;
+  return Object.keys(obj).some(function(k) {
+    if (k === '_row') return false;
+    return String(obj[k] != null ? obj[k] : '').trim() !== '';
+  });
+}
+
+function ensureBlMonitoringHeaders_() {
+  const ss   = SpreadsheetApp.getActiveSpreadsheet();
+  const name = resolveSheetTabName_('blMonitoring') || BL_MONITORING_TAB;
+  let ws     = ss.getSheetByName(name);
+  if (!ws) ws = ss.insertSheet(name);
+
+  const hdr = detectBlHeaderRow_(ws);
+  if (!hdr) {
+    ws.getRange(1, 1, 1, BL_MONITORING_HEADERS.length).setValues([BL_MONITORING_HEADERS]);
+    return ws;
+  }
+
+  const headers = hdr.headers.slice();
+  const headerRow = hdr.headerRow;
+  BL_MONITORING_JSON_HEADERS.forEach(function(col) {
+    if (headers.indexOf(col) !== -1) return;
+    const newCol = headers.length + 1;
+    ws.getRange(headerRow, newCol).setValue(col);
+    headers.push(col);
+  });
+  return ws;
 }
 
 function normalizeSddDecisionLabel_(raw) {
@@ -1645,17 +1787,36 @@ function getData(sheetKey) {
     }
   }
 
-  // For Mill data we need display-preserved numerics (e.g. "66.000")
-  // so UI matches the exact visual formatting in Google Sheets.
-  const dispRows = sheetKey === 'mill' ? range.getDisplayValues() : null;
+  if (sheetKey === 'blMonitoring') {
+    const hdr = getBlHeaderInfo_(sheet);
+    if (hdr && hdr.headers && hdr.headers.length) {
+      headerRowNum = hdr.headerRow;
+      headers = hdr.headers;
+      dataRows = rows.slice(headerRowNum);
+    }
+  }
+
+  // Preserve display formatting (e.g. volume "66.000") for Mill & BL Monitoring.
+  const dispRows = (sheetKey === 'mill' || sheetKey === 'blMonitoring')
+    ? range.getDisplayValues()
+    : null;
   const dispDataRows = dispRows ? dispRows.slice(headerRowNum) : null;
 
   return dataRows.map(function(row, i) {
     const sourceRow = dispDataRows ? dispDataRows[i] : row;
-    const obj = { _row: headerRowNum + i + 1 };
+    let obj;
+    if (sheetKey === 'blMonitoring') {
+      obj = blCanonicalizeRow_(headers, sourceRow);
+      obj._row = headerRowNum + i + 1;
+      return obj;
+    }
+    obj = { _row: headerRowNum + i + 1 };
     headers.forEach(function(h, j) { obj[h] = sourceRow[j]; });
     if (sheetKey === 'mill') mirrorMillQuarterYearOnRead_(obj);
     return obj;
+  }).filter(function(obj) {
+    if (sheetKey !== 'blMonitoring') return true;
+    return blRowHasContent_(obj);
   });
 }
 
@@ -1665,6 +1826,15 @@ function addRow(sheetKey, data) {
   if (sheetKey === 'ttp') {
     const hdr = detectTtpHeaderRow_(sheet);
     if (hdr && hdr.headers && hdr.headers.length) headers = hdr.headers;
+  }
+  if (sheetKey === 'blMonitoring') {
+    ensureBlMonitoringHeaders_();
+    const hdr = getBlHeaderInfo_(sheet);
+    headers = hdr.headers;
+    const newRow = blExpandCanonicalToRow_(headers, data || {}, null);
+    const targetRow = Math.max(sheet.getLastRow(), hdr.headerRow) + 1;
+    sheet.getRange(targetRow, 1, 1, newRow.length).setValues([newRow]);
+    return { success: true };
   }
   if (sheetKey === 'contactSupplier') {
     const now = nowIso_();
@@ -1688,6 +1858,14 @@ function updateRow(sheetKey, rowNum, data) {
   if (sheetKey === 'ttp') {
     const hdr = detectTtpHeaderRow_(sheet);
     if (hdr && hdr.headers && hdr.headers.length) headers = hdr.headers;
+  }
+  if (sheetKey === 'blMonitoring') {
+    const hdr = getBlHeaderInfo_(sheet);
+    headers = hdr.headers;
+    const current = sheet.getRange(r, 1, 1, headers.length).getValues()[0];
+    const updated = blExpandCanonicalToRow_(headers, data || {}, current);
+    sheet.getRange(r, 1, 1, updated.length).setValues([updated]);
+    return { success: true };
   }
   if (sheetKey === 'contactSupplier') {
     data.updated_at = nowIso_();
@@ -1747,12 +1925,26 @@ function parsePostBody_(e) {
   }
 }
 
+function findSheetTabFuzzy_(ss, tabName) {
+  const want = String(tabName || '').trim().toLowerCase();
+  if (!want) return null;
+  const sheets = ss.getSheets();
+  for (var i = 0; i < sheets.length; i++) {
+    if (String(sheets[i].getName()).trim().toLowerCase() === want) return sheets[i];
+  }
+  return null;
+}
+
 function getSheet(sheetKey) {
   const ss   = SpreadsheetApp.getActiveSpreadsheet();
-  const name = SHEETS[sheetKey];
-  if (!name) throw new Error('Sheet key not found: ' + sheetKey);
-  const sheet = ss.getSheetByName(name);
-  if (!sheet) throw new Error('Tab not found: ' + name);
+  const name = resolveSheetTabName_(sheetKey);
+  if (!name) {
+    throw new Error('Sheet key not found: ' + sheetKey + '. Pastikan tab "' + BL_MONITORING_TAB + '" ada di spreadsheet, lalu deploy ulang Apps Script (v3-bl-monitoring).');
+  }
+  let sheet = ss.getSheetByName(name) || findSheetTabFuzzy_(ss, name);
+  if (!sheet) {
+    throw new Error('Tab not found: "' + name + '". Buat tab dengan nama persis: ' + BL_MONITORING_TAB);
+  }
   return sheet;
 }
 
