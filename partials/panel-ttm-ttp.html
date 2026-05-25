@@ -126,20 +126,8 @@
             </div>
           </div>
 
-          <!-- View toggle: Grouped / Flat -->
-          <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 6px;border-bottom:1px solid rgba(74,28,28,0.06);">
-            <div class="ttp-view-toggle">
-              <button class="ttp-view-btn active" id="ttpViewFlat" title="One row per record — click a row for supplier detail">
-                <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-                Table view
-              </button>
-              <button class="ttp-view-btn" id="ttpViewGrouped" title="Summarize multiple records per mill">
-                <svg viewBox="0 0 24 24"><path d="M3 6h7v7H3z"/><path d="M14 6h7v7h-7z"/><path d="M3 17h7v4H3z"/><path d="M14 17h7v4h-7z"/></svg>
-                Grouped by Mill
-              </button>
-            </div>
-            <div style="font-size:11px;color:#B09A9A;" id="ttpGroupInfo"></div>
-          </div>
+          <div class="ttp-group-info-bar" id="ttpGroupInfo"></div>
+
           <div class="search-bar">
             <span class="search-icon"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="16.5" y1="16.5" x2="22" y2="22"/></svg></span>
             <input type="text" id="ttpSearch" placeholder="Search..." />

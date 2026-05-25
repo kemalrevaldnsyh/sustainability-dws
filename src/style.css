@@ -1933,6 +1933,12 @@
      border-color: rgba(139,26,26,0.30);
      color: #8B1A1A;
    }
+   .ttp-group-info-bar {
+     padding: 6px 16px 0;
+     font-size: 11px;
+     color: #B09A9A;
+     text-align: right;
+   }
    
    .ttp-selection-info {
      display: flex;
@@ -5134,6 +5140,16 @@ body.qm-form-open { overflow: hidden; }
   white-space: normal;
   word-break: break-word;
 }
+#eudrTable.eudr-registry-table td.eudr-ffb-pct-cell {
+  font-weight: 600;
+  white-space: nowrap;
+}
+#eudrTable.eudr-registry-table td.eudr-ffb-pct-cell.eudr-ffb-pct--ok {
+  color: var(--forest, #2d5a3d);
+}
+#eudrTable.eudr-registry-table td.eudr-ffb-pct-cell.eudr-ffb-pct--low {
+  color: #8B1A1A;
+}
 .eudr-status-empty {
   color: #C4B4B4;
   font-style: italic;
@@ -5349,71 +5365,161 @@ body.eudr-detail-open { overflow: hidden; }
   font-size: 12px;
   color: #8B6060;
 }
-.eudr-detail-section--formula {
-  margin-top: 8px;
-  padding-top: 22px;
-  border-top: 1px solid rgba(74, 28, 28, 0.1);
-}
-.eudr-formula-status-bar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 14px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(74, 28, 28, 0.04);
-}
-.eudr-formula-status-label {
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.35px;
-  text-transform: uppercase;
-  color: #8B6060;
-}
-.eudr-formula-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.eudr-formula-card {
   margin-bottom: 14px;
 }
-.eudr-formula-item {
-  display: flex;
+.eudr-formula-card--compact .table-header {
+  padding: 10px 14px;
+  min-height: 0;
+}
+.eudr-formula-card-header {
   align-items: center;
   gap: 10px;
-  padding: 9px 11px;
-  border: 1px solid rgba(74, 28, 28, 0.08);
-  border-radius: 8px;
+}
+.eudr-formula-toggle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid rgba(74, 28, 28, 0.12);
+  border-radius: 6px;
   background: #fff;
+  color: #8B6060;
   cursor: pointer;
 }
-.eudr-formula-item input[type="checkbox"] {
-  flex: 0 0 auto;
-  width: 15px;
-  height: 15px;
-  accent-color: #8B1A1A;
+.eudr-formula-toggle svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  transition: transform 0.15s ease;
 }
-.eudr-formula-item-text {
+.eudr-formula-card--open .eudr-formula-toggle svg {
+  transform: rotate(180deg);
+}
+.eudr-formula-card-title-wrap {
   flex: 1 1 auto;
   min-width: 0;
-  font-size: 13px;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.eudr-formula-card-title-wrap h3 {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.2;
+}
+.eudr-formula-inline-hint {
+  font-size: 11px;
+  color: #9C8080;
+  white-space: nowrap;
+}
+.eudr-formula-card-actions {
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+}
+.eudr-formula-active-count {
+  font-size: 11px;
+  font-weight: 600;
+  color: #8B6060;
+  white-space: nowrap;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(74, 28, 28, 0.05);
+}
+.eudr-formula-body {
+  border-top: 1px solid rgba(74, 28, 28, 0.06);
+  padding: 8px 12px 10px;
+}
+.eudr-formula-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+@media (max-width: 1200px) {
+  .eudr-formula-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .eudr-formula-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 480px) {
+  .eudr-formula-grid { grid-template-columns: 1fr; }
+  .eudr-formula-inline-hint { display: none; }
+}
+.eudr-formula-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 8px;
+  border: 1px solid rgba(74, 28, 28, 0.08);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+  min-height: 0;
+}
+.eudr-formula-chip:hover {
+  border-color: rgba(139, 26, 26, 0.2);
+  background: #fff;
+}
+.eudr-formula-chip input[type="checkbox"] {
+  flex: 0 0 auto;
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  accent-color: #8B1A1A;
+}
+.eudr-formula-chip-text {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 11px;
+  line-height: 1.3;
   color: #4A1C1C;
 }
-.eudr-formula-item-actual {
-  color: #8B6060;
-  font-size: 12px;
+.eudr-formula-chip--threshold {
+  flex-wrap: wrap;
 }
-.eudr-formula-result {
-  flex: 0 0 auto;
+.eudr-formula-threshold-input {
+  width: 52px;
+  padding: 2px 6px;
+  border: 1px solid rgba(74, 28, 28, 0.14);
+  border-radius: 5px;
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.3px;
-  text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 999px;
+  font-family: inherit;
+  color: #4A1C1C;
+  background: #fff;
 }
-.eudr-formula-result--pass { background: rgba(39, 174, 96, 0.12); color: #1e8449; }
-.eudr-formula-result--fail { background: rgba(192, 57, 43, 0.12); color: #c0392b; }
-.eudr-formula-result--skip { background: rgba(124, 101, 101, 0.1); color: #7C6565; }
-.eudr-formula-actions { display: flex; justify-content: flex-end; }
+.eudr-formula-threshold-input:focus {
+  outline: none;
+  border-color: rgba(139, 26, 26, 0.35);
+  box-shadow: 0 0 0 2px rgba(139, 26, 26, 0.08);
+}
+.eudr-formula-threshold-suffix {
+  font-size: 11px;
+  color: #9C8080;
+}
+.eudr-formula-save-status {
+  font-size: 11px;
+  color: #9C8080;
+  min-width: 64px;
+  text-align: right;
+}
+.eudr-stats-row .stat-card--success .stat-card-num { color: #1e8449; }
+.eudr-stats-row .stat-card--danger .stat-card-num { color: #c0392b; }
+.eudr-status-filter {
+  padding: 6px 10px;
+  border: 1px solid rgba(74, 28, 28, 0.12);
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #4A1C1C;
+  background: #fff;
+  min-width: 130px;
+}
 .eudr-status-val--potential { background: rgba(39, 174, 96, 0.12); color: #1e8449; }
 .eudr-status-val--not { background: rgba(192, 57, 43, 0.12); color: #c0392b; }

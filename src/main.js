@@ -3811,8 +3811,8 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw1Y6bkD7howwBXmmDG_gFuHuFGimXn17vsjKiGv7JnLcMmVBry4Mx1_u6gmF5x0sP7Gg/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbw1Y6bkD7howwBXmmDG_gFuHuFGimXn17vsjKiGv7JnLcMmVBry4Mx1_u6gmF5x0sP7Gg';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx9cGhXNUZ96pACKyMexq1IwKKFE14j6wLgB83QLT5c1hj7OUCOKV27KIMQH5ZCMKNEFQ/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbx9cGhXNUZ96pACKyMexq1IwKKFE14j6wLgB83QLT5c1hj7OUCOKV27KIMQH5ZCMKNEFQ';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -7047,7 +7047,7 @@ function initDashboardApp() {
   })();
 
   // ─── TTP DATA ───────────────────────────────────────────
-  let ttpViewMode = 'flat'; // default: flat table (not grouped)
+  let ttpViewMode = 'grouped';
   let ttpFlatFilteredRows = [];
   let ttpDetailCurrentRow = null;
   function normalizeTtpHeaderKey_(h) {
@@ -7078,7 +7078,11 @@ function initDashboardApp() {
 
   function ttpCategoryDisplay_(raw) {
     const s = String(raw == null ? '' : raw).trim();
-    return s || '—';
+    if (!s) return '—';
+    const bucket = ttpNormalizeCategoryBucket_(s);
+    if (bucket === 'cooperative') return 'Cooperative';
+    const hit = TTP_CATEGORY_MIX_BUCKETS.find(function(b) { return b.id === bucket; });
+    return hit ? hit.label : s;
   }
 
   function ttpCategoryGroupSummary_(rows) {
@@ -7092,9 +7096,16 @@ function initDashboardApp() {
     return uniq.slice(0, 2).join(', ') + ' +' + (uniq.length - 2);
   }
 
+  function ttpRowSupplyWeight_(row, supplyCol) {
+    const supRaw = supplyCol ? row[supplyCol] : undefined;
+    let sup = typeof supRaw === 'number' ? supRaw : parseFloat(String(supRaw || '').replace(/,/g, ''));
+    if (!isNaN(sup) && sup > 0) return sup;
+    return 1;
+  }
+
   /**
    * Compute supplier % by category based on FFB Supply volume.
-   * Returns array of {label, pct, pctLabel, color} sorted by supply desc.
+   * Falls back to row count (weight 1) when supply is missing or zero.
    */
   function ttpSupplierPctByCategory_(rows) {
     const supplyCol = ttpFindSupplyCol_();
@@ -7105,13 +7116,10 @@ function initDashboardApp() {
     (rows || []).forEach(function(row) {
       const raw = ttpRowCategoryValue_(row);
       const bucket = ttpNormalizeCategoryBucket_(raw);
-      const supRaw = supplyCol ? row[supplyCol] : undefined;
-      let sup = typeof supRaw === 'number' ? supRaw : parseFloat(String(supRaw || '').replace(/,/g, ''));
-      if (isNaN(sup) || sup < 0) sup = 0;
-      if (bucket && bucket !== 'other' && supByBucket[bucket] !== undefined) {
-        supByBucket[bucket] += sup;
-      }
-      total += sup;
+      if (!bucket || bucket === 'other' || supByBucket[bucket] === undefined) return;
+      const weight = ttpRowSupplyWeight_(row, supplyCol);
+      supByBucket[bucket] += weight;
+      total += weight;
     });
 
     if (!total) return [];
@@ -7159,7 +7167,7 @@ function initDashboardApp() {
     if (/^external\s*estate/.test(s) || s === 'external estate') return 'external_estate';
     if (s === 'dealer' || /^dealer\b/.test(s)) return 'dealer';
     if (/plasma/.test(s)) return 'plasma';
-    if (/cooperat|co-op|kooperasi|\bcoop\b/.test(s)) return 'cooperative';
+    if (/coor?perat|cooperat|corperat|coopr|kooperasi|koperasi|co-op|\bcoop\b/.test(s)) return 'cooperative';
     return 'other';
   }
 
@@ -7693,7 +7701,7 @@ function initDashboardApp() {
   }
 
   function ttpMainTableColspan_(grouped) {
-    return grouped ? 7 : 6;
+    return 6;
   }
 
   function ttpGroupAvgPctHtml_(rows, product, subCount) {
@@ -7710,7 +7718,7 @@ function initDashboardApp() {
     const cols = [
       { label: 'FFB Supplier Group Name', get: function(d) { return ttpRowField_(d, ['FFB SUPPLIER GROUP NAME']); } },
       { label: 'FFB Supplier Name', get: function(d) { return ttpRowField_(d, ['FFB SUPPLIER NAME']); } },
-      { label: 'Category', get: function(d) { return ttpRowCategoryValue_(d); } },
+      { label: 'Category', get: function(d) { return ttpCategoryDisplay_(ttpRowCategoryValue_(d)); } },
       { label: 'Lat', get: function(d) { return ttpRowField_(d, ['LAT', 'LATITUDE']); } },
       { label: 'Long', get: function(d) { return ttpRowField_(d, ['LONG', 'LONGITUDE']); } },
       { label: 'Village', get: function(d) { return ttpRowField_(d, ['VILLAGE']); } },
@@ -7740,16 +7748,14 @@ function initDashboardApp() {
   function ttpMainTableHeadHtml_(grouped) {
     const cpoLabel = ttpPctCol || '% CPO TRACEABLE';
     const pkLabel = ttpPkPctCol || '% PK TRACEABLE';
-    const isGrouped = !!grouped;
-    let row = '<tr>'
+    return '<tr>'
       + '<th class="ttp-th ttp-th-group">Group Name</th>'
       + '<th class="ttp-th ttp-th-company">Company Name</th>'
       + '<th class="ttp-th ttp-th-mill">Mill Name</th>'
       + '<th class="ttp-th ttp-th-pct ttp-th-pct-cpo">' + cpoLabel + '</th>'
       + '<th class="ttp-th ttp-th-pct ttp-th-pct-pk">' + pkLabel + '</th>'
-      + '<th class="ttp-th ttp-th-category">Supplier %</th>';
-    if (isGrouped) row += '<th class="ttp-th ttp-th-actions"></th>';
-    return row + '</tr>';
+      + '<th class="ttp-th ttp-th-category">Supplier %</th>'
+      + '</tr>';
   }
 
   function ttpSyncTableLayoutClass_() {
@@ -7992,7 +7998,7 @@ function initDashboardApp() {
         }) || '% PK TRACEABLE';
       })(ttpFields);
       ttpCategoryCol = pickTtpCategoryCol_(ttpFields);
-      document.getElementById('ttpTableHead').innerHTML = ttpMainTableHeadHtml_(false);
+      document.getElementById('ttpTableHead').innerHTML = ttpMainTableHeadHtml_(true);
       ttpSyncTableLayoutClass_();
       loading.style.display = 'none';
       table.style.display = 'table';
@@ -8003,8 +8009,7 @@ function initDashboardApp() {
       buildCompanyDropdown();
       buildColumnModePanel();
       document.getElementById('btn-export-ttp-xlsx').disabled = false;
-      ttpViewMode = 'flat';
-      syncTtpViewUi_();
+      ttpViewMode = 'grouped';
       buildTtpPeriodDropdowns_();
       bindTtpPeriodBarOnce_();
       refreshTtpPeriodDashboard_();
@@ -8054,14 +8059,6 @@ function initDashboardApp() {
         return;
       }
 
-      const flatRow = e.target.closest('.ttp-flat-row');
-      if (flatRow && body.contains(flatRow) && ttpViewMode === 'flat') {
-        const idx = parseInt(flatRow.dataset.flatIdx, 10);
-        const row = ttpFlatFilteredRows[idx];
-        if (row) openTtpDetailModal_(row);
-        return;
-      }
-
       const nestedRow = e.target.closest('.ttp-group-nested-row');
       if (nestedRow && body.contains(nestedRow) && ttpViewMode === 'grouped') {
         if (nestedRow.dataset.row) {
@@ -8079,13 +8076,13 @@ function initDashboardApp() {
       if (groupRow && body.contains(groupRow) && !e.target.closest('.ttp-group-detail-row')) {
         const groupId = groupRow.dataset.group;
         const expanded = groupRow.dataset.expanded === '1';
-        const children = body.querySelectorAll(`[data-parent="${groupId}"]`);
+        const children = body.querySelectorAll('[data-parent="' + groupId + '"]');
         if (expanded) {
-          children.forEach(c => c.classList.add('hidden'));
+          children.forEach(function(c) { c.classList.add('hidden'); });
           groupRow.dataset.expanded = '0';
           groupRow.classList.remove('expanded');
         } else {
-          children.forEach(c => c.classList.remove('hidden'));
+          children.forEach(function(c) { c.classList.remove('hidden'); });
           groupRow.dataset.expanded = '1';
           groupRow.classList.add('expanded');
         }
@@ -8107,13 +8104,9 @@ function initDashboardApp() {
   }
 
   function renderTTPTable() {
-    syncTtpViewUi_();
+    ttpViewMode = 'grouped';
     ttpSyncTableLayoutClass_();
-    if (ttpViewMode === 'grouped') {
-      renderTTPGrouped();
-    } else {
-      renderTTPFlat();
-    }
+    renderTTPGrouped();
     updateTTPSelectionInfo();
   }
 
@@ -8148,7 +8141,7 @@ function initDashboardApp() {
     });
 
     document.getElementById('ttpGroupInfo').textContent =
-      groups.size + ' mills · ' + filtered.length + ' records';
+      groups.size + ' mills · ' + filtered.length + ' records · click a mill to expand';
 
     let html = '';
     let gIdx = 0;
@@ -8158,12 +8151,10 @@ function initDashboardApp() {
       const compName  = first[companyCol] || '—';
       const subCount  = rows.length;
       const groupId   = 'ttpg-' + gIdx;
-
       const supplierPctHtml = ttpSupplierPctHtml_(rows);
       const avgCpoHtml = ttpGroupAvgPctHtml_(rows, 'cpo', subCount);
       const avgPkHtml = ttpGroupAvgPctHtml_(rows, 'pk', subCount);
 
-      // ── Parent row ──
       html += `<tr class="ttp-group-row" data-group="${groupId}" data-expanded="0">
         <td>${groupName}</td>
         <td>${compName}</td>
@@ -8177,7 +8168,6 @@ function initDashboardApp() {
         <td>${avgCpoHtml}</td>
         <td>${avgPkHtml}</td>
         <td>${supplierPctHtml}</td>
-        <td></td>
       </tr>`;
 
       html += '<tr class="ttp-group-detail-row hidden" data-parent="' + groupId + '">'
@@ -8241,12 +8231,10 @@ function initDashboardApp() {
     const btnAddTtp = document.getElementById('btn-add-ttp');
     const ttpSearchInp = document.getElementById('ttpSearch');
     const ttpSearchClearBtn = document.getElementById('ttpSearchClear');
-    const ttpViewGrouped = document.getElementById('ttpViewGrouped');
-    const ttpViewFlat = document.getElementById('ttpViewFlat');
     const ttpBtnSelect = document.getElementById('ttpBtnSelect');
     const ttpBtnFilter = document.getElementById('ttpBtnFilter');
     const ttpExportBtn = document.getElementById('btn-export-ttp-xlsx');
-    if (!btnAddTtp || !ttpSearchInp || !ttpSearchClearBtn || !ttpViewGrouped || !ttpViewFlat || !ttpBtnSelect || !ttpBtnFilter || !ttpExportBtn) {
+    if (!btnAddTtp || !ttpSearchInp || !ttpSearchClearBtn || !ttpBtnSelect || !ttpBtnFilter || !ttpExportBtn) {
       console.warn('[dashboard] TTP panel toolbar incomplete; TTP controls skipped.');
       return;
     }
@@ -8274,18 +8262,6 @@ function initDashboardApp() {
       scheduleRenderTTPTable.flush();
       searchInput.focus();
     });
-
-    ttpViewGrouped.addEventListener('click', function() {
-      ttpViewMode = 'grouped';
-      syncTtpViewUi_();
-      scheduleRenderTTPTable();
-    });
-    ttpViewFlat.addEventListener('click', function() {
-      ttpViewMode = 'flat';
-      syncTtpViewUi_();
-      scheduleRenderTTPTable();
-    });
-    syncTtpViewUi_();
 
     ttpBtnSelect.addEventListener('click', function(e) {
       e.stopPropagation();
@@ -9385,7 +9361,7 @@ function initDashboardApp() {
 
   /** BL Monitoring — always hit latest GAS deploy (bypass stale Vite prebundle). */
   var BL_MONITORING_GAS_URL =
-    'https://script.google.com/macros/s/AKfycbw1Y6bkD7howwBXmmDG_gFuHuFGimXn17vsjKiGv7JnLcMmVBry4Mx1_u6gmF5x0sP7Gg/exec';
+    'https://script.google.com/macros/s/AKfycbx9cGhXNUZ96pACKyMexq1IwKKFE14j6wLgB83QLT5c1hj7OUCOKV27KIMQH5ZCMKNEFQ/exec';
 
   async function fetchBlMonitoringRows_() {
     var base = (typeof window !== 'undefined' && window.SDD_LATEST_WEBAPP_URL)
@@ -10933,6 +10909,8 @@ function initDashboardApp() {
   let eudrLoaded = false;
   let eudrLoadPromise = null;
   let eudrSearch = '';
+  let eudrStatusFilter = 'all';
+  let eudrStatusCache = null;
   let eudrRenderScheduled = false;
   let eudrTableDelegationBound = false;
   let eudrEditRow = null;
@@ -10973,7 +10951,7 @@ function initDashboardApp() {
   const EUDR_STATUS_CRITERIA = [
     { key: 'legality', label: 'Legality = Complete (1)' },
     { key: 'millCategory', label: 'Mill Category = Integrated' },
-    { key: 'cpoTraceable', label: '% CPO Traceable = 100%' },
+    { key: 'ownPlasmaFfb', label: '% Own Estate + Plasma (FFB)', hasThreshold: true, defaultThreshold: 70 },
     { key: 'resultRiskLevel', label: 'Result Risk Level = Low' },
     { key: 'millLocation', label: 'Mill Location = APL' },
     { key: 'certification', label: 'Certification (≥ 1 certificate)' },
@@ -10983,7 +10961,10 @@ function initDashboardApp() {
     { key: 'deforestation', label: 'Deforestation < 10 Ha' },
   ];
   let eudrFormulaConfig = null;
+  let eudrFormulaSaveTimer = null;
+  let eudrFormulaSaving = false;
   let eudrModalMillRow = null;
+  let eudrFormulaPanelBound = false;
 
   function eudrEntityKey_(group, company, mill) {
     return [group, company, mill].map(function(s) {
@@ -11129,11 +11110,98 @@ function initDashboardApp() {
   }
 
   function eudrPrepareRow_(d) {
+    eudrAttachTtpMetrics_(d);
     d._eudrSearchBlob = [
       d['GROUP NAME'], d['COMPANY NAME'], d['MILL NAME'], d['UML ID'],
       d['PROVINCE'], d['SUPPLY TO'], d['MILL CAPACITY'], d.STATUS,
+      d._eudrOwnPlasmaPctLabel,
     ].concat(EUDR_SHEET_FIELD_KEYS.map(function(k) { return d[k]; }))
       .map(function(x) { return String(x || '').toLowerCase(); }).join(' ');
+    return d;
+  }
+
+  function eudrTtpRowRawCategory_(row) {
+    if (!row || typeof row !== 'object') return '';
+    const key = ttpCategoryCol || pickTtpCategoryCol_(ttpFields) || 'CATEGORY';
+    if (row[key] != null && String(row[key]).trim()) return String(row[key]).trim();
+    const alt = Object.keys(row).find(function(k) {
+      if (k === '_row' || k === '_sddSearchBlob') return false;
+      return normalizeTtpHeaderKey_(k) === 'CATEGORY';
+    });
+    return alt && row[alt] != null ? String(row[alt]).trim() : '';
+  }
+
+  function eudrParseFfbSupplyTon_(row, supplyCol) {
+    const supRaw = supplyCol ? row[supplyCol] : undefined;
+    if (supRaw == null || supRaw === '') return 0;
+    const sup = typeof supRaw === 'number' ? supRaw : parseFloat(String(supRaw).replace(/,/g, ''));
+    return !isNaN(sup) && sup > 0 ? sup : 0;
+  }
+
+  function eudrIsOwnOrPlasmaCategory_(rawCategory) {
+    const bucket = ttpNormalizeCategoryBucket_(rawCategory);
+    return bucket === 'own_estate' || bucket === 'plasma';
+  }
+
+  function eudrFormatFfbPctLabel_(pct) {
+    if (pct === undefined || pct === null || isNaN(pct)) return '—';
+    if (pct < 0.1) return '<0.1%';
+    if (Math.abs(pct - Math.round(pct)) < 0.05) return Math.round(pct) + '%';
+    return (Math.round(pct * 10) / 10).toFixed(1) + '%';
+  }
+
+  function eudrFindTtpRowsForEntity_(eudrRow) {
+    if (!ttpLoaded || !Array.isArray(ttpData) || !ttpData.length || !eudrRow) return [];
+    const group = String(eudrRow['GROUP NAME'] || '').trim();
+    const company = String(eudrRow['COMPANY NAME'] || '').trim();
+    const mill = String(eudrRow['MILL NAME'] || '').trim();
+    const key = eudrRow._entityKey || eudrEntityKey_(group, company, mill);
+    const ccKey = company && mill ? eudrEntityKey_('', company, mill) : '';
+    return ttpData.filter(function(r) {
+      if (typeof ttpIsDataRow_ === 'function' && !ttpIsDataRow_(r)) return false;
+      const rg = String(r['GROUP NAME'] || r['Group Name'] || '').trim();
+      const rc = String(r['COMPANY NAME'] || r['Company Name'] || '').trim();
+      const rm = String(r['MILL NAME'] || r['Mill Name'] || '').trim();
+      if (eudrEntityKey_(rg, rc, rm) === key) return true;
+      if (ccKey && eudrEntityKey_('', rc, rm) === ccKey) return true;
+      return false;
+    });
+  }
+
+  function eudrComputeOwnPlasmaFfbPct_(ttpRows) {
+    const supplyCol = typeof ttpFindSupplyCol_ === 'function' ? ttpFindSupplyCol_() : '';
+    let ownPlasmaSum = 0;
+    let totalSum = 0;
+    (ttpRows || []).forEach(function(row) {
+      const weight = eudrParseFfbSupplyTon_(row, supplyCol);
+      if (weight <= 0) return;
+      totalSum += weight;
+      if (eudrIsOwnOrPlasmaCategory_(eudrTtpRowRawCategory_(row))) {
+        ownPlasmaSum += weight;
+      }
+    });
+    if (totalSum <= 0) {
+      return { pct: NaN, pctLabel: '—', ownPlasmaSum: 0, totalSum: 0 };
+    }
+    const pct = (ownPlasmaSum / totalSum) * 100;
+    return {
+      pct: pct,
+      pctLabel: eudrFormatFfbPctLabel_(pct),
+      ownPlasmaSum: ownPlasmaSum,
+      totalSum: totalSum,
+    };
+  }
+
+  function eudrComputeOwnPlasmaFfbPctForEudrRow_(eudrRow) {
+    return eudrComputeOwnPlasmaFfbPct_(eudrFindTtpRowsForEntity_(eudrRow));
+  }
+
+  function eudrAttachTtpMetrics_(d) {
+    const result = eudrComputeOwnPlasmaFfbPctForEudrRow_(d);
+    d._eudrOwnPlasmaPct = result.pct;
+    d._eudrOwnPlasmaPctLabel = result.pctLabel;
+    d._eudrOwnPlasmaFfbSum = result.ownPlasmaSum;
+    d._eudrOwnPlasmaFfbTotal = result.totalSum;
     return d;
   }
 
@@ -11162,18 +11230,36 @@ function initDashboardApp() {
   }
 
   function eudrDefaultFormulaConfig_() {
-    const out = {};
+    const out = { _thresholds: { ownPlasmaFfb: 70 } };
     EUDR_STATUS_CRITERIA.forEach(function(c) { out[c.key] = true; });
     return out;
+  }
+
+  function eudrNormalizeFormulaKey_(key) {
+    const k = String(key || '').trim();
+    return k === 'cpoTraceable' ? 'ownPlasmaFfb' : k;
+  }
+
+  function eudrGetOwnPlasmaThreshold_(formulaCfg) {
+    formulaCfg = formulaCfg || eudrGetFormulaConfig_();
+    const thr = formulaCfg._thresholds && formulaCfg._thresholds.ownPlasmaFfb;
+    const n = parseFloat(String(thr != null ? thr : 70).replace(',', '.'));
+    if (isNaN(n)) return 70;
+    return Math.min(100, Math.max(0, n));
   }
 
   function eudrParseFormulaRows_(rows) {
     const cfg = eudrDefaultFormulaConfig_();
     (rows || []).forEach(function(r) {
-      const key = String(r['CRITERION KEY'] || r.key || '').trim();
-      if (!key) return;
+      const key = eudrNormalizeFormulaKey_(r['CRITERION KEY'] || r.key || '');
+      if (!key || cfg[key] === undefined) return;
       const en = String(r.ENABLED || r.enabled || '').trim().toLowerCase();
       cfg[key] = en === 'yes' || en === 'y' || en === '1' || en === 'true';
+      const thrRaw = r.THRESHOLD != null ? r.THRESHOLD : r.threshold;
+      if (thrRaw != null && String(thrRaw).trim() !== '') {
+        const n = parseFloat(String(thrRaw).replace(',', '.'));
+        if (!isNaN(n)) cfg._thresholds[key] = Math.min(100, Math.max(0, n));
+      }
     });
     return cfg;
   }
@@ -11189,17 +11275,204 @@ function initDashboardApp() {
   }
 
   function eudrGetFormulaConfig_() {
-    return eudrFormulaConfig || eudrDefaultFormulaConfig_();
+    const base = eudrDefaultFormulaConfig_();
+    const cfg = eudrFormulaConfig || {};
+    const out = Object.assign({}, base, cfg);
+    out._thresholds = Object.assign({}, base._thresholds, cfg._thresholds || {});
+    return out;
   }
 
-  function eudrReadFormulaCheckboxes_() {
-    const cfg = {};
-    document.querySelectorAll('#eudrDetailBody [data-eudr-formula-key]').forEach(function(el) {
+  function eudrReadFormulaConfigFromUi_() {
+    const cfg = eudrDefaultFormulaConfig_();
+    document.querySelectorAll('#panel-eudr-potential [data-eudr-formula-key]').forEach(function(el) {
       const key = el.getAttribute('data-eudr-formula-key');
       if (!key) return;
       cfg[key] = !!el.checked;
     });
+    const thrEl = document.getElementById('eudrOwnPlasmaThreshold');
+    if (thrEl) {
+      const n = parseFloat(String(thrEl.value).replace(',', '.'));
+      if (!isNaN(n)) cfg._thresholds.ownPlasmaFfb = Math.min(100, Math.max(0, n));
+    }
     return cfg;
+  }
+
+  function eudrReadFormulaCheckboxes_() {
+    return eudrReadFormulaConfigFromUi_();
+  }
+
+  function eudrUpdateFormulaActiveCount_() {
+    const el = document.getElementById('eudrFormulaActiveCount');
+    if (!el) return;
+    const cfg = eudrReadFormulaCheckboxes_();
+    const active = EUDR_STATUS_CRITERIA.filter(function(c) { return cfg[c.key] !== false; }).length;
+    el.textContent = active + ' / ' + EUDR_STATUS_CRITERIA.length + ' active';
+  }
+
+  function eudrRenderFormulaPanel_() {
+    const grid = document.getElementById('eudrFormulaGrid');
+    if (!grid) return;
+    const cfg = eudrGetFormulaConfig_();
+    grid.innerHTML = EUDR_STATUS_CRITERIA.map(function(c) {
+      const checked = cfg[c.key] !== false ? ' checked' : '';
+      if (c.hasThreshold) {
+        const thr = cfg._thresholds && cfg._thresholds[c.key] != null
+          ? cfg._thresholds[c.key]
+          : (c.defaultThreshold || 70);
+        return '<label class="eudr-formula-chip eudr-formula-chip--threshold">'
+          + '<input type="checkbox" data-eudr-formula-key="' + escHtml(c.key) + '"' + checked + ' />'
+          + '<span class="eudr-formula-chip-text">' + escHtml(c.label) + ' ≥</span>'
+          + '<input type="number" class="eudr-formula-threshold-input" id="eudrOwnPlasmaThreshold" '
+          + 'min="0" max="100" step="0.1" value="' + escHtml(String(thr)) + '" aria-label="Minimum percentage" />'
+          + '<span class="eudr-formula-threshold-suffix">%</span>'
+          + '</label>';
+      }
+      return '<label class="eudr-formula-chip">'
+        + '<input type="checkbox" data-eudr-formula-key="' + escHtml(c.key) + '"' + checked + ' />'
+        + '<span class="eudr-formula-chip-text">' + escHtml(c.label) + '</span>'
+        + '</label>';
+    }).join('');
+    eudrUpdateFormulaActiveCount_();
+    eudrBindFormulaPanelOnce_();
+  }
+
+  function eudrOnFormulaCriteriaChange_() {
+    eudrFormulaConfig = eudrReadFormulaConfigFromUi_();
+    eudrClearStatusCache_();
+    eudrUpdateFormulaActiveCount_();
+    eudrUpdateStats_();
+    scheduleRenderEudrTable_();
+    if (eudrEditRow) {
+      const badgesEl = document.getElementById('eudrDetailBadges');
+      const millRow = eudrModalMillRow || eudrPickBestMillRow_(eudrFindMillRowsForEntity_(eudrEditRow)) || {};
+      if (badgesEl) {
+        badgesEl.innerHTML = ''
+          + resultRiskLevelPill(millRow['RESULT RISK LEVEL'])
+          + eudrStatusBadgeHtml_(eudrGetDisplayStatus_(eudrEditRow));
+      }
+    }
+    eudrScheduleFormulaAutoSave_();
+  }
+
+  function eudrScheduleFormulaAutoSave_() {
+    if (eudrFormulaSaveTimer) clearTimeout(eudrFormulaSaveTimer);
+    eudrFormulaSaveTimer = setTimeout(function() {
+      eudrFormulaSaveTimer = null;
+      eudrSaveFormulaConfig_(true);
+    }, 450);
+  }
+
+  function eudrBindFormulaPanelOnce_() {
+    if (eudrFormulaPanelBound) return;
+    const panel = document.getElementById('panel-eudr-potential');
+    if (!panel) return;
+    eudrFormulaPanelBound = true;
+    panel.addEventListener('change', function(e) {
+      if (!e.target) return;
+      if (e.target.matches('[data-eudr-formula-key]') || e.target.id === 'eudrOwnPlasmaThreshold') {
+        eudrOnFormulaCriteriaChange_();
+      }
+    });
+    panel.addEventListener('input', function(e) {
+      if (e.target && e.target.id === 'eudrOwnPlasmaThreshold') {
+        eudrOnFormulaCriteriaChange_();
+      }
+    });
+    const toggleBtn = document.getElementById('eudrFormulaToggle');
+    const bodyEl = document.getElementById('eudrFormulaBody');
+    const cardEl = document.getElementById('eudrFormulaCard');
+    if (toggleBtn && bodyEl && cardEl) {
+      toggleBtn.addEventListener('click', function() {
+        const open = bodyEl.hidden;
+        bodyEl.hidden = !open;
+        toggleBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+        cardEl.classList.toggle('eudr-formula-card--open', open);
+      });
+    }
+  }
+
+  function eudrClearStatusCache_() {
+    eudrStatusCache = null;
+  }
+
+  function eudrFormulaConfigKey_(cfg) {
+    cfg = cfg || eudrGetFormulaConfig_();
+    const thr = eudrGetOwnPlasmaThreshold_(cfg);
+    return EUDR_STATUS_CRITERIA.map(function(c) {
+      var part = c.key + (cfg[c.key] !== false ? '1' : '0');
+      if (c.hasThreshold) part += '@' + thr;
+      return part;
+    }).join('');
+  }
+
+  function eudrComputeStatusForEudrRow_(eudrRow, formulaCfg) {
+    const millRow = eudrBuildEvalMillRow_(eudrRow);
+    return eudrComputeStatus_(millRow, eudrRow, formulaCfg);
+  }
+
+  function eudrGetDisplayStatus_(eudrRow, formulaCfg) {
+    formulaCfg = formulaCfg || eudrGetFormulaConfig_();
+    const entityKey = eudrRow && eudrRow._entityKey ? eudrRow._entityKey : eudrEntityKey_(
+      eudrRow && eudrRow['GROUP NAME'], eudrRow && eudrRow['COMPANY NAME'], eudrRow && eudrRow['MILL NAME']
+    );
+    const cacheKey = entityKey + '|' + eudrFormulaConfigKey_(formulaCfg);
+    if (!eudrStatusCache) eudrStatusCache = new Map();
+    if (eudrStatusCache.has(cacheKey)) return eudrStatusCache.get(cacheKey);
+    const status = eudrComputeStatusForEudrRow_(eudrRow, formulaCfg).status;
+    eudrStatusCache.set(cacheKey, status);
+    return status;
+  }
+
+  function eudrRawMillField_(row, keys) {
+    row = row || {};
+    const picked = pickSavedCol(row, keys);
+    if (picked !== '') return picked;
+    for (var i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (row[k] === 0 || row[k] === '0') return '0';
+      if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+        return String(row[k]).trim();
+      }
+    }
+    return '';
+  }
+
+  function eudrGrievanceToken_(raw) {
+    if (raw === undefined || raw === null) return null;
+    const s = String(raw).trim();
+    if (s === '') return null;
+    const t = s.toLowerCase();
+    if (t === 'no' || t === 'n' || t === 'false' || t === '0' || t === '0.0') return 0;
+    if (t === 'yes' || t === 'y' || t === 'true' || t === '1') return 1;
+    const n = parseFloat(s.replace(',', '.'));
+    if (!isNaN(n)) return n;
+    return null;
+  }
+
+  /** Mill sheet: TOTAL GRIEVANCES = 0 means no grievance (same as No). */
+  function eudrGrievanceCount_(row) {
+    row = row || {};
+    const totalRaw = eudrRawMillField_(row, ['TOTAL GRIEVANCES', 'Total Grievances', 'Grievance']);
+    if (totalRaw !== '') {
+      const tok = eudrGrievanceToken_(totalRaw);
+      if (tok !== null) return tok;
+    }
+    const flags = [
+      'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES', 'HUMAN RIGHT',
+      'SAFETY', 'SOCIAL', 'ENVIRONMENT',
+    ];
+    var count = 0;
+    flags.forEach(function(k) {
+      const raw = eudrRawMillField_(row, [k]);
+      const tok = eudrGrievanceToken_(raw);
+      if (tok === 1) count++;
+      else if (tok !== null && tok > 1) count += tok;
+    });
+    return count;
+  }
+
+  function eudrGrievanceIsClear_(row) {
+    return eudrGrievanceCount_(row) <= 0;
   }
 
   function eudrParseHaFromText_(raw) {
@@ -11226,30 +11499,36 @@ function initDashboardApp() {
     return null;
   }
 
-  function eudrEvalCriterion_(key, millRow, eudrRow) {
+  function eudrEvalCriterion_(key, millRow, eudrRow, formulaCfg) {
     millRow = millRow || {};
     eudrRow = eudrRow || {};
+    formulaCfg = formulaCfg || eudrGetFormulaConfig_();
     if (key === 'legality') {
       const v = millProfileLegalityFromScore_(millRow) || pickSavedCol(millRow, ['LEGALITY', 'Legality']);
-      const score = pickSavedCol(millRow, ['LEGALITY SCORE', 'SCORE']);
-      const pass = String(v).toLowerCase() === 'complete'
-        || String(score).trim() === '1';
+      const score = pickSavedCol(millRow, ['LEGALITY SCORE', 'SCORE', 'Score']);
+      const vl = String(v).toLowerCase();
+      const scoreNum = parseFloat(String(score).replace(',', '.'));
+      const pass = vl === 'complete' || vl === '1' || vl === 'yes'
+        || String(score).trim() === '1' || scoreNum === 1;
       return { pass: pass, actual: v || score || '—', expected: 'Complete (1)' };
     }
     if (key === 'millCategory') {
       const v = pickSavedCol(millRow, ['MILL CATEGORY', 'Mill Category']);
-      const pass = String(v).toLowerCase().indexOf('integrated') !== -1;
+      const vl = String(v).toLowerCase().replace(/\s+/g, ' ').trim();
+      const pass = vl.indexOf('integrated') !== -1;
       return { pass: pass, actual: v || '—', expected: 'Integrated' };
     }
-    if (key === 'cpoTraceable') {
-      const raw = eudrResolveTraceableCpo_(millRow);
-      const n = parseFloat(String(raw || '').replace('%', '').replace(',', '.'));
-      const pass = !isNaN(n) && n >= 100;
-      return { pass: pass, actual: raw || '—', expected: '100%' };
+    if (key === 'ownPlasmaFfb' || key === 'cpoTraceable') {
+      const threshold = eudrGetOwnPlasmaThreshold_(formulaCfg);
+      const result = eudrComputeOwnPlasmaFfbPctForEudrRow_(eudrRow);
+      const n = result.pct;
+      const pass = !isNaN(n) && n + 0.001 >= threshold;
+      const thrLabel = threshold % 1 === 0 ? String(threshold) : threshold.toFixed(1);
+      return { pass: pass, actual: result.pctLabel, expected: '≥ ' + thrLabel + '%' };
     }
     if (key === 'resultRiskLevel') {
-      const v = pickSavedCol(millRow, ['RESULT RISK LEVEL', 'Result Risk Level']);
-      const pass = String(v).trim().toLowerCase() === 'low';
+      const v = millResolvedRiskLevelForStats_(millRow) || pickSavedCol(millRow, ['RESULT RISK LEVEL', 'Result Risk Level', 'RISK LEVEL']);
+      const pass = String(v).trim().toLowerCase().indexOf('low') !== -1;
       return { pass: pass, actual: v || '—', expected: 'Low' };
     }
     if (key === 'millLocation') {
@@ -11263,24 +11542,29 @@ function initDashboardApp() {
       return { pass: pass, actual: fields[0] || fields[1] || '—', expected: 'APL' };
     }
     if (key === 'certification') {
+      const pass = eudrHasCertification_(millRow);
       const certs = ['RSPO', 'ISPO', 'ISCC'];
-      let count = 0;
+      var found = [];
       certs.forEach(function(name) {
         const v = eudrCertValue_(millRow, name);
-        const yn = millProfileFormatYesNo_(v) || String(v || '').trim();
-        if (/^yes$/i.test(yn) || yn === '1') count++;
+        const yn = millProfileFormatYesNo_(v);
+        if (yn === 'Yes' || v === '1') found.push(name);
+        else if (v && String(v).toUpperCase().indexOf(name) !== -1) found.push(name);
       });
-      if (!count) {
-        const total = pickSavedCol(millRow, ['TOTAL CERTIFICATION', 'CERTIFICATION']);
-        const n = parseFloat(String(total || '').replace(/[^\d.,-]/g, '').replace(',', '.'));
-        if (!isNaN(n) && n >= 1) count = n;
-      }
-      return { pass: count >= 1, actual: count ? (count + ' cert') : '—', expected: '≥ 1 certificate' };
+      return {
+        pass: pass,
+        actual: found.length ? found.join(', ') : (pickSavedCol(millRow, ['CERTIFICATION']) || '—'),
+        expected: '≥ 1 certificate',
+      };
     }
     if (key === 'grievance') {
-      const summary = eudrGrievanceSummary_(millRow);
-      const pass = String(summary).trim().toLowerCase() === 'no';
-      return { pass: pass, actual: summary || '—', expected: 'No' };
+      const count = eudrGrievanceCount_(millRow);
+      const pass = count <= 0;
+      return {
+        pass: pass,
+        actual: pass ? 'No (0)' : String(count),
+        expected: 'No (0)',
+      };
     }
     if (key === 'ndpePolicy') {
       const v = pickSavedCol(millRow, ['NDPE', 'NDPE Policy']);
@@ -11297,10 +11581,16 @@ function initDashboardApp() {
       return { pass: !isNbl, actual: yn || v, expected: 'No' };
     }
     if (key === 'deforestation') {
+      const after2020 = eudrNormYesNoVal_(eudrSheetVal_(eudrRow, 'DEFORESTATION (AFTER 2020)'));
+      if (after2020 === 'No') {
+        return { pass: true, actual: '0 Ha (After 2020: No)', expected: '< 10 Ha' };
+      }
+      if (after2020 === 'Yes') {
+        return { pass: false, actual: 'After 2020: Yes', expected: '< 10 Ha' };
+      }
       const sources = [
         pickSavedCol(millRow, ['DEFORESTATION SPATIAL', 'Deforestation Spatial']),
         pickSavedCol(millRow, ['COMPLIMENT/NOT COMPLIMENT']),
-        eudrSheetVal_(eudrRow, 'DEFORESTATION (AFTER 2020)'),
       ];
       var ha = null;
       for (var i = 0; i < sources.length; i++) {
@@ -11325,8 +11615,10 @@ function initDashboardApp() {
       return { status: '—', results: [], allPass: false, enabledCount: 0 };
     }
     const results = enabledKeys.map(function(key) {
-      const def = EUDR_STATUS_CRITERIA.find(function(c) { return c.key === key; }) || { key: key, label: key };
-      const evalRes = eudrEvalCriterion_(key, millRow, eudrRow);
+      const def = EUDR_STATUS_CRITERIA.find(function(c) { return c.key === key; })
+        || EUDR_STATUS_CRITERIA.find(function(c) { return c.key === eudrNormalizeFormulaKey_(key); })
+        || { key: key, label: key };
+      const evalRes = eudrEvalCriterion_(key, millRow, eudrRow, formulaCfg);
       return Object.assign({ key: key, label: def.label, enabled: true }, evalRes);
     });
     const allPass = results.every(function(r) { return r.pass; });
@@ -11351,88 +11643,38 @@ function initDashboardApp() {
     return '<span class="eudr-status-val">' + escHtml(s) + '</span>';
   }
 
-  function eudrBuildFormulaSectionHtml_(millRow, eudrRow, formulaCfg) {
-    formulaCfg = formulaCfg || eudrGetFormulaConfig_();
-    const computed = eudrComputeStatus_(millRow, eudrRow, formulaCfg);
-    const listHtml = EUDR_STATUS_CRITERIA.map(function(c) {
-      const checked = formulaCfg[c.key] !== false ? ' checked' : '';
-      const evalRes = computed.results.find(function(r) { return r.key === c.key; });
-      const enabled = formulaCfg[c.key] !== false;
-      let resultCls = 'eudr-formula-result--skip';
-      let resultTxt = 'Off';
-      if (enabled && evalRes) {
-        resultCls = evalRes.pass ? 'eudr-formula-result--pass' : 'eudr-formula-result--fail';
-        resultTxt = evalRes.pass ? 'Pass' : 'Fail';
-      }
-      const actual = enabled && evalRes ? (' · ' + escHtml(evalRes.actual)) : '';
-      return '<label class="eudr-formula-item">'
-        + '<input type="checkbox" data-eudr-formula-key="' + escHtml(c.key) + '"' + checked + ' />'
-        + '<span class="eudr-formula-item-text">' + escHtml(c.label) + '<span class="eudr-formula-item-actual">' + actual + '</span></span>'
-        + '<span class="eudr-formula-result ' + resultCls + '">' + resultTxt + '</span>'
-        + '</label>';
-    }).join('');
-    return ''
-      + '<section class="eudr-detail-section eudr-detail-section--formula">'
-      + '<h3 class="eudr-detail-section-title">Status Formula</h3>'
-      + '<p class="eudr-assessment-hint">Centang kriteria yang dipakai. Semua kriteria aktif harus <strong>Pass</strong> → status <strong>Potential</strong>. Simpan checklist ke tab <strong>EUDR Status Formula</strong>.</p>'
-      + '<div class="eudr-formula-status-bar">'
-      + '<span class="eudr-formula-status-label">Computed status</span>'
-      + eudrStatusBadgeHtml_(computed.status)
-      + '</div>'
-      + '<div class="eudr-formula-list">' + listHtml + '</div>'
-      + '<div class="eudr-formula-actions">'
-      + '<button type="button" class="btn-sm btn-outline" id="eudrSaveFormulaBtn">Save Formula to Sheet</button>'
-      + '</div>'
-      + '</section>';
-  }
-
-  function eudrRefreshFormulaSection_(millRow, eudrRow) {
-    const section = document.querySelector('#eudrDetailBody .eudr-detail-section--formula');
-    if (!section) return;
-    const formulaCfg = eudrReadFormulaCheckboxes_();
-    const html = eudrBuildFormulaSectionHtml_(millRow, eudrRow, formulaCfg);
-    const tmp = document.createElement('div');
-    tmp.innerHTML = html;
-    const next = tmp.firstElementChild;
-    if (next) section.replaceWith(next);
-    eudrBindFormulaEvents_(millRow, eudrRow);
-  }
-
-  function eudrBindFormulaEvents_(millRow, eudrRow) {
-    document.querySelectorAll('#eudrDetailBody [data-eudr-formula-key]').forEach(function(el) {
-      el.addEventListener('change', function() {
-        eudrRefreshFormulaSection_(millRow, eudrRow);
-      });
-    });
-    const saveFormulaBtn = document.getElementById('eudrSaveFormulaBtn');
-    if (saveFormulaBtn) {
-      saveFormulaBtn.onclick = function() { eudrSaveFormulaConfig_(); };
-    }
-  }
-
-  async function eudrSaveFormulaConfig_() {
-    const btn = document.getElementById('eudrSaveFormulaBtn');
-    const cfg = eudrReadFormulaCheckboxes_();
+  async function eudrSaveFormulaConfig_(silent) {
+    if (eudrFormulaSaving) return;
+    const cfg = eudrReadFormulaConfigFromUi_();
     const criteria = EUDR_STATUS_CRITERIA.map(function(c) {
-      return { key: c.key, enabled: cfg[c.key] !== false };
+      const item = { key: c.key, enabled: cfg[c.key] !== false };
+      if (c.hasThreshold && cfg._thresholds) {
+        item.threshold = cfg._thresholds[c.key];
+      }
+      return item;
     });
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Saving...';
-    }
+    const statusEl = document.getElementById('eudrFormulaSaveStatus');
+    eudrFormulaSaving = true;
+    if (statusEl) statusEl.textContent = 'Saving...';
     try {
       await apiPost({ action: 'saveEudrStatusFormula', criteria: criteria });
       eudrFormulaConfig = cfg;
-      if (typeof window.showSddToast === 'function') {
+      if (statusEl) statusEl.textContent = 'Saved';
+      setTimeout(function() {
+        if (statusEl && statusEl.textContent === 'Saved') statusEl.textContent = '';
+      }, 1800);
+      if (!silent && typeof window.showSddToast === 'function') {
         window.showSddToast('Status formula saved to sheet.', 'success');
       }
     } catch (err) {
-      alert('Failed to save formula: ' + ((err && err.message) ? err.message : String(err)));
-    } finally {
-      if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Save Formula to Sheet';
+      if (statusEl) statusEl.textContent = 'Save failed';
+      if (typeof window.showSddToast === 'function') {
+        window.showSddToast('Failed to save formula: ' + ((err && err.message) ? err.message : String(err)), 'error');
+      } else if (!silent) {
+        alert('Failed to save formula: ' + ((err && err.message) ? err.message : String(err)));
       }
+    } finally {
+      eudrFormulaSaving = false;
     }
   }
 
@@ -11467,7 +11709,7 @@ function initDashboardApp() {
     return ''
       + '<section class="eudr-detail-section eudr-detail-section--assessment">'
       + '<h3 class="eudr-detail-section-title">EUDR Assessment (saved to sheet)</h3>'
-      + '<p class="eudr-assessment-hint">Isi field di bawah lalu klik <strong>Save to Sheet</strong>. Status dihitung otomatis dari formula di bawah.</p>'
+      + '<p class="eudr-assessment-hint">Isi field di bawah lalu klik <strong>Save to Sheet</strong>. Status dihitung dari formula global di halaman utama.</p>'
       + '<div class="eudr-assessment-form">'
       + yesNoHtml
       + irfHtml
@@ -11495,7 +11737,7 @@ function initDashboardApp() {
     const assessment = eudrReadAssessmentForm_();
     const millRows = eudrFindMillRowsForEntity_(eudrEditRow);
     const millRow = eudrPickBestMillRow_(millRows) || eudrModalMillRow || {};
-    const formulaCfg = eudrReadFormulaCheckboxes_();
+    const formulaCfg = eudrGetFormulaConfig_();
     const mergedRow = Object.assign({}, eudrEditRow, assessment);
     const computed = eudrComputeStatus_(millRow, mergedRow, formulaCfg);
     if (computed.status && computed.status !== '—') assessment.STATUS = computed.status;
@@ -11520,15 +11762,13 @@ function initDashboardApp() {
       const badgesEl = document.getElementById('eudrDetailBadges');
       if (bodyEl) {
         bodyEl.innerHTML = eudrBuildDetailReadonlyHtml_(millRow, eudrEditRow)
-          + eudrBuildAssessmentFormHtml_(eudrEditRow)
-          + eudrBuildFormulaSectionHtml_(millRow, eudrEditRow);
-        eudrBindFormulaEvents_(millRow, eudrEditRow);
-        eudrBindAssessmentFormulaRefresh_(millRow, eudrEditRow);
+          + eudrBuildAssessmentFormHtml_(eudrEditRow);
+        eudrBindAssessmentStatusPreview_(millRow, eudrEditRow);
       }
       if (badgesEl) {
         badgesEl.innerHTML = ''
           + resultRiskLevelPill(millRow['RESULT RISK LEVEL'])
-          + eudrStatusBadgeHtml_(eudrEditRow.STATUS);
+          + eudrStatusBadgeHtml_(eudrGetDisplayStatus_(eudrEditRow));
       }
       if (typeof window.showSddToast === 'function') {
         window.showSddToast('EUDR data saved to sheet.', 'success');
@@ -11549,33 +11789,90 @@ function initDashboardApp() {
     return eudrStatusBadgeHtml_(s);
   }
 
-  function eudrBindAssessmentFormulaRefresh_(millRow, eudrRow) {
+  function eudrRenderDetailBody_(millRow, eudrRow) {
+    return eudrBuildDetailReadonlyHtml_(millRow, eudrRow)
+      + eudrBuildAssessmentFormHtml_(eudrRow);
+  }
+
+  function eudrBindAssessmentStatusPreview_(millRow, eudrRow) {
     document.querySelectorAll('#eudrDetailBody [data-eudr-field]').forEach(function(el) {
       el.addEventListener('change', function() {
         const merged = Object.assign({}, eudrRow, eudrReadAssessmentForm_());
-        eudrRefreshFormulaSection_(millRow, merged);
+        const badgesEl = document.getElementById('eudrDetailBadges');
+        if (badgesEl) {
+          badgesEl.innerHTML = ''
+            + resultRiskLevelPill(millRow['RESULT RISK LEVEL'])
+            + eudrStatusBadgeHtml_(eudrGetDisplayStatus_(merged));
+        }
       });
     });
   }
 
-  function eudrRenderDetailBody_(millRow, eudrRow) {
-    return eudrBuildDetailReadonlyHtml_(millRow, eudrRow)
-      + eudrBuildAssessmentFormHtml_(eudrRow)
-      + eudrBuildFormulaSectionHtml_(millRow, eudrRow);
-  }
-
   function eudrFindMillRowsForEntity_(eudrRow) {
     if (!eudrRow || !Array.isArray(allData) || !allData.length) return [];
-    const key = eudrRow._entityKey || eudrEntityKey_(
-      eudrRow['GROUP NAME'], eudrRow['COMPANY NAME'], eudrRow['MILL NAME']
-    );
+    const group = String(eudrRow['GROUP NAME'] || '').trim();
+    const company = String(eudrRow['COMPANY NAME'] || '').trim();
+    const mill = String(eudrRow['MILL NAME'] || '').trim();
+    const key = eudrRow._entityKey || eudrEntityKey_(group, company, mill);
+    const ccKey = company && mill ? eudrEntityKey_('', company, mill) : '';
     return allData.filter(function(r) {
-      return eudrEntityKey_(
-        r['GROUP NAME'] || r['Group Name'],
-        r['COMPANY NAME'] || r['Company Name'],
-        r['MILL NAME'] || r['Mill Name']
-      ) === key;
+      const rg = String(r['GROUP NAME'] || r['Group Name'] || r['Grup Name'] || '').trim();
+      const rc = String(r['COMPANY NAME'] || r['Company Name'] || '').trim();
+      const rm = String(r['MILL NAME'] || r['Mill Name'] || '').trim();
+      if (eudrEntityKey_(rg, rc, rm) === key) return true;
+      if (ccKey && eudrEntityKey_('', rc, rm) === ccKey) return true;
+      return false;
     });
+  }
+
+  function eudrBuildEvalMillRow_(eudrRow) {
+    eudrRow = eudrRow || {};
+    const millRows = eudrFindMillRowsForEntity_(eudrRow);
+    const out = Object.assign({}, eudrPickBestMillRow_(millRows) || {});
+    if (!pickSavedCol(out, ['COMPANY NAME', 'Company Name'])) {
+      out['COMPANY NAME'] = eudrRow['COMPANY NAME'] || '';
+    }
+    if (!pickSavedCol(out, ['GROUP NAME', 'Group Name'])) {
+      out['GROUP NAME'] = eudrRow['GROUP NAME'] || '';
+    }
+    if (!pickSavedCol(out, ['MILL NAME', 'Mill Name'])) {
+      out['MILL NAME'] = eudrRow['MILL NAME'] || '';
+    }
+    if (!pickSavedCol(out, ['PROVINCE', 'Province']) && eudrRow['PROVINCE']) {
+      out['PROVINCE'] = eudrRow['PROVINCE'];
+    }
+    const mergeKeys = [
+      'RSPO', 'ISPO', 'ISCC', 'CERTIFICATION', 'TOTAL CERTIFICATION',
+      'MILL CATEGORY', 'MILL LOC', 'RESULT RISK LEVEL', 'RISK LEVEL',
+      'SCORE', 'LEGALITY SCORE', 'LEGALITY', 'NDPE', 'BUYER NO BUY LIST',
+      'DEFORESTATION SPATIAL', 'COMPLIMENT/NOT COMPLIMENT',
+      'TOTAL GRIEVANCES', 'DEFORESTATION GRIEVANCES', 'HGU/HGB',
+    ];
+    millRows.forEach(function(r) {
+      mergeKeys.forEach(function(k) {
+        if (!pickSavedCol(out, [k]) && pickSavedCol(r, [k])) {
+          out[k] = pickSavedCol(r, [k]);
+        }
+      });
+    });
+    return out;
+  }
+
+  function eudrHasCertification_(millRow) {
+    const certs = ['RSPO', 'ISPO', 'ISCC'];
+    for (var i = 0; i < certs.length; i++) {
+      const v = eudrCertValue_(millRow, certs[i]);
+      if (!v) continue;
+      const yn = millProfileFormatYesNo_(v);
+      if (yn === 'Yes' || v === '1') return true;
+      if (String(v).toUpperCase().indexOf(certs[i]) !== -1) return true;
+    }
+    const total = pickSavedCol(millRow, ['TOTAL CERTIFICATION', 'Total Certification']);
+    const n = parseFloat(String(total || '').replace(/[^\d.,-]/g, '').replace(',', '.'));
+    if (!isNaN(n) && n >= 1) return true;
+    const blob = pickSavedCol(millRow, ['CERTIFICATION', 'Certification']);
+    if (blob && /rspo|ispo|iscc/i.test(blob)) return true;
+    return false;
   }
 
   function eudrPickBestMillRow_(rows) {
@@ -11673,27 +11970,21 @@ function initDashboardApp() {
   }
 
   function eudrGrievanceSummary_(row) {
-    const total = pickSavedCol(row, ['TOTAL GRIEVANCES', 'Total Grievances', 'Grievance']);
-    if (total) {
-      const t = String(total).trim().toLowerCase();
-      if (t === '1' || t === 'yes') return 'Yes';
-      if (t === '0' || t === 'no') return 'No';
-      return total;
-    }
-    const flags = [
-      'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES', 'HUMAN RIGHT',
-      'SAFETY', 'SOCIAL', 'ENVIRONMENT',
-    ];
-    const hits = flags.filter(function(k) {
-      const v = pickSavedCol(row, [k]);
-      if (!v) return false;
-      const t = String(v).trim().toLowerCase();
-      return t === '1' || t === 'yes' || t === 'y' || t === 'true';
-    });
-    return hits.length ? ('Yes (' + hits.length + ' category)') : 'No';
+    const count = eudrGrievanceCount_(row);
+    if (count <= 0) return 'No (0)';
+    if (count === 1) return 'Yes';
+    return 'Yes (' + count + ' category)';
   }
 
-  function eudrResolveTraceableCpo_(row) {
+  function eudrResolveTraceableCpo_(row, eudrRow) {
+    eudrRow = eudrRow || {};
+    if (eudrRow._eudrOwnPlasmaPctLabel && eudrRow._eudrOwnPlasmaPctLabel !== '—') {
+      return eudrRow._eudrOwnPlasmaPctLabel;
+    }
+    const result = eudrComputeOwnPlasmaFfbPctForEudrRow_(eudrRow);
+    if (!isNaN(result.pct)) return result.pctLabel;
+
+    row = row || {};
     let raw = pickSavedCol(row, [
       '% CPO TRACEABLE', '% TRACEABLE CPO', 'CPO TRACEABLE',
       'PERCENTAGE TRACEABILITY', '% TRACEABLE',
@@ -11705,25 +11996,7 @@ function initDashboardApp() {
       }
       return raw;
     }
-    if (!ttpLoaded || !Array.isArray(ttpData) || !ttpData.length) return '';
-    const co = String(row['COMPANY NAME'] || row['Company Name'] || '').trim().toUpperCase();
-    if (!co) return '';
-    const colKey = ttpPctCol || '% CPO TRACEABLE';
-    let sum = 0;
-    let count = 0;
-    ttpData.forEach(function(r) {
-      const rc = String(r['COMPANY NAME'] || r['Company Name'] || '').trim().toUpperCase();
-      if (rc !== co) return;
-      let v = r[colKey];
-      if (v == null || v === '') v = r['% CPO TRACEABLE'];
-      if (v == null || v === '') return;
-      const n = typeof ttpNormalizePctNumber_ === 'function'
-        ? ttpNormalizePctNumber_(ttpParsePctValue_(v))
-        : parseFloat(String(v).replace(',', '.'));
-      if (!isNaN(n)) { sum += n; count++; }
-    });
-    if (!count) return '';
-    return (Math.round((sum / count) * 100) / 100) + '%';
+    return '';
   }
 
   function eudrBuildDetailBodyHtml_(millRow, eudrRow) {
@@ -11733,7 +12006,7 @@ function initDashboardApp() {
     const country = pickSavedCol(millRow, ['COUNTRY', 'Country', 'NATION']) || 'Indonesia';
     const capacity = eudrMillCapacityFromMill_(millRow) || eudrRow['MILL CAPACITY'] || '';
     const supplyTo = eudrSupplyToFromMill_(millRow) || eudrRow['SUPPLY TO'] || '';
-    const traceable = eudrResolveTraceableCpo_(millRow);
+    const traceable = eudrResolveTraceableCpo_(millRow, eudrRow);
     const legalityOverall = millProfileLegalityFromScore_(millRow) || pickSavedCol(millRow, ['LEGALITY', 'Legality']);
     const ndpe = pickSavedCol(millRow, ['NDPE', 'NDPE Policy', 'NDPE COMMITMENT']);
     const ndpeVal = ndpe ? (millProfileFormatYesNo_(ndpe) || ndpe) : '—';
@@ -11750,7 +12023,7 @@ function initDashboardApp() {
       eudrDetailFieldHtml_('Mill Category', pickSavedCol(millRow, ['MILL CATEGORY', 'Mill Category'])),
       eudrDetailFieldHtml_('Mill Capacity', capacity),
       eudrDetailFieldHtml_('Product Supply', pickSavedCol(millRow, ['PRODUCT SUPPLY', 'Product Supply'])),
-      eudrDetailFieldHtml_('% Traceable CPO', traceable || '—'),
+      eudrDetailFieldHtml_('% Own Estate + Plasma (FFB)', traceable || '—'),
       eudrDetailFieldHtml_('Result Risk Level', pickSavedCol(millRow, ['RESULT RISK LEVEL', 'Result Risk Level']), {
         html: resultRiskLevelPill(millRow['RESULT RISK LEVEL']),
       }),
@@ -11815,15 +12088,13 @@ function initDashboardApp() {
       subEl.textContent = [group, company, province].filter(Boolean).join(' · ') || '—';
     }
     if (badgesEl) {
-      const previewStatus = eudrComputeStatus_(millRow, eudrRow).status;
       badgesEl.innerHTML = ''
         + resultRiskLevelPill(millRow['RESULT RISK LEVEL'])
-        + eudrStatusBadgeHtml_(eudrRow.STATUS || previewStatus);
+        + eudrStatusBadgeHtml_(eudrGetDisplayStatus_(eudrRow));
     }
     bodyEl.innerHTML = eudrRenderDetailBody_(millRow, eudrRow);
     eudrModalMillRow = millRow;
-    eudrBindFormulaEvents_(millRow, eudrRow);
-    eudrBindAssessmentFormulaRefresh_(millRow, eudrRow);
+    eudrBindAssessmentStatusPreview_(millRow, eudrRow);
     overlay.classList.add('active');
     document.body.classList.add('eudr-detail-open');
     overlay.scrollTop = 0;
@@ -11856,21 +12127,27 @@ function initDashboardApp() {
     const totalEl = document.getElementById('eudr-stat-total');
     if (!totalEl) return;
     totalEl.textContent = String(eudrRows.length);
-    const pending = eudrRows.filter(function(d) {
-      const s = String(d.STATUS || '').trim().toLowerCase();
-      return !s || s === '—';
-    }).length;
-    const set = eudrRows.length - pending;
-    const pendingEl = document.getElementById('eudr-stat-pending');
-    const setEl = document.getElementById('eudr-stat-set');
-    if (pendingEl) pendingEl.textContent = String(pending);
-    if (setEl) setEl.textContent = String(set);
+    var potential = 0;
+    var notPotential = 0;
+    eudrRows.forEach(function(d) {
+      const s = eudrGetDisplayStatus_(d);
+      if (s === 'Potential') potential++;
+      else if (s === 'Not Potential') notPotential++;
+    });
+    const potentialEl = document.getElementById('eudr-stat-potential');
+    const notEl = document.getElementById('eudr-stat-not');
+    if (potentialEl) potentialEl.textContent = String(potential);
+    if (notEl) notEl.textContent = String(notPotential);
   }
 
   function eudrGetFilteredRows_() {
     const q = eudrSearch;
     return eudrRows.filter(function(d) {
-      return !q || (d._eudrSearchBlob || '').includes(q);
+      if (q && !(d._eudrSearchBlob || '').includes(q)) return false;
+      const status = eudrGetDisplayStatus_(d);
+      if (eudrStatusFilter === 'potential') return status === 'Potential';
+      if (eudrStatusFilter === 'not-potential') return status === 'Not Potential';
+      return true;
     });
   }
 
@@ -11879,12 +12156,21 @@ function initDashboardApp() {
     if (!body) return;
     const filtered = eudrGetFilteredRows_();
     if (!filtered.length) {
-      body.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:32px;color:#9C8A8A;">'
-        + (eudrSearch ? 'No results match your search.' : 'No mills found in Mill Onboarding.')
+      var emptyMsg = 'No mills found in Mill Onboarding.';
+      if (eudrSearch) emptyMsg = 'No results match your search.';
+      else if (eudrStatusFilter === 'potential') emptyMsg = 'No mills with Potential status for current formula.';
+      else if (eudrStatusFilter === 'not-potential') emptyMsg = 'No mills with Not Potential status.';
+      body.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:32px;color:#9C8A8A;">'
+        + emptyMsg
         + '</td></tr>';
       return;
     }
     body.innerHTML = filtered.map(function(d) {
+      const ownPlasmaLabel = d._eudrOwnPlasmaPctLabel || '—';
+      const thr = eudrGetOwnPlasmaThreshold_();
+      const ownPlasmaClass = !isNaN(d._eudrOwnPlasmaPct) && d._eudrOwnPlasmaPct + 0.001 >= thr
+        ? ' eudr-ffb-pct--ok'
+        : (!isNaN(d._eudrOwnPlasmaPct) ? ' eudr-ffb-pct--low' : '');
       return '<tr class="eudr-row-clickable" data-eudr-key="' + escHtml(d._entityKey || '') + '" title="Klik untuk lihat detail">'
         + '<td><span class="mill-name">' + escHtml(d['GROUP NAME'] || '—') + '</span></td>'
         + '<td>' + escHtml(d['COMPANY NAME'] || '—') + '</td>'
@@ -11892,7 +12178,9 @@ function initDashboardApp() {
         + '<td>' + escHtml(d['PROVINCE'] || '—') + '</td>'
         + '<td class="eudr-cell-long">' + escHtml(eudrDisplayCell_(d['SUPPLY TO'])) + '</td>'
         + '<td>' + escHtml(eudrDisplayCell_(d['MILL CAPACITY'])) + '</td>'
-        + '<td>' + eudrStatusCell_(d.STATUS) + '</td>'
+        + '<td class="eudr-ffb-pct-cell' + ownPlasmaClass + '" title="Own Estate + Plasma share of FFB supply (Monitoring TTM/TTP)">'
+        + escHtml(ownPlasmaLabel) + '</td>'
+        + '<td>' + eudrStatusCell_(eudrGetDisplayStatus_(d)) + '</td>'
         + '</tr>';
     }).join('');
   }
@@ -11931,7 +12219,11 @@ function initDashboardApp() {
       errorEl.style.display = 'none';
       table.style.display = 'none';
       await ensureMillDataForEudr_();
+      try { if (!ttpLoaded) await loadTTPData(); } catch (ttpErr) {
+        console.warn('[EUDR] TTP data unavailable for Own Estate + Plasma %:', ttpErr);
+      }
       await loadEudrFormulaConfig_();
+      eudrClearStatusCache_();
       const mills = eudrBuildMillRegistry_();
       var raw = [];
       try {
@@ -11944,6 +12236,7 @@ function initDashboardApp() {
       eudrRows = eudrMergeDisplay_(mills, Array.isArray(raw) ? raw : []).map(eudrPrepareRow_);
       eudrLoaded = true;
       eudrBindTableDelegationOnce_();
+      eudrRenderFormulaPanel_();
       eudrUpdateStats_();
       loading.style.display = 'none';
       table.style.display = 'table';
@@ -11963,7 +12256,9 @@ function initDashboardApp() {
 
   async function loadEudrData(force) {
     if (eudrLoaded && !force) {
+      eudrRenderFormulaPanel_();
       scheduleRenderEudrTable_();
+      eudrUpdateStats_();
       return;
     }
     if (eudrLoadPromise) return eudrLoadPromise;
@@ -11982,6 +12277,7 @@ function initDashboardApp() {
     const clearEl = document.getElementById('eudrSearchClear');
     const btnRefresh = document.getElementById('btn-refresh-eudr');
     const btnSync = document.getElementById('btn-sync-eudr');
+    const statusFilterEl = document.getElementById('eudrStatusFilter');
     const detailOverlay = document.getElementById('eudrDetailOverlay');
     if (!searchEl || !clearEl || !btnRefresh) return;
 
@@ -12007,6 +12303,13 @@ function initDashboardApp() {
       else scheduleRenderEudrTable_();
       searchEl.focus();
     });
+
+    if (statusFilterEl) {
+      statusFilterEl.addEventListener('change', function() {
+        eudrStatusFilter = this.value || 'all';
+        scheduleRenderEudrTable_();
+      });
+    }
 
     btnRefresh.addEventListener('click', function() {
       eudrLoaded = false;

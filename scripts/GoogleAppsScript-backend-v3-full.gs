@@ -201,19 +201,19 @@ const EUDR_POTENTIAL_HEADERS = [
   'UPDATED BY',
 ];
 
-const EUDR_STATUS_FORMULA_HEADERS = ['CRITERION KEY', 'ENABLED', 'LABEL'];
+const EUDR_STATUS_FORMULA_HEADERS = ['CRITERION KEY', 'ENABLED', 'LABEL', 'THRESHOLD'];
 
 const EUDR_STATUS_FORMULA_DEFAULTS = [
-  ['legality', 'Yes', 'Legality = Complete (1)'],
-  ['millCategory', 'Yes', 'Mill Category = Integrated'],
-  ['cpoTraceable', 'Yes', '% CPO Traceable = 100%'],
-  ['resultRiskLevel', 'Yes', 'Result Risk Level = Low'],
-  ['millLocation', 'Yes', 'Mill Location = APL'],
-  ['certification', 'Yes', 'Certification (at least 1 certificate)'],
-  ['grievance', 'Yes', 'Grievance = No'],
-  ['ndpePolicy', 'Yes', 'NDPE Policy = Yes'],
-  ['noBuyList', 'Yes', 'No Buy List = No'],
-  ['deforestation', 'Yes', 'Deforestation < 10 Ha'],
+  ['legality', 'Yes', 'Legality = Complete (1)', ''],
+  ['millCategory', 'Yes', 'Mill Category = Integrated', ''],
+  ['ownPlasmaFfb', 'Yes', '% Own Estate + Plasma (FFB)', '70'],
+  ['resultRiskLevel', 'Yes', 'Result Risk Level = Low', ''],
+  ['millLocation', 'Yes', 'Mill Location = APL', ''],
+  ['certification', 'Yes', 'Certification (at least 1 certificate)', ''],
+  ['grievance', 'Yes', 'Grievance = No', ''],
+  ['ndpePolicy', 'Yes', 'NDPE Policy = Yes', ''],
+  ['noBuyList', 'Yes', 'No Buy List = No', ''],
+  ['deforestation', 'Yes', 'Deforestation < 10 Ha', ''],
 ];
 
 /** Identity fields merged from existing row when omitted on upsert. */
@@ -446,7 +446,7 @@ function doGet(e) {
       return respond({
         success: true,
         message: 'Apps Script is alive',
-        version: 'v3-eudr-formula',
+        version: 'v3-eudr-formula-threshold',
         blMonitoring: !!resolveSheetTabName_('blMonitoring'),
         questionnaireMonitoring: !!resolveSheetTabName_('questionnaireMonitoring'),
         eudrPotential: !!resolveSheetTabName_('eudrPotential'),
@@ -808,7 +808,7 @@ function ensureEudrStatusFormulaHeaders_() {
   const sheet = ensureSheetHeadersGeneric_('eudrStatusFormula', EUDR_STATUS_FORMULA_HEADERS);
   if (sheet.getLastRow() <= 1) {
     const rows = EUDR_STATUS_FORMULA_DEFAULTS.map(function(r) {
-      return [r[0], r[1], r[2]];
+      return [r[0], r[1], r[2], r[3] != null ? String(r[3]) : ''];
     });
     if (rows.length) {
       sheet.getRange(2, 1, rows.length, EUDR_STATUS_FORMULA_HEADERS.length).setValues(rows);
@@ -822,16 +822,29 @@ function saveEudrStatusFormula_(criteria) {
   const sheet = getSheet('eudrStatusFormula');
   const headers = EUDR_STATUS_FORMULA_HEADERS;
   const labelMap = {};
-  EUDR_STATUS_FORMULA_DEFAULTS.forEach(function(r) { labelMap[r[0]] = r[2]; });
+  const defaultThresholdMap = {};
+  EUDR_STATUS_FORMULA_DEFAULTS.forEach(function(r) {
+    labelMap[r[0]] = r[2];
+    defaultThresholdMap[r[0]] = r[3] != null ? String(r[3]) : '';
+  });
   const enabledMap = {};
+  const thresholdMap = {};
   (criteria || []).forEach(function(c) {
     if (!c || !c.key) return;
-    enabledMap[String(c.key).trim()] = c.enabled !== false && String(c.enabled).toLowerCase() !== 'no';
+    var key = String(c.key).trim();
+    if (key === 'cpoTraceable') key = 'ownPlasmaFfb';
+    enabledMap[key] = c.enabled !== false && String(c.enabled).toLowerCase() !== 'no';
+    if (c.threshold !== undefined && c.threshold !== null && String(c.threshold).trim() !== '') {
+      thresholdMap[key] = String(c.threshold).trim();
+    }
   });
   const rows = EUDR_STATUS_FORMULA_DEFAULTS.map(function(def) {
     const key = def[0];
     const enabled = enabledMap.hasOwnProperty(key) ? enabledMap[key] : true;
-    return [key, enabled ? 'Yes' : 'No', labelMap[key] || def[2]];
+    const thr = thresholdMap.hasOwnProperty(key)
+      ? thresholdMap[key]
+      : (defaultThresholdMap[key] || '');
+    return [key, enabled ? 'Yes' : 'No', labelMap[key] || def[2], thr];
   });
   const last = Math.max(sheet.getLastRow(), 1);
   if (last > 1) sheet.deleteRows(2, last - 1);
