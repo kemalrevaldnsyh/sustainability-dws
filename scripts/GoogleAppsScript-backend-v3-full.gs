@@ -473,6 +473,7 @@ function doGet(e) {
     if (action === 'getSuppliedCpo')       return respond(getSuppliedCpoData_(e.parameter.sheet || ''));
     if (action === 'listSuppliedPkSheets') return respond(listSuppliedPkSheets_());
     if (action === 'getSuppliedPk')        return respond(getSuppliedPkData_(e.parameter.sheet || ''));
+    if (action === 'getFacilityMapImage')  return respond(getFacilityMapImage_(e.parameter || {}));
 
     return respond({ success: false, error: 'Unknown action: ' + action });
   } catch (err) {
@@ -3379,4 +3380,56 @@ function getSuppliedPkData_(sheetName) {
     parseSuppliedPkValues_(values, sName, allRows);
   });
   return allRows;
+}
+
+/**
+ * Proxy static map image for Facility Performance PDF export.
+ * Fetches server-side to avoid browser CORS limits.
+ */
+function getFacilityMapImage_(params) {
+  params = params || {};
+  var lat = parseFloat(String(params.lat || '').replace(',', '.'));
+  var lng = parseFloat(String(params.lng || '').replace(',', '.'));
+  var zoom = parseInt(params.zoom || 13, 10);
+  var w = parseInt(params.w || 640, 10);
+  var h = parseInt(params.h || 320, 10);
+  if (isNaN(zoom) || zoom < 1) zoom = 13;
+  if (zoom > 18) zoom = 18;
+  if (isNaN(w) || w < 200) w = 640;
+  if (w > 1280) w = 1280;
+  if (isNaN(h) || h < 150) h = 320;
+  if (h > 720) h = 720;
+  if (isNaN(lat) || isNaN(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) {
+    return { success: false, error: 'Invalid coordinates' };
+  }
+
+  var latStr = lat.toFixed(6);
+  var lngStr = lng.toFixed(6);
+  var urls = [
+    'https://staticmap.openstreetmap.de/staticmap.php?center=' + latStr + ',' + lngStr
+      + '&zoom=' + zoom + '&size=' + w + 'x' + h
+      + '&maptype=mapnik&markers=' + latStr + ',' + lngStr + ',red-pushpin'
+  ];
+
+  var lastErr = '';
+  for (var i = 0; i < urls.length; i++) {
+    try {
+      var resp = UrlFetchApp.fetch(urls[i], { muteHttpExceptions: true, followRedirects: true });
+      var code = resp.getResponseCode();
+      if (code !== 200) {
+        lastErr = 'HTTP ' + code;
+        continue;
+      }
+      var ct = String(resp.getHeaders()['Content-Type'] || '');
+      if (ct.indexOf('image') === -1) {
+        lastErr = 'Response is not an image';
+        continue;
+      }
+      var b64 = Utilities.base64Encode(resp.getBlob().getBytes());
+      return { success: true, mime: 'image/png', dataUrl: 'data:image/png;base64,' + b64 };
+    } catch (err) {
+      lastErr = String(err && err.message ? err.message : err);
+    }
+  }
+  return { success: false, error: lastErr || 'Map fetch failed' };
 }

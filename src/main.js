@@ -3811,8 +3811,8 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyAqZvGXtbSplQW7laeEGNj9iUC6oJ7qubUskC64r6C07MN3uiZDP9urqcVFutGD0TOiw/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbyAqZvGXtbSplQW7laeEGNj9iUC6oJ7qubUskC64r6C07MN3uiZDP9urqcVFutGD0TOiw';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzLn0BFjAJ9o4QHcNkE34r81lCRDEnlQetzLhV6rfGnvynw6eTp5JZIamgtGGaxI-xlLA/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbzLn0BFjAJ9o4QHcNkE34r81lCRDEnlQetzLhV6rfGnvynw6eTp5JZIamgtGGaxI-xlLA';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -8795,7 +8795,9 @@ function initDashboardApp() {
       document.getElementById('grv-stat-total').textContent = grvData.length;
       document.getElementById('grv-stat-open').textContent = grvData.filter(d => (d['Grievance Status']||'').toLowerCase().includes('open')).length;
       document.getElementById('grv-stat-closed').textContent = grvData.filter(d => (d['Grievance Status']||'').toLowerCase().includes('closed')).length;
-      document.getElementById('grv-stat-high').textContent = grvData.filter(d => (d['Risk Classification']||'').toLowerCase().includes('high')).length;
+      document.getElementById('grv-stat-invalid').textContent = grvData.filter(function(d) {
+        return String(d['Grievance Status'] || '').toLowerCase().includes('invalid');
+      }).length;
 
       loading.style.display = 'none';
       table.style.display = 'table';
@@ -9418,7 +9420,7 @@ function initDashboardApp() {
 
   /** BL Monitoring — always hit latest GAS deploy (bypass stale Vite prebundle). */
   var BL_MONITORING_GAS_URL =
-    'https://script.google.com/macros/s/AKfycbyAqZvGXtbSplQW7laeEGNj9iUC6oJ7qubUskC64r6C07MN3uiZDP9urqcVFutGD0TOiw/exec';
+    'https://script.google.com/macros/s/AKfycbzLn0BFjAJ9o4QHcNkE34r81lCRDEnlQetzLhV6rfGnvynw6eTp5JZIamgtGGaxI-xlLA/exec';
 
   async function fetchBlMonitoringRows_() {
     var base = (typeof window !== 'undefined' && window.SDD_LATEST_WEBAPP_URL)
@@ -13792,6 +13794,12 @@ function initDashboardApp() {
       return n ? 'Q' + n : (String(v || '').trim() || '—');
     }
 
+    function pfCompanyCoordValue_(row) {
+      return String(
+        (row && (row['COORDINATES'] || row['Coordinates'] || row['Coordinate'] || row['COORDINATE'])) || ''
+      ).trim();
+    }
+
     function pfQuarterMatchesFilter_(rowQ, filterQ) {
       if (!filterQ) return true;
       return String(parseMillQuarterSort(rowQ) || '') === String(filterQ);
@@ -14246,6 +14254,7 @@ function initDashboardApp() {
           grievance:  r['TOTAL GRIEVANCES'] != null ? r['TOTAL GRIEVANCES'] : '—',
           ttpPctNum:  ttpPctNum,
           certification: String(r['CERTIFICATION'] || '').trim(),
+          coordinate: pfCompanyCoordValue_(r) || '—',
         };
 
         facilities.forEach(function(fac) {
@@ -14336,6 +14345,7 @@ function initDashboardApp() {
           grievance:  r['TOTAL GRIEVANCES'] != null ? r['TOTAL GRIEVANCES'] : '—',
           ttpPctNum:  ttpPkPctNum,
           certification: String(r['CERTIFICATION'] || '').trim(),
+          coordinate: pfCompanyCoordValue_(r) || '—',
         };
 
         facilities.forEach(function(fac) {
@@ -15217,8 +15227,8 @@ function initDashboardApp() {
           return drawReportHeader_(true);
         }
 
-        function drawSectionTitle_(title, y, accent) {
-          y = ensureSpace_(y, 14);
+        function drawSectionTitle_(title, y, accent, skipEnsure) {
+          if (!skipEnsure) y = ensureSpace_(y, 14);
           doc.setFillColor.apply(doc, accent);
           doc.roundedRect(mL, y, cW, 8, 1.5, 1.5, 'F');
           doc.setTextColor.apply(doc, WHITE);
@@ -15358,7 +15368,376 @@ function initDashboardApp() {
           });
         }
 
-        function drawProfileSection_(profiles, startY, accent) {
+        function pfParseLatLng_(raw) {
+          const s = String(raw || '').trim();
+          if (!s) return null;
+          const nums = s.match(/-?\d+(?:[.,]\d+)?/g);
+          if (!nums || nums.length < 2) return null;
+          const lat = parseFloat(String(nums[0]).replace(',', '.'));
+          const lng = parseFloat(String(nums[1]).replace(',', '.'));
+          if (isNaN(lat) || isNaN(lng)) return null;
+          if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+          return { lat: lat, lng: lng };
+        }
+
+        function pfLonLatToWorldPx_(lng, lat, zoom) {
+          const scale = 256 * Math.pow(2, zoom);
+          const x = (lng + 180) / 360 * scale;
+          const sinLat = Math.sin(lat * Math.PI / 180);
+          const y = (0.5 - Math.log((1 + sinLat) / (1 - sinLat)) / (4 * Math.PI)) * scale;
+          return { x: x, y: y };
+        }
+
+        function pfTileProviders_(z, x, y) {
+          return [
+            'https://a.basemaps.cartocdn.com/rastertiles/voyager/' + z + '/' + x + '/' + y + '.png',
+            'https://b.basemaps.cartocdn.com/rastertiles/voyager/' + z + '/' + x + '/' + y + '.png',
+            'https://c.basemaps.cartocdn.com/rastertiles/voyager/' + z + '/' + x + '/' + y + '.png',
+          ];
+        }
+
+        async function pfLoadTileImage_(urls) {
+          const list = Array.isArray(urls) ? urls : [urls];
+          for (let i = 0; i < list.length; i++) {
+            const url = list[i];
+            const imgDirect = await new Promise(function(resolve) {
+              const el = new Image();
+              el.crossOrigin = 'anonymous';
+              el.onload = function() { resolve(el); };
+              el.onerror = function() { resolve(null); };
+              el.src = url;
+            });
+            if (imgDirect) return imgDirect;
+
+            try {
+              const res = await fetch(url, { mode: 'cors', cache: 'force-cache' });
+              if (!res.ok) continue;
+              const blob = await res.blob();
+              if (!blob || !String(blob.type || '').startsWith('image/')) continue;
+              const objectUrl = URL.createObjectURL(blob);
+              const imgBlob = await new Promise(function(resolve) {
+                const el = new Image();
+                el.onload = function() {
+                  URL.revokeObjectURL(objectUrl);
+                  resolve(el);
+                };
+                el.onerror = function() {
+                  URL.revokeObjectURL(objectUrl);
+                  resolve(null);
+                };
+                el.src = objectUrl;
+              });
+              if (imgBlob) return imgBlob;
+            } catch (_) { /* try next provider */ }
+          }
+          return null;
+        }
+
+        function pfMapFitView_(points, mapAreaW, mapAreaH, paddingPx) {
+          paddingPx = paddingPx || 28;
+          let minLat = Infinity;
+          let maxLat = -Infinity;
+          let minLng = Infinity;
+          let maxLng = -Infinity;
+          points.forEach(function(p) {
+            minLat = Math.min(minLat, p.lat);
+            maxLat = Math.max(maxLat, p.lat);
+            minLng = Math.min(minLng, p.lng);
+            maxLng = Math.max(maxLng, p.lng);
+          });
+          const centerLat = (minLat + maxLat) / 2;
+          const centerLng = (minLng + maxLng) / 2;
+          if (minLat === maxLat && minLng === maxLng) {
+            return { centerLat: centerLat, centerLng: centerLng, zoom: 11 };
+          }
+          const padLat = Math.max((maxLat - minLat) * 0.05, 0.008);
+          const padLng = Math.max((maxLng - minLng) * 0.05, 0.008);
+          minLat -= padLat;
+          maxLat += padLat;
+          minLng -= padLng;
+          maxLng += padLng;
+          const innerW = Math.max(80, mapAreaW - paddingPx * 2);
+          const innerH = Math.max(80, mapAreaH - paddingPx * 2);
+
+          function fitsAtZoom(z) {
+            const nw = pfLonLatToWorldPx_(minLng, maxLat, z);
+            const se = pfLonLatToWorldPx_(maxLng, minLat, z);
+            const boxW = Math.abs(se.x - nw.x);
+            const boxH = Math.abs(se.y - nw.y);
+            return boxW <= innerW && boxH <= innerH;
+          }
+
+          let zoom = 4;
+          for (let z = 16; z >= 3; z--) {
+            if (fitsAtZoom(z)) {
+              zoom = z;
+              break;
+            }
+          }
+          // Zoom in one extra level when points still fit (tighter framing).
+          if (zoom < 16 && fitsAtZoom(zoom + 1)) zoom += 1;
+          return { centerLat: centerLat, centerLng: centerLng, zoom: zoom };
+        }
+
+        function pfDrawCanvasMarkerShadow_(ctx, x, y, r) {
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(40, 30, 30, 0.22)';
+          ctx.ellipse(x + 1.5, y + r + 2, r * 0.9, r * 0.35, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        function pfDrawCanvasMarker_(ctx, x, y, point, accentRgb) {
+          if (point.kind === 'facility') {
+            pfDrawCanvasMarkerShadow_(ctx, x, y, 14);
+            ctx.beginPath();
+            ctx.fillStyle = 'rgba(' + accentRgb.join(',') + ',0.22)';
+            ctx.arc(x, y, 18, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.fillStyle = 'rgb(' + accentRgb.join(',') + ')';
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2.5;
+            ctx.arc(x, y - 2, 9, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.fillStyle = 'rgb(' + accentRgb.join(',') + ')';
+            ctx.moveTo(x, y + 7);
+            ctx.lineTo(x - 7, y + 20);
+            ctx.lineTo(x + 7, y + 20);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 11px Helvetica, Arial, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('F', x, y + 1);
+            ctx.textAlign = 'left';
+            return;
+          }
+          const idx = point.index || 0;
+          pfDrawCanvasMarkerShadow_(ctx, x, y, 8);
+          ctx.beginPath();
+          ctx.fillStyle = 'rgba(24, 92, 160, 0.2)';
+          ctx.arc(x, y, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.fillStyle = '#1a5fa8';
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.arc(x, y, 7, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 9px Helvetica, Arial, sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(String(idx), x, y + 3);
+          ctx.textAlign = 'left';
+        }
+
+        function pfDrawMapLegendPanel_(ctx, points, widthPx, legendTop, legendH, accentRgb) {
+          ctx.fillStyle = '#faf8f8';
+          ctx.fillRect(0, legendTop, widthPx, legendH);
+          ctx.strokeStyle = 'rgba(139, 26, 26, 0.12)';
+          ctx.lineWidth = 1;
+          ctx.beginPath();
+          ctx.moveTo(0, legendTop);
+          ctx.lineTo(widthPx, legendTop);
+          ctx.stroke();
+
+          const facility = points.find(function(p) { return p.kind === 'facility'; });
+          const companies = points.filter(function(p) { return p.kind === 'company'; });
+          const padX = 14;
+          let y = legendTop + 14;
+
+          ctx.fillStyle = '#3d1818';
+          ctx.font = 'bold 11px Helvetica, Arial, sans-serif';
+          ctx.fillText('LOCATIONS (' + points.length + ')', padX, y);
+          y += 12;
+          ctx.fillStyle = '#7a5a5a';
+          ctx.font = '9px Helvetica, Arial, sans-serif';
+          ctx.fillText('F = Facility refinery/plant   ·   1–' + companies.length + ' = Supplier company mills', padX, y);
+          y += 14;
+
+          const colW = (widthPx - padX * 2 - 12) / 2;
+          const rowH = 13;
+          const rows = [];
+          if (facility) rows.push({ kind: 'facility', text: 'F  ' + String(facility.label || 'Facility').slice(0, 38) });
+          companies.forEach(function(p) {
+            rows.push({ kind: 'company', text: String(p.index) + '  ' + String(p.label || 'Company').slice(0, 36) });
+          });
+
+          rows.forEach(function(row, i) {
+            const col = i % 2;
+            const rowIdx = Math.floor(i / 2);
+            const rx = padX + col * (colW + 12);
+            const ry = y + rowIdx * rowH;
+            if (row.kind === 'facility') {
+              ctx.fillStyle = 'rgb(' + accentRgb.join(',') + ')';
+              ctx.beginPath();
+              ctx.arc(rx + 4, ry - 3, 4, 0, Math.PI * 2);
+              ctx.fill();
+            } else {
+              ctx.fillStyle = '#1a5fa8';
+              ctx.beginPath();
+              ctx.arc(rx + 4, ry - 3, 4, 0, Math.PI * 2);
+              ctx.fill();
+            }
+            ctx.fillStyle = '#2a1010';
+            ctx.font = '8.5px Helvetica, Arial, sans-serif';
+            ctx.fillText(row.text, rx + 12, ry);
+          });
+
+          ctx.fillStyle = '#9c8080';
+          ctx.font = '8px Helvetica, Arial, sans-serif';
+          ctx.fillText('© OpenStreetMap contributors · © CARTO', padX, legendTop + legendH - 8);
+        }
+
+        /** One map: facility + company coordinates, auto-fit bounds, legend panel. */
+        async function pfRenderPointsMapDataUrl_(points, widthPx, heightPx, accentRgb) {
+          if (!Array.isArray(points) || !points.length) return '';
+          const legendH = Math.round(heightPx * 0.24);
+          const mapAreaH = heightPx - legendH;
+          const view = pfMapFitView_(points, widthPx, mapAreaH, 24);
+          const zoom = view.zoom;
+          const canvas = document.createElement('canvas');
+          canvas.width = widthPx;
+          canvas.height = heightPx;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) return '';
+
+          ctx.fillStyle = '#f4f1f1';
+          ctx.fillRect(0, 0, widthPx, heightPx);
+
+          const centerPx = pfLonLatToWorldPx_(view.centerLng, view.centerLat, zoom);
+          const topLeftX = centerPx.x - widthPx / 2;
+          const topLeftY = centerPx.y - mapAreaH / 2;
+          const minTx = Math.floor(topLeftX / 256) - 1;
+          const maxTx = Math.floor((topLeftX + widthPx) / 256) + 1;
+          const minTy = Math.floor(topLeftY / 256) - 1;
+          const maxTy = Math.floor((topLeftY + mapAreaH) / 256) + 1;
+          const maxTile = Math.pow(2, zoom);
+
+          const jobs = [];
+          for (let ty = minTy; ty <= maxTy; ty++) {
+            if (ty < 0 || ty >= maxTile) continue;
+            for (let tx = minTx; tx <= maxTx; tx++) {
+              let wrappedTx = tx;
+              while (wrappedTx < 0) wrappedTx += maxTile;
+              while (wrappedTx >= maxTile) wrappedTx -= maxTile;
+              jobs.push({ tx: tx, ty: ty, urls: pfTileProviders_(zoom, wrappedTx, ty) });
+            }
+          }
+          const loaded = await Promise.all(jobs.map(async function(job) {
+            const img = await pfLoadTileImage_(job.urls);
+            return { tx: job.tx, ty: job.ty, img: img };
+          }));
+          let tilesDrawn = 0;
+          loaded.forEach(function(job) {
+            if (!job.img) return;
+            ctx.drawImage(job.img, Math.round(job.tx * 256 - topLeftX), Math.round(job.ty * 256 - topLeftY), 256, 256);
+            tilesDrawn++;
+          });
+          if (!tilesDrawn) return '';
+
+          // Subtle map frame inset (GIS dashboard feel).
+          ctx.fillStyle = 'rgba(255,255,255,0.08)';
+          ctx.fillRect(0, 0, widthPx, mapAreaH);
+          ctx.strokeStyle = 'rgba(139, 26, 26, 0.15)';
+          ctx.lineWidth = 1.5;
+          ctx.strokeRect(0.75, 0.75, widthPx - 1.5, mapAreaH - 1.5);
+
+          const companies = points.filter(function(p) { return p.kind === 'company'; });
+          const facility = points.find(function(p) { return p.kind === 'facility'; });
+          companies.forEach(function(p) {
+            const wp = pfLonLatToWorldPx_(p.lng, p.lat, zoom);
+            pfDrawCanvasMarker_(ctx, Math.round(wp.x - topLeftX), Math.round(wp.y - topLeftY), p, accentRgb);
+          });
+          if (facility) {
+            const wp = pfLonLatToWorldPx_(facility.lng, facility.lat, zoom);
+            pfDrawCanvasMarker_(ctx, Math.round(wp.x - topLeftX), Math.round(wp.y - topLeftY), facility, accentRgb);
+          }
+
+          pfDrawMapLegendPanel_(ctx, points, widthPx, mapAreaH, legendH, accentRgb);
+
+          try {
+            return canvas.toDataURL('image/png');
+          } catch (_) {
+            return '';
+          }
+        }
+
+        function pfBuildPdfMapPoints_(profiles, companies, facilityName) {
+          const points = [];
+          const profile = profiles && profiles[0];
+          const facCoord = pfParseLatLng_(profile && profile._cplCoordinate);
+          if (facCoord) {
+            points.push({
+              lat: facCoord.lat,
+              lng: facCoord.lng,
+              kind: 'facility',
+              label: facilityName || pfPdfSanitize_(profile._cplSite) || 'Facility',
+            });
+          }
+          let idx = 0;
+          companies.forEach(function(c) {
+            const p = pfParseLatLng_(c.coordinate);
+            if (!p) return;
+            idx++;
+            points.push({
+              lat: p.lat,
+              lng: p.lng,
+              kind: 'company',
+              label: c.company,
+              index: idx,
+            });
+          });
+          return points;
+        }
+
+        async function drawUnifiedFacilityMap_(profiles, companies, facilityName, startY, accent) {
+          const points = pfBuildPdfMapPoints_(profiles, companies, facilityName);
+          if (!points.length) return startY;
+
+          const mapW = cW;
+          const mapH = Math.round(mapW * 0.56);
+          const sectionTitleH = 11;
+          // Reserve title + map together so "Facility Map" never orphans on the previous page.
+          let y = ensureSpace_(startY, sectionTitleH + mapH + 12);
+          y = drawSectionTitle_('Facility Map', y, accent, true);
+          const x = mL;
+          const canvasW = 1400;
+          const canvasH = Math.round(canvasW * (mapH / mapW));
+
+          doc.setDrawColor.apply(doc, BORDER);
+          doc.setFillColor.apply(doc, WHITE);
+          doc.setLineWidth(0.35);
+          doc.roundedRect(x, y, mapW, mapH, 3, 3, 'FD');
+          doc.setDrawColor(accent[0], accent[1], accent[2]);
+          doc.setLineWidth(0.6);
+          doc.roundedRect(x + 0.4, y + 0.4, mapW - 0.8, mapH - 0.8, 2.5, 2.5, 'S');
+
+          const mapDataUrl = await pfRenderPointsMapDataUrl_(points, canvasW, canvasH, accent);
+          if (mapDataUrl) {
+            try {
+              doc.addImage(mapDataUrl, 'PNG', x + 1.2, y + 1.2, mapW - 2.4, mapH - 2.4);
+            } catch (_) {
+              doc.setFont('helvetica', 'italic');
+              doc.setFontSize(8.5);
+              doc.setTextColor.apply(doc, INK_MUTED);
+              doc.text('Map could not be embedded in PDF.', x + 4, y + 17);
+            }
+          } else {
+            doc.setFont('helvetica', 'italic');
+            doc.setFontSize(8.5);
+            doc.setTextColor.apply(doc, INK_MUTED);
+            doc.text('Map unavailable — check internet connection and retry export.', x + 4, y + 17);
+          }
+
+          return y + mapH + 10;
+        }
+
+        async function drawProfileSection_(profiles, startY, accent) {
           let y = drawSectionTitle_('Facility Profile', startY, accent);
 
           if (!profiles.length) {
@@ -15439,6 +15818,7 @@ function initDashboardApp() {
             'Company Name',
             'Group',
             'Certification',
+            'Coordinate',
             'NBL',
             'Risk',
             'Grievance',
@@ -15449,6 +15829,7 @@ function initDashboardApp() {
               pfPdfSanitize_(c.company),
               pfPdfSanitize_(c.group),
               c.certification || '',
+              pfPdfSanitize_(c.coordinate),
               pfPdfSanitize_(c.nbl),
               pfPdfSanitize_(c.riskLevel),
               pfPdfSanitize_(c.grievance),
@@ -15456,7 +15837,7 @@ function initDashboardApp() {
             ];
           });
 
-          const colW = pfPdfColWidths_([22, 16, 18, 9, 12, 8, 15]);
+          const colW = pfPdfColWidths_([18, 14, 14, 14, 8, 10, 7, 15]);
 
           doc.autoTable(Object.assign({}, pfPdfTableBase_(), {
             head: tableHead,
@@ -15471,10 +15852,11 @@ function initDashboardApp() {
               0: { cellWidth: colW[0], halign: 'left' },
               1: { cellWidth: colW[1], halign: 'left' },
               2: { cellWidth: colW[2], halign: 'left' },
-              3: { cellWidth: colW[3], halign: 'center' },
+              3: { cellWidth: colW[3], halign: 'left', fontSize: 7.7 },
               4: { cellWidth: colW[4], halign: 'center' },
-              5: { cellWidth: colW[5], halign: 'right' },
-              6: { cellWidth: colW[6], halign: 'right', fontStyle: 'bold' },
+              5: { cellWidth: colW[5], halign: 'center' },
+              6: { cellWidth: colW[6], halign: 'right' },
+              7: { cellWidth: colW[7], halign: 'right', fontStyle: 'bold' },
             },
             didParseCell: function(data) {
               if (data.section !== 'body') return;
@@ -15485,14 +15867,14 @@ function initDashboardApp() {
                 data.cell.styles.valign = 'middle';
                 return;
               }
-              if (data.column.index === 3) {
+              if (data.column.index === 4) {
                 const v = String(data.cell.raw || '').toLowerCase();
                 if (v.includes('yes') || v.includes('nbl')) {
                   data.cell.styles.textColor = BRAND;
                   data.cell.styles.fontStyle = 'bold';
                 }
               }
-              if (data.column.index === 4) {
+              if (data.column.index === 5) {
                 const v = String(data.cell.raw || '').toLowerCase();
                 if (v.includes('high')) {
                   data.cell.styles.textColor = BRAND;
@@ -15510,7 +15892,8 @@ function initDashboardApp() {
 
         let y = drawReportHeader_(false);
 
-        selections.forEach(function(sel, selIdx) {
+        for (let selIdx = 0; selIdx < selections.length; selIdx++) {
+          const sel = selections[selIdx];
           const isPk = sel.type === 'pk';
           const accent = isPk ? PK_GREEN : BRAND;
           const sumFn = isPk ? pfPkGroupSummary_ : pfGroupSummary_;
@@ -15533,10 +15916,11 @@ function initDashboardApp() {
           }
 
           y = drawFacilityHero_(g, badge, facilityPct, pctLabel, companies.length, y, accent);
-          y = drawProfileSection_(profiles, y, accent);
+          y = await drawProfileSection_(profiles, y, accent);
+          y = await drawUnifiedFacilityMap_(profiles, companies, g.facility, y, accent);
           y = drawKpiCards_(y, sum, facilityPct, pctLabel, accent);
           y = drawCompanyTable_(companies, y, pctLabel, accent);
-        });
+        }
 
         drawFooters_();
 
