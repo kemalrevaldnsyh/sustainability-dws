@@ -3174,38 +3174,21 @@ function supplyFacilityMatchesGs_(plant, facRaw) {
 }
 
 /**
- * Find Mill Onboarding Profile row by Company Name + Group Name (plant/quarter/year not required).
+ * Find Mill Onboarding Profile row by COMPANY NAME only.
  */
-function supplyGroupMatchesGs_(excelGroup, sheetGroup) {
-  var eg = String(excelGroup || '').trim();
-  var sg = String(sheetGroup || '').trim();
-  if (!eg) return true;
-  if (!sg) return true;
-  if (supplyNormKey_(eg) === supplyNormKey_(sg)) return true;
-  var nek = supplyNormKey_(eg);
-  var nsk = supplyNormKey_(sg);
-  return nsk.length >= 4 && (nsk.indexOf(nek) >= 0 || nek.indexOf(nsk) >= 0);
-}
-
 function findMillRowForSupplySubmit_(millData, millHeaders, row) {
   var targetRow = Number(row.target_mill_row || row._mill_row || 0);
   if (targetRow >= 2) return targetRow;
 
   var excelCo = String(row['COMPANY NAME'] || '').trim();
-  var excelMill = String(row['MILL NAME'] || excelCo).trim();
-  var excelGroup = String(row['GROUP NAME'] || '').trim();
+  if (!excelCo) return 0;
 
   var coCol = millHeaders.indexOf('COMPANY NAME');
-  var grCol = millHeaders.indexOf('GROUP NAME');
-  var miCol = millHeaders.indexOf('MILL NAME');
+  if (coCol < 0) return 0;
 
   for (var r = 1; r < millData.length; r++) {
-    var sheetRow = millData[r];
-    var sheetCo = coCol >= 0 ? String(sheetRow[coCol] || '').trim() : '';
-    var sheetMill = miCol >= 0 ? String(sheetRow[miCol] || '').trim() : '';
-    if (!supplyIdentityMatchesGs_(excelCo, excelMill, sheetCo, sheetMill)) continue;
-    if (grCol >= 0 && !supplyGroupMatchesGs_(excelGroup, sheetRow[grCol])) continue;
-    return r + 1;
+    var sheetCo = String(millData[r][coCol] || '').trim();
+    if (supplyNameMatchesGs_(excelCo, sheetCo)) return r + 1;
   }
   return 0;
 }

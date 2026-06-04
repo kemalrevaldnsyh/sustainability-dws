@@ -18268,16 +18268,12 @@ function initDashboardApp() {
     return false;
   }
 
-  /** Excel company/mill may map to profile COMPANY NAME or MILL NAME (PK sheets often use company col as mill). */
-  function supplyIdentityMatchesProfile_(excel, profileRow) {
-    const ec = excel.company;
-    const em = excel.mill;
+  /** Validate import row against Mill Profile — COMPANY NAME column only. */
+  function supplyCompanyMatchesProfile_(excelCompany, profileRow) {
+    const ec = String(excelCompany || '').trim();
     const pc = String(profileRow['COMPANY NAME'] || '').trim();
-    const pm = String(profileRow['MILL NAME'] || '').trim();
-    if (!ec && !em) return false;
-    if (supplyNameMatches_(ec, pc) || supplyNameMatches_(ec, pm)) return true;
-    if (em && (supplyNameMatches_(em, pm) || supplyNameMatches_(em, pc))) return true;
-    return false;
+    if (!ec || !pc) return false;
+    return supplyNameMatches_(ec, pc);
   }
 
   function supplyGroupMatchesProfile_(excelGroup, profileGroup) {
@@ -18311,36 +18307,24 @@ function initDashboardApp() {
   }
 
   /**
-   * Match Mill Onboarding Profile by Company Name + Group Name (plant/facility is optional tie-breaker only).
-   * Import batch quarter/year are metadata only — never used to accept/reject a match.
+   * Match Mill Onboarding Profile by COMPANY NAME only (sheet column COMPANY NAME).
    */
   function supplyFindMillProfileMatch_(excelRow, supplyKind) {
     const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
-    const kind = supplyKind === 'PK' ? 'PK' : 'CPO';
     const excel = (excelRow && excelRow.company !== undefined)
       ? excelRow
       : supplyResolveNamesFromExcel_(excelRow || {});
 
-    let groupMismatch = null;
+    const company = String(excel.company || '').trim();
+    if (!company) return { status: 'new', row: null };
+
     let best = null;
     let bestScore = -1;
 
     for (let i = 0; i < src.length; i++) {
       const d = src[i];
-      if (!supplyIdentityMatchesProfile_(excel, d)) continue;
-
-      const groupOk = supplyGroupMatchesProfile_(excel.group, d['GROUP NAME']);
-      if (!groupOk) {
-        if (!groupMismatch) groupMismatch = d;
-        continue;
-      }
-
-      let score = 6;
-      if (supplyNameMatches_(excel.company, d['COMPANY NAME'])) score += 3;
-      if (supplyNameMatches_(excel.mill, d['MILL NAME'])) score += 2;
-      if (excel.group && supplyNameMatches_(excel.group, d['GROUP NAME'])) score += 2;
-      if (excel.plant && supplyFacilityMatchesProfile_(excel.plant, d, kind)) score += 1;
-      if (supplyProductSupplyAllows_(d, kind)) score += 1;
+      if (!supplyCompanyMatchesProfile_(company, d)) continue;
+      let score = supplyNameMatches_(company, d['COMPANY NAME']) ? 10 : 5;
       if (score > bestScore) {
         bestScore = score;
         best = d;
@@ -18348,7 +18332,6 @@ function initDashboardApp() {
     }
 
     if (best) return { status: 'matched', row: best };
-    if (groupMismatch) return { status: 'group_mismatch', row: groupMismatch };
     return { status: 'new', row: null };
   }
 
@@ -18970,7 +18953,7 @@ function initDashboardApp() {
     const matched = batch ? (batch.rows || []).filter(function(r) { return r.match_status === 'matched' && !r._submitted; }).length : 0;
     const supplyKind = String(batch && (batch.supply_type || (batch.rows && batch.rows[0] && batch.rows[0].supply_type)) || 'CPO').toUpperCase();
     return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 10px 4px;border-top:1px solid rgba(139,26,26,0.07);flex-wrap:wrap;">'
-      + '<span style="font-size:11px;color:#9C8080;">Review di Task List draft. Submit Matched mengisi <strong>PERCENTAGE SUPPLY ' + escHtml(supplyKind) + '</strong> pada baris profile yang cocok (Company/Mill + Group + Facility ' + escHtml(supplyKind) + ' + Product Supply).</span>'
+      + '<span style="font-size:11px;color:#9C8080;">Review di Task List draft. Submit Matched mengisi <strong>PERCENTAGE SUPPLY ' + escHtml(supplyKind) + '</strong> pada baris Mill Profile yang <strong>COMPANY NAME</strong>-nya cocok dengan Excel.</span>'
       + '<div style="display:flex;gap:8px;">'
       + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">💾 Save as Draft</button>'
       + (matched > 0 ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-matched" data-batch="' + escHtml(batchId) + '">✓ Submit Matched (' + matched + ')</button>' : '')
@@ -18999,7 +18982,7 @@ function initDashboardApp() {
     };
     const found = supplyFindMillProfileMatch_(excelLike, kind);
     const profile = found.row;
-    if (profile && (found.status === 'matched' || found.status === 'group_mismatch')) {
+    if (profile && found.status === 'matched') {
       draftRow.target_mill_row = profile._row;
       draftRow._mill_row = profile._row;
       draftRow.match_status = found.status;
