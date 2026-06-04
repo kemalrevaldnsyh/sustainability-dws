@@ -3811,8 +3811,8 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyJNQ4wp7AK6a4CdF1EwamWBhQX_hJliuS4g0s08skD-wjWkM_aCHCrr7_YgMJ7du6QhQ/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbyJNQ4wp7AK6a4CdF1EwamWBhQX_hJliuS4g0s08skD-wjWkM_aCHCrr7_YgMJ7du6QhQ';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwlGzxB7AJJrlM3sQtPojctTIn2jLzj7CYvUhTzADiiqkTzTTyJjm5HGVl8QrUrxbaMDA/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbwlGzxB7AJJrlM3sQtPojctTIn2jLzj7CYvUhTzADiiqkTzTTyJjm5HGVl8QrUrxbaMDA';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -9577,7 +9577,7 @@ function initDashboardApp() {
 
   /** BL Monitoring — always hit latest GAS deploy (bypass stale Vite prebundle). */
   var BL_MONITORING_GAS_URL =
-    'https://script.google.com/macros/s/AKfycbyJNQ4wp7AK6a4CdF1EwamWBhQX_hJliuS4g0s08skD-wjWkM_aCHCrr7_YgMJ7du6QhQ/exec';
+    'https://script.google.com/macros/s/AKfycbwlGzxB7AJJrlM3sQtPojctTIn2jLzj7CYvUhTzADiiqkTzTTyJjm5HGVl8QrUrxbaMDA/exec';
 
   async function fetchBlMonitoringRows_() {
     var base = (typeof window !== 'undefined' && window.SDD_LATEST_WEBAPP_URL)
@@ -18194,9 +18194,11 @@ function initDashboardApp() {
   }
 
   function supplyResolveNamesFromExcel_(r) {
-    const company = String(r.COMPANY_NAME || '').trim();
-    const millRaw = String(r.MILL_NAME || '').trim();
-    const group = String(r.COMPANY_GROUP_NAME || r.EXCEL_GROUP || '').trim();
+    const company = String(r.COMPANY_NAME || r['COMPANY NAME'] || '').trim();
+    const millRaw = String(r.MILL_NAME || r['MILL NAME'] || '').trim();
+    const group = String(
+      r.EXCEL_GROUP || r['GROUP NAME'] || r.COMPANY_GROUP_NAME || r['COMPANY GROUP NAME'] || ''
+    ).trim();
     const plant = String(r.PLANT || '').trim();
     return {
       company: company,
@@ -18269,20 +18271,11 @@ function initDashboardApp() {
     return millProductSupplyMatchesCpo_(profileRow);
   }
 
-  function supplyPeriodMatchesProfile_(profileRow, quarter, year) {
-    const qWant = String(quarter || '').trim().replace(/^Q/i, '');
-    const yWant = String(year || '').trim();
-    const dy = String(millYearVal(profileRow) || '').trim();
-    const dq = String(millQuarterVal(profileRow) || '').trim().replace(/^Q/i, '');
-    if (yWant && dy && dy !== yWant) return false;
-    if (qWant && dq && dq !== qWant && dq !== ('Q' + qWant)) return false;
-    return true;
-  }
-
   /**
-   * Match Mill Onboarding Profile: identity (company/mill) + group + FACILITY NAME CPO/PK + PRODUCT SUPPLY + period.
+   * Match Mill Onboarding Profile by Company Name + Group Name (plant/facility is optional tie-breaker only).
+   * Import batch quarter/year are metadata only — never used to accept/reject a match.
    */
-  function supplyFindMillProfileMatch_(excelRow, supplyKind, quarter, year) {
+  function supplyFindMillProfileMatch_(excelRow, supplyKind) {
     const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
     const kind = supplyKind === 'PK' ? 'PK' : 'CPO';
     const excel = (excelRow && excelRow.company !== undefined)
@@ -18296,21 +18289,19 @@ function initDashboardApp() {
     for (let i = 0; i < src.length; i++) {
       const d = src[i];
       if (!supplyIdentityMatchesProfile_(excel, d)) continue;
-      if (!supplyPeriodMatchesProfile_(d, quarter, year)) continue;
-      if (!supplyProductSupplyAllows_(d, kind)) continue;
 
       const groupOk = supplyGroupMatchesProfile_(excel.group, d['GROUP NAME']);
-      const facOk = supplyFacilityMatchesProfile_(excel.plant, d, kind);
       if (!groupOk) {
         if (!groupMismatch) groupMismatch = d;
         continue;
       }
-      if (!facOk) continue;
 
-      let score = 4;
+      let score = 6;
+      if (supplyNameMatches_(excel.company, d['COMPANY NAME'])) score += 3;
       if (supplyNameMatches_(excel.mill, d['MILL NAME'])) score += 2;
-      if (supplyNameMatches_(excel.company, d['COMPANY NAME'])) score += 1;
-      if (excel.group && supplyNameMatches_(excel.group, d['GROUP NAME'])) score += 1;
+      if (excel.group && supplyNameMatches_(excel.group, d['GROUP NAME'])) score += 2;
+      if (excel.plant && supplyFacilityMatchesProfile_(excel.plant, d, kind)) score += 1;
+      if (supplyProductSupplyAllows_(d, kind)) score += 1;
       if (score > bestScore) {
         bestScore = score;
         best = d;
@@ -18332,7 +18323,7 @@ function initDashboardApp() {
       COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
       PLANT: draftRow[facField] || draftRow.PLANT || '',
     };
-    const found = supplyFindMillProfileMatch_(excelLike, kind, batch && batch.quarter || draftRow.QUARTER, batch && batch.year || draftRow.YEAR);
+    const found = supplyFindMillProfileMatch_(excelLike, kind);
     draftRow.match_status = found.status;
     draftRow.supply_type = kind;
     if (found.status === 'matched' && found.row) {
@@ -18425,13 +18416,14 @@ function initDashboardApp() {
     const colCoName   = headers.indexOf('COMPANY NAME');
     const colMillName = headers.indexOf('MILL NAME');
     const colSumQty   = headers.indexOf('SUM OF QTY KG');
-    const colTotal    = headers.indexOf('TOTAL');
+    let colTotal = headers.indexOf('TOTAL');
+    if (colTotal < 0) colTotal = headers.indexOf('GRAND TOTAL');
 
     if (colCoName < 0) {
       return { error: 'Kolom COMPANY NAME tidak ditemukan.' };
     }
 
-    const qtyCol = colSumQty >= 0 ? colSumQty : colTotal;
+    const qtyCol = colTotal >= 0 ? colTotal : colSumQty;
     let lastPlant = '';
     let lastGroup = '';
     const parsed = [];
@@ -18661,16 +18653,11 @@ function initDashboardApp() {
           return '<th style="padding:6px 10px;text-align:left;font-size:10.5px;font-weight:700;color:#5A3030;background:#f9f3f3;border-bottom:1px solid rgba(139,26,26,0.1);white-space:nowrap;">' + escHtml(h) + '</th>';
         }).join('') + '</tr>';
 
-    const quarterSel = document.getElementById('supply-import-quarter');
-    const yearSel    = document.getElementById('supply-import-year');
-    const q = quarterSel ? quarterSel.value : '';
-    const y = yearSel ? yearSel.value : '';
-
     const kind = supplyType === 'PK' ? 'PK' : 'CPO';
     const preview = parsedRows.slice(0, 8);
     tBody.innerHTML = preview.map(function(r, i) {
       const names = supplyResolveNamesFromExcel_(r);
-      const match = supplyFindMillProfileMatch_(r, kind, q, y);
+      const match = supplyFindMillProfileMatch_(r, kind);
       const matchLabel = match.status === 'matched' ? '✓ Profile'
         : (match.status === 'group_mismatch' ? '⚠ Group' : 'Baru');
       const millDisp = names.mill || '—';
@@ -18704,7 +18691,7 @@ function initDashboardApp() {
 
     const rows = parsedRows.map(function(r, idx) {
       const names = supplyResolveNamesFromExcel_(r);
-      const found = supplyFindMillProfileMatch_(r, kind, quarter, year);
+      const found = supplyFindMillProfileMatch_(r, kind);
       const profile = found.row;
 
       const draft = {
