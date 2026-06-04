@@ -62,7 +62,7 @@ const CARDS = [
   {
     panel: 'eudr-potential',
     title: 'EUDR Potential',
-    desc: 'Kesiapan EUDR per mill — identitas dari Mill Onboarding, Status di sheet terpisah.',
+    desc: 'EUDR readiness per mill — identity from Mill Onboarding; status on a separate sheet.',
     icon: 'eudr',
   },
   {
@@ -74,7 +74,7 @@ const CARDS = [
   {
     panel: 'questionnaire-monitoring',
     title: 'Questionnaire Monitoring',
-    desc: 'Pantau progress kuesioner per mill — status, milestone, dan tanggal follow-up.',
+    desc: 'Monitor questionnaire progress per mill — status, milestones, and follow-up dates.',
     icon: 'questionnaire',
   },
 ];

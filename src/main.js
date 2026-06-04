@@ -7725,14 +7725,12 @@ function initDashboardApp() {
     const pkEl = document.getElementById('ttp-stat-pk-traceable');
     const ttmCpoEl = document.getElementById('ttp-stat-cpo-ttm-coord');
     const ttmPkEl = document.getElementById('ttp-stat-pk-ttm-coord');
-    const metaEl = document.getElementById('ttpPeriodMeta');
     const periodRows = ttpGetPeriodRows_();
     const cpoAgg = ttpAggregateTotalTraceablePct_(periodRows, 'cpo');
     const pkAgg = ttpAggregateTotalTraceablePct_(periodRows, 'pk');
     const millRows = ttpMillRowsForSelectedYear_();
     const ttmCpo = ttpCalcTtmCoordinatePct_(millRows, 'cpo');
     const ttmPk = ttpCalcTtmCoordinatePct_(millRows, 'pk');
-    if (metaEl) metaEl.textContent = ttpPeriodMetaText_(periodRows, cpoAgg, pkAgg);
 
     if (cpoEl) {
       cpoEl.textContent = ttpFormatTraceablePct_(cpoAgg.value);
