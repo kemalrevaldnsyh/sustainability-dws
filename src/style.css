@@ -2755,6 +2755,74 @@
    .ttp-group-nested-footer .ttp-group-add-btn {
      flex-shrink: 0;
    }
+
+   /* TTP Add modal — locked prefill + Dealer multi-village */
+   .ttp-form-field-locked .ttp-locked-val {
+     padding: 10px 12px;
+     border-radius: 10px;
+     border: 1.5px solid rgba(139, 26, 26, 0.12);
+     background: rgba(139, 26, 26, 0.04);
+     color: #4a3535;
+     font-size: 13px;
+     font-weight: 600;
+     line-height: 1.35;
+     cursor: not-allowed;
+     user-select: none;
+   }
+   .ttp-dealer-villages-panel-wrap {
+     grid-column: 1 / -1;
+   }
+   .ttp-dealer-villages-desc {
+     margin: -2px 0 10px;
+     font-size: 11px;
+     color: #9c8a8a;
+     line-height: 1.45;
+   }
+   .ttp-dealer-villages-list {
+     display: flex;
+     flex-direction: column;
+     gap: 8px;
+     margin-bottom: 10px;
+   }
+   .ttp-dealer-village-row {
+     display: flex;
+     align-items: center;
+     gap: 8px;
+   }
+   .ttp-dealer-village-inp {
+     flex: 1;
+     min-width: 0;
+     padding: 8px 10px;
+     border: 1.5px solid rgba(139, 26, 26, 0.18);
+     border-radius: 8px;
+     font-size: 13px;
+     color: #1a0a0a;
+     background: #fff;
+     outline: none;
+     font-family: inherit;
+   }
+   .ttp-dealer-village-inp:focus {
+     border-color: #8b1a1a;
+   }
+   .ttp-village-single-wrap[hidden] {
+     display: none !important;
+   }
+   .ttp-dealer-village-rm {
+     flex-shrink: 0;
+     width: 32px;
+     height: 32px;
+     border: none;
+     background: transparent;
+     color: #9c8a8a;
+     font-size: 18px;
+     line-height: 1;
+     cursor: pointer;
+     border-radius: 6px;
+   }
+   .ttp-dealer-village-rm:hover {
+     color: #8b1a1a;
+     background: rgba(139, 26, 26, 0.06);
+   }
    .ttp-group-nested-hint {
      margin: 0;
      padding: 0;

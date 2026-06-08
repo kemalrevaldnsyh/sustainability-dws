@@ -516,6 +516,7 @@ function doPost(e) {
     if (action === 'syncEudrPotential') return respond(syncEudrPotentialRows_(body.mills || []));
     if (action === 'upsertEudr') return respond(upsertEudrPotentialRow_(body.data || {}));
     if (action === 'saveEudrStatusFormula') return respond(saveEudrStatusFormula_(body.criteria || []));
+    if (action === 'addTtpBatch') return respond(addTtpBatch_(body.rows || []));
     if (action === 'add')    return respond(addRow(sheetKey, body.data || {}));
     if (action === 'update') return respond(updateRow(sheetKey, body.row, body.data || {}));
     if (action === 'delete') {
@@ -1391,7 +1392,25 @@ function appendTtpRow_(ws, headers, obj) {
   const row = headers.map(function(h) {
     return obj[h] !== undefined && obj[h] !== null ? obj[h] : '';
   });
+  forceCoordStrings_(headers, row);
   ws.appendRow(row);
+}
+
+/** Add multiple TTP rows in one request (e.g. Dealer → one row per village). */
+function addTtpBatch_(rows) {
+  if (!rows || !rows.length) throw new Error('No TTP rows to add');
+  ensureTtpHeaders_();
+  const sheet = getSheet('ttp');
+  const hdr = detectTtpHeaderRow_(sheet);
+  const headers = hdr && hdr.headers && hdr.headers.length ? hdr.headers : TTP_HEADERS.slice();
+  rows.forEach(function(data) {
+    const newRow = headers.map(function(h) {
+      return data[h] !== undefined && data[h] !== null ? data[h] : '';
+    });
+    forceCoordStrings_(headers, newRow);
+    sheet.appendRow(newRow);
+  });
+  return { success: true, count: rows.length };
 }
 
 function patchTtpRow_(ws, headers, sheetRow, patch) {

@@ -3811,8 +3811,8 @@ import { renderMillProfileSummaryPdf } from './mill-profile-pdf-summary.js';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx2MWTe5C-bBrTEwnAZy74pndWI6fcoR8x9uCgo6A3xnOn0_uheTS8JgfWr5hifk3clag/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbx2MWTe5C-bBrTEwnAZy74pndWI6fcoR8x9uCgo6A3xnOn0_uheTS8JgfWr5hifk3clag';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbw0KAsUZIf3S9jPznxxkBp1fcTpvpbKJcDgtxRSMxudDsHFtqNokx-WJbXKR1haHzh8Ww/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbw0KAsUZIf3S9jPznxxkBp1fcTpvpbKJcDgtxRSMxudDsHFtqNokx-WJbXKR1haHzh8Ww';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -5450,7 +5450,16 @@ function initDashboardApp() {
       data[el.dataset.field] = el.value;
     });
     try {
-      if (modalMode === 'add') {
+      if (modalMode === 'add' && modalSheet === 'ttp') {
+        const dealerRows = ttpBuildDealerSaveRows_(data);
+        if (dealerRows && dealerRows.length > 1) {
+          await apiPost({ action: 'addTtpBatch', sheet: 'ttp', rows: dealerRows });
+        } else if (dealerRows && dealerRows.length === 1) {
+          await apiPost({ action: 'add', sheet: modalSheet, data: dealerRows[0] });
+        } else {
+          await apiPost({ action: 'add', sheet: modalSheet, data });
+        }
+      } else if (modalMode === 'add') {
         await apiPost({ action: 'add', sheet: modalSheet, data });
       } else {
         await apiPost({ action: 'update', sheet: modalSheet, row: modalRow, data });
@@ -8276,18 +8285,162 @@ function initDashboardApp() {
     return out.length ? out : [{ title: 'TTP Record', fields: fields }];
   }
 
+  function ttpModalIsFieldLocked_(field, data) {
+    if (modalMode !== 'add' || !ttpModalAddContext || !ttpModalAddContext.lockedFields) return false;
+    const val = data ? (data[field] || '') : '';
+    return ttpModalAddContext.lockedFields.has(field) && String(val).trim() !== '';
+  }
+
+  function ttpModalLockedFieldHtml_(field, val) {
+    return '<div class="form-field ttp-form-field-locked">'
+      + '<label>' + escHtml(field) + '</label>'
+      + '<div class="ttp-locked-val" title="Prefilled from mill context">' + escHtml(String(val)) + '</div>'
+      + '<input type="hidden" data-field="' + escHtml(field) + '" value="' + escHtml(String(val)) + '">'
+      + '</div>';
+  }
+
+  function ttpIsDealerCategory_(value) {
+    return /^dealer$/i.test(String(value || '').trim());
+  }
+
   function ttpModalFieldHtml_(field, data) {
     const val = data ? (data[field] || '') : '';
+    if (ttpModalIsFieldLocked_(field, data)) {
+      return ttpModalLockedFieldHtml_(field, val);
+    }
     const type = ttpModalFieldType_(field);
     const isFull = false;
-    if (type === 'yn') return buildYnSelect(field, val, isFull);
-    if (type === 'category' || type === 'select') {
-      return buildCustomSelect(field, ttpModalDropdownOptions_(field, val), String(val), false, isFull);
+    const key = normalizeTtpHeaderKey_(field);
+    let html = '';
+    if (type === 'yn') {
+      html = buildYnSelect(field, val, isFull);
+    } else if (type === 'category' || type === 'select') {
+      html = buildCustomSelect(field, ttpModalDropdownOptions_(field, val), String(val), false, isFull);
+    } else {
+      html = '<div class="form-field' + (isFull ? ' full' : '') + '">'
+        + '<label>' + escHtml(field) + '</label>'
+        + '<input type="text" data-field="' + escHtml(field) + '" value="' + escHtml(String(val)) + '" placeholder="' + escHtml(field) + '">'
+        + '</div>';
     }
-    return '<div class="form-field' + (isFull ? ' full' : '') + '">'
-      + '<label>' + escHtml(field) + '</label>'
-      + '<input type="text" data-field="' + escHtml(field) + '" value="' + escHtml(String(val)) + '" placeholder="' + escHtml(field) + '">'
+    if (key === 'VILLAGE') {
+      return '<div class="ttp-village-single-wrap" data-ttp-village-field="1">' + html + '</div>';
+    }
+    return html;
+  }
+
+  function ttpDealerVillagesPanelHtml_(rowCount) {
+    const count = Math.max(1, rowCount || 2);
+    let rowsHtml = '';
+    for (let i = 0; i < count; i++) {
+      rowsHtml += ttpDealerVillageRowHtml_('');
+    }
+    return ''
+      + '<div class="form-field full ttp-dealer-villages-panel-wrap" id="ttpDealerVillagesPanel" hidden>'
+      + '<label>Village</label>'
+      + '<p class="ttp-dealer-villages-desc">Isi nama village (ketik manual). Satu village = satu baris data. Lat/Long hanya di baris pertama.</p>'
+      + '<div class="ttp-dealer-villages-list" id="ttpDealerVillagesList">' + rowsHtml + '</div>'
+      + '<button type="button" class="btn-sm btn-outline-warm" id="ttpDealerAddVillage">+ Tambah village</button>'
       + '</div>';
+  }
+
+  function ttpDealerVillageRowHtml_(value) {
+    return ''
+      + '<div class="ttp-dealer-village-row">'
+      + '<input type="text" class="ttp-dealer-village-inp" value="' + escHtml(String(value || '')) + '"'
+      + ' placeholder="Nama village" autocomplete="off">'
+      + '<button type="button" class="ttp-dealer-village-rm" title="Hapus">×</button>'
+      + '</div>';
+  }
+
+  function ttpCollectDealerVillages_() {
+    const list = document.getElementById('ttpDealerVillagesList');
+    if (!list) return [];
+    const villages = [];
+    list.querySelectorAll('.ttp-dealer-village-inp').forEach(function(inp) {
+      const v = String(inp.value || '').trim();
+      if (v) villages.push(v);
+    });
+    return villages;
+  }
+
+  function ttpReadCategoryValue_(grid) {
+    const categoryCol = ttpPickField_(['CATEGORY']);
+    if (!categoryCol || !grid) return '';
+    const catEl = grid.querySelector('input[data-field="' + categoryCol.replace(/"/g, '\\"') + '"]');
+    return catEl ? String(catEl.value || '').trim() : '';
+  }
+
+  function ttpSyncDealerVillagesUi_(grid) {
+    const panel = document.getElementById('ttpDealerVillagesPanel');
+    if (!panel || !grid) return;
+    const isDealer = ttpIsDealerCategory_(ttpReadCategoryValue_(grid));
+    panel.hidden = !isDealer;
+    grid.querySelectorAll('[data-ttp-village-field="1"]').forEach(function(el) {
+      el.hidden = isDealer;
+    });
+    if (isDealer) {
+      const list = document.getElementById('ttpDealerVillagesList');
+      if (list && !list.querySelector('.ttp-dealer-village-row')) {
+        list.innerHTML = ttpDealerVillageRowHtml_('') + ttpDealerVillageRowHtml_('');
+      }
+    }
+  }
+
+  function bindTtpModalDealerUi_(grid) {
+    if (!grid) return;
+    ttpSyncDealerVillagesUi_(grid);
+
+    if (grid.dataset.ttpDealerUiBound === '1') return;
+    grid.dataset.ttpDealerUiBound = '1';
+
+    grid.addEventListener('click', function(e) {
+      const opt = e.target.closest('.cs-option');
+      if (opt && opt.closest('[data-ttp-category-field="1"]')) {
+        setTimeout(function() { ttpSyncDealerVillagesUi_(grid); }, 0);
+      }
+      if (e.target.closest('#ttpDealerAddVillage')) {
+        e.preventDefault();
+        const list = document.getElementById('ttpDealerVillagesList');
+        if (!list) return;
+        list.insertAdjacentHTML('beforeend', ttpDealerVillageRowHtml_(''));
+      }
+      const rmBtn = e.target.closest('.ttp-dealer-village-rm');
+      if (rmBtn) {
+        const row = rmBtn.closest('.ttp-dealer-village-row');
+        const list = document.getElementById('ttpDealerVillagesList');
+        if (!row || !list) return;
+        if (list.querySelectorAll('.ttp-dealer-village-row').length <= 1) {
+          const inp = row.querySelector('.ttp-dealer-village-inp');
+          if (inp) inp.value = '';
+          return;
+        }
+        row.remove();
+      }
+    });
+  }
+
+  function ttpBuildDealerSaveRows_(data) {
+    const categoryCol = ttpPickField_(['CATEGORY']);
+    const villageCol = ttpPickField_(['VILLAGE']);
+    const latCol = ttpPickField_(['LAT', 'LATITUDE']);
+    const longCol = ttpPickField_(['LONG', 'LONGITUDE']);
+    const category = categoryCol ? data[categoryCol] : '';
+    if (!ttpIsDealerCategory_(category)) return null;
+
+    const villages = ttpCollectDealerVillages_();
+    if (!villages.length) {
+      throw new Error('Dealer category requires at least one village.');
+    }
+
+    return villages.map(function(village, idx) {
+      const row = Object.assign({}, data);
+      if (villageCol) row[villageCol] = village;
+      if (idx > 0) {
+        if (latCol) row[latCol] = '';
+        if (longCol) row[longCol] = '';
+      }
+      return row;
+    });
   }
 
   function buildTtpForm(data) {
@@ -8299,15 +8452,28 @@ function initDashboardApp() {
     const sections = ttpModalResolveSections_(fields);
     grid.className = 'modal-form-grid cols-1';
     let html = '';
+    const categoryCol = ttpPickField_(['CATEGORY']);
+    const catVal = categoryCol && data ? (data[categoryCol] || '') : '';
+    const dealerActive = ttpIsDealerCategory_(catVal);
     sections.forEach(function(sec) {
       html += '<div class="mill-form-section"><div class="mill-form-section-title">' + escHtml(sec.title) + '</div><div class="mill-form-grid">';
       sec.fields.forEach(function(f) {
         html += ttpModalFieldHtml_(f, data);
+        if (sec.title === 'Supplier & Location' && categoryCol && f === categoryCol) {
+          html += ttpDealerVillagesPanelHtml_(dealerActive ? 2 : 1);
+        }
       });
       html += '</div></div>';
     });
     grid.innerHTML = html;
     initCustomSelects(grid);
+    if (categoryCol) {
+      const catHidden = grid.querySelector('input[data-field="' + categoryCol.replace(/"/g, '\\"') + '"]');
+      if (catHidden && catHidden.parentElement) {
+        catHidden.parentElement.setAttribute('data-ttp-category-field', '1');
+      }
+    }
+    bindTtpModalDealerUi_(grid);
   }
 
   function ttpBuildAddPrefill_(ctx, sampleRow) {
@@ -8353,8 +8519,12 @@ function initDashboardApp() {
     } catch (err) {
       console.warn('[TTP] Could not parse sample row for add prefill', err);
     }
-    ttpModalAddContext = { millName: ctx.millName };
     const prefill = ttpBuildAddPrefill_(ctx, sampleRow);
+    const lockedFields = new Set();
+    Object.keys(prefill).forEach(function(k) {
+      if (String(prefill[k] || '').trim()) lockedFields.add(k);
+    });
+    ttpModalAddContext = { millName: ctx.millName, lockedFields: lockedFields };
     openModal('ttp', ttpFields.length ? ttpFields : [''], 'add', prefill);
     const titleEl = document.getElementById('modalTitle');
     if (titleEl) {
