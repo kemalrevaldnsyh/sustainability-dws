@@ -5144,6 +5144,9 @@ function initDashboardApp() {
   let ttpPeriodMode = 'overall'; // year only
   let ttpPeriodYear = '';
   let ttpPeriodQuarter = '';
+  let ttpExpandedMills_ = new Set();
+  let ttpModalAddContext = null;
+  let ttpScrollToMillAfterRender_ = '';
   let millLoadPromise = null;
   let ttpLoadPromise = null;
   let grvLoadPromise = null;
@@ -5253,6 +5256,31 @@ function initDashboardApp() {
         <div class="custom-select-dropdown">${optionsHtml}</div>
       </div>
     </div>`;
+  }
+
+  function buildYnSelect(field, currentVal, isFull) {
+    const arrowSvg = '<svg class="cs-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
+    const checkSvg = '<svg class="cs-opt-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
+    const raw = String(currentVal == null ? '' : currentVal).trim();
+    let val = '';
+    if (/^y(es)?$/i.test(raw) || raw.toUpperCase() === 'Y') val = 'Y';
+    else if (/^n(o)?$/i.test(raw) || raw.toUpperCase() === 'N') val = 'N';
+
+    const triggerInner = val
+      ? '<span class="cs-yn-dot"></span><span class="cs-value">' + escHtml(val) + '</span>'
+      : '<span class="cs-placeholder">— Pilih —</span>';
+    const optionsHtml = ''
+      + '<div class="cs-option cs-option-placeholder" data-val="">— Pilih —</div>'
+      + '<div class="cs-option cs-yes' + (val === 'Y' ? ' selected' : '') + '" data-val="Y"><span class="cs-yn-dot"></span>' + checkSvg + 'Y</div>'
+      + '<div class="cs-option cs-no' + (val === 'N' ? ' selected' : '') + '" data-val="N"><span class="cs-yn-dot"></span>' + checkSvg + 'N</div>';
+
+    return '<div class="form-field' + (isFull ? ' full' : '') + '">'
+      + '<label>' + escHtml(field) + '</label>'
+      + '<input type="hidden" data-field="' + escHtml(field) + '" value="' + escHtml(val) + '">'
+      + '<div class="custom-select-wrap yesno-wrap yn-wrap' + (val === 'Y' ? ' val-yes' : val === 'N' ? ' val-no' : '') + '">'
+      + '<div class="custom-select-trigger">' + triggerInner + arrowSvg + '</div>'
+      + '<div class="custom-select-dropdown">' + optionsHtml + '</div>'
+      + '</div></div>';
   }
 
   function initCustomSelects(container) {
@@ -5367,6 +5395,8 @@ function initDashboardApp() {
       buildMillForm(data);
     } else if (sheet === 'grievance') {
       buildGrvForm(data);
+    } else if (sheet === 'ttp') {
+      buildTtpForm(data);
     } else {
       grid.className = 'modal-form-grid';
       grid.innerHTML = fields.map(f => {
@@ -5387,11 +5417,12 @@ function initDashboardApp() {
     }
 
     document.getElementById('modalOverlay')?.classList.add('active');
-    const firstInput = grid.querySelector('input, select');
+    const firstInput = grid.querySelector('input:not([type="hidden"]), select, textarea');
     if (firstInput) firstInput.focus();
   }
 
   function closeModal() {
+    if (modalSheet === 'ttp') ttpModalAddContext = null;
     document.getElementById('modalOverlay')?.classList.remove('active');
   }
 
@@ -5461,6 +5492,12 @@ function initDashboardApp() {
         }
         await loadMillData();
       } else if (modalSheet === 'ttp') {
+        if (ttpModalAddContext && ttpModalAddContext.millName) {
+          const millKey = String(ttpModalAddContext.millName).trim();
+          ttpExpandedMills_.add(millKey);
+          ttpScrollToMillAfterRender_ = millKey;
+        }
+        ttpModalAddContext = null;
         ttpLoaded = false; await loadTTPData();
       } else if (modalSheet === 'contactSupplier') {
         contactListLoaded = false; await loadContactListData(true);
@@ -5615,6 +5652,16 @@ function initDashboardApp() {
     const y = pickMillColumnValue_(o, 'year');
     if (y) o['YEAR'] = y;
     return o;
+  }
+
+  /** Mill / TTP UI: baris tanpa COMPANY NAME tidak ditampilkan. */
+  function millRowHasCompanyName_(row) {
+    if (!row) return false;
+    const co = String(
+      row['COMPANY NAME'] != null ? row['COMPANY NAME']
+        : (row['Company Name'] != null ? row['Company Name'] : '')
+    ).trim();
+    return co.length > 0 && co !== '—' && co !== '-';
   }
 
   function bindMillTableDelegationOnce() {
@@ -5870,7 +5917,9 @@ function initDashboardApp() {
 
   function millRowsAfterRegistryDimFilters() {
     return allData.filter(function(d) {
-      return millRowMatchesChipAndSearch(d) && millRowMatchesPdfDimFilters(d);
+      return millRowHasCompanyName_(d)
+        && millRowMatchesChipAndSearch(d)
+        && millRowMatchesPdfDimFilters(d);
     });
   }
 
@@ -6192,7 +6241,9 @@ function initDashboardApp() {
       errorEl.style.display = 'none';
       table.style.display = 'none';
       const rawRows = await apiGet('mill');
-      const rawData = (Array.isArray(rawRows) ? rawRows : []).map(normalizeMillApiRow);
+      const rawData = (Array.isArray(rawRows) ? rawRows : [])
+        .map(normalizeMillApiRow)
+        .filter(millRowHasCompanyName_);
       allDataRaw = rawData.map(prepareMillRowPerfCache);
 
       // ── DEDUP: per Mill ID / UML ID, keep the row with most non-empty fields ──
@@ -7215,11 +7266,36 @@ function initDashboardApp() {
   }
 
   const TTP_CATEGORY_MIX_BUCKETS = [
-    { id: 'own_estate',      label: 'Own Estate',      color: '#2d5a3d' },
-    { id: 'external_estate', label: 'External Estate', color: '#1a6b5c' },
-    { id: 'dealer',          label: 'Dealer',          color: '#9a6b1a' },
-    { id: 'plasma',          label: 'Plasma',          color: '#2a5f8f' },
-    { id: 'cooperative',     label: 'Cooperative',     color: '#6b3f8f' },
+    {
+      id: 'own_estate',
+      label: 'Own Estate',
+      color: '#2d5a3d',
+      desc: 'Plantations whose ownership and operations are under the direct control of the mill company.',
+    },
+    {
+      id: 'external_estate',
+      label: 'External Estate',
+      color: '#1a6b5c',
+      desc: 'Third-party plantations (independent plantations or external suppliers) located outside the processing company\u2019s concession.',
+    },
+    {
+      id: 'dealer',
+      label: 'Dealer',
+      color: '#9a6b1a',
+      desc: 'A supply chain that purchases raw materials or products from primary sources (such as farmers or plantations) and then resells them to processing facilities.',
+    },
+    {
+      id: 'plasma',
+      label: 'Plasma',
+      color: '#2a5f8f',
+      desc: 'A group of farmers who manage plantations in official partnership with the company.',
+    },
+    {
+      id: 'cooperative',
+      label: 'Cooperative',
+      color: '#6b3f8f',
+      desc: 'Third-party plantations consisting of farmers who are grouped into a cooperative organization.',
+    },
   ];
 
   function ttpNormalizeCategoryBucket_(raw) {
@@ -7300,6 +7376,7 @@ function initDashboardApp() {
         id: b.id,
         label: b.label,
         color: b.color,
+        desc: b.desc || '',
         count: counts[b.id] || 0,
         pct: 0,
         pctLabel: '0%',
@@ -7687,28 +7764,33 @@ function initDashboardApp() {
     return isNaN(n) ? NaN : n;
   }
 
+  function ttpRowCompanyNameVal_(row) {
+    if (!row || typeof row !== 'object') return '';
+    const keys = Object.keys(row);
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i];
+      if (k === '_row' || (String(k).length && String(k)[0] === '_')) continue;
+      if (normalizeTtpHeaderKey_(k) === 'COMPANY NAME') {
+        return String(row[k] || '').trim();
+      }
+    }
+    return String(row['COMPANY NAME'] != null ? row['COMPANY NAME'] : (row['Company Name'] || '')).trim();
+  }
+
   function ttpIsDataRow_(row) {
     if (!row || typeof row !== 'object') return false;
     if (row._sddSearchBlob && /total traceable cpo|total traceable pk/.test(row._sddSearchBlob)) {
       return false;
     }
-    let hasMill = false;
-    let hasCompany = false;
-    let hasSupplier = false;
     const keys = Object.keys(row);
     for (let i = 0; i < keys.length; i++) {
       const k = keys[i];
       if (k === '_row' || (String(k).length && String(k)[0] === '_')) continue;
       const v = String(row[k] || '').trim();
       if (/^total traceable/i.test(v)) return false;
-      const u = normalizeTtpHeaderKey_(k);
-      if (u === 'MILL NAME' && v && v !== '—' && v !== '-') hasMill = true;
-      if ((u === 'COMPANY NAME' || u === 'COMPANY CODE') && v && v !== '—' && v !== '-') hasCompany = true;
-      if ((u === 'FFB SUPPLIER NAME' || u === 'FFB SUPPLIER GROUP NAME') && v && v !== '—' && v !== '-') {
-        hasSupplier = true;
-      }
     }
-    return hasMill || hasCompany || hasSupplier;
+    const companyName = ttpRowCompanyNameVal_(row);
+    return companyName.length > 0 && companyName !== '—' && companyName !== '-';
   }
 
   /** Sheet footer: PK = SUM(PK Traceable) / SUM(PK SUPPLY to KCP); CPO = SUM(CPO Traceable) / SUM(CPO SUPPLY to REFINERY). */
@@ -8088,12 +8170,13 @@ function initDashboardApp() {
         + '<div class="ttp-category-mix-item" data-cat="' + escHtml(it.id) + '">'
         + '<div class="ttp-category-mix-pct" style="color:' + escHtml(it.color) + '">' + escHtml(it.pctLabel) + '</div>'
         + '<div class="ttp-category-mix-label">' + escHtml(it.label) + '</div>'
+        + '<p class="ttp-category-mix-item-desc">' + escHtml(it.desc || '') + '</p>'
         + '<div class="ttp-category-mix-track" aria-hidden="true"><span class="ttp-category-mix-fill" style="width:'
         + Math.min(100, Math.max(0, it.pct)) + '%;background:' + escHtml(it.color) + ';"></span></div>'
         + '</div>';
     }).join('');
 
-    section.setAttribute('aria-label', 'Category by traceable data across five supplier categories');
+    section.setAttribute('aria-label', 'Category traceable TTP Data across five supplier categories');
     applyTtpCategoryMixCollapsedUi_();
   }
 
@@ -8110,8 +8193,201 @@ function initDashboardApp() {
     return '<span style="font-weight:600;color:var(--forest)">' + val + '</span>' + avgSuffix;
   }
 
+  const TTP_MODAL_HIDDEN_KEYS_ = new Set([
+    'SUBMISSION_ID', 'FFB_LINE_ID', 'SUPPLIER_TYPE', 'SYNCED_AT', 'SYNCED_BY', 'NO',
+  ]);
+
+  const TTP_MODAL_SELECT_KEYS_ = new Set([
+    'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'COMPANY CODE', 'UML ID',
+    'FFB SUPPLIER GROUP NAME', 'PROVINCE', 'DISTRICT', 'SUBDISTRICT', 'SUB DISTRICT',
+    'VILLAGE', 'LEGALITAS', 'YEAR', 'QUARTER',
+  ]);
+
+  function ttpModalFieldType_(field) {
+    const key = normalizeTtpHeaderKey_(field);
+    if (TTP_MODAL_HIDDEN_KEYS_.has(key)) return 'hidden';
+    if (key === 'CATEGORY' || (key.includes('CATEGORY') && !key.includes('MILL'))) return 'category';
+    if (key === 'ISPO (Y/N)' || key === 'RSPO (Y/N)' || key === 'ISCC (Y/N)') return 'yn';
+    if (TTP_MODAL_SELECT_KEYS_.has(key)) return 'select';
+    return 'text';
+  }
+
+  function ttpModalDropdownOptions_(field, currentVal) {
+    const key = normalizeTtpHeaderKey_(field);
+    let opts = [];
+    if (ttpModalFieldType_(field) === 'category') {
+      opts = TTP_CATEGORY_MIX_BUCKETS.map(function(b) { return b.label; });
+    } else if (ttpModalFieldType_(field) === 'select') {
+      opts = getUniqueValuesForCol(field).slice();
+      if ((key === 'GROUP NAME' || key === 'COMPANY NAME' || key === 'MILL NAME') && typeof allData !== 'undefined' && allData.length) {
+        const millFieldMap = {
+          'GROUP NAME': 'GROUP NAME',
+          'COMPANY NAME': 'COMPANY NAME',
+          'MILL NAME': 'MILL NAME',
+        };
+        const millKey = millFieldMap[key];
+        if (millKey) {
+          const seen = Object.create(null);
+          opts.forEach(function(v) { seen[v] = true; });
+          allData.forEach(function(row) {
+            const v = String(row[millKey] || '').trim();
+            if (v && !seen[v]) { seen[v] = true; opts.push(v); }
+          });
+          opts.sort(function(a, b) { return a.localeCompare(b); });
+        }
+      }
+    }
+    const v = String(currentVal || '').trim();
+    if (v && opts.indexOf(v) === -1) opts.unshift(v);
+    return opts;
+  }
+
+  function ttpModalResolveSections_(fields) {
+    const resolved = resolveTtpFieldSections_();
+    const ttmSet = new Set(resolved.ttm);
+    const ttpSet = new Set(resolved.ttp);
+    const ttmFields = fields.filter(function(f) { return ttmSet.has(f); });
+    const ttpFieldsList = fields.filter(function(f) { return ttpSet.has(f); });
+    const other = fields.filter(function(f) { return !ttmSet.has(f) && !ttpSet.has(f); });
+    const out = [];
+    if (ttmFields.length) out.push({ title: 'Mill & Company', fields: ttmFields });
+
+    if (ttpFieldsList.length) {
+      const supplierKeys = new Set([
+        'FFB SUPPLIER GROUP NAME', 'FFB SUPPLIER NAME', 'CATEGORY', 'LAT', 'LONG',
+        'VILLAGE ID', 'VILLAGE', 'SUBDISTRICT', 'SUB DISTRICT', 'DISTRICT', 'PROVINCE',
+        'CONCESION AREA', 'CONCESSION AREA', 'PLANTED AREA', 'NUMBER OD SMALLHOLDERS',
+        'NUMBER OF SMALLHOLDERS', 'TAHUN TANAM', 'LEGALITAS',
+      ]);
+      const supplier = [];
+      const supply = [];
+      ttpFieldsList.forEach(function(f) {
+        const key = normalizeTtpHeaderKey_(f);
+        if (supplierKeys.has(key) || key.includes('FFB SUPPLIER') || key.includes('CONCES')) {
+          supplier.push(f);
+        } else {
+          supply.push(f);
+        }
+      });
+      if (supplier.length) out.push({ title: 'Supplier & Location', fields: supplier });
+      if (supply.length) out.push({ title: 'Certification & Supply', fields: supply });
+    }
+    if (other.length) out.push({ title: 'Other', fields: other });
+    return out.length ? out : [{ title: 'TTP Record', fields: fields }];
+  }
+
+  function ttpModalFieldHtml_(field, data) {
+    const val = data ? (data[field] || '') : '';
+    const type = ttpModalFieldType_(field);
+    const isFull = false;
+    if (type === 'yn') return buildYnSelect(field, val, isFull);
+    if (type === 'category' || type === 'select') {
+      return buildCustomSelect(field, ttpModalDropdownOptions_(field, val), String(val), false, isFull);
+    }
+    return '<div class="form-field' + (isFull ? ' full' : '') + '">'
+      + '<label>' + escHtml(field) + '</label>'
+      + '<input type="text" data-field="' + escHtml(field) + '" value="' + escHtml(String(val)) + '" placeholder="' + escHtml(field) + '">'
+      + '</div>';
+  }
+
+  function buildTtpForm(data) {
+    const grid = document.getElementById('modalFormGrid');
+    if (!grid) return;
+    const fields = (modalFields || ttpFields || []).filter(function(f) {
+      return ttpModalFieldType_(f) !== 'hidden';
+    });
+    const sections = ttpModalResolveSections_(fields);
+    grid.className = 'modal-form-grid cols-1';
+    let html = '';
+    sections.forEach(function(sec) {
+      html += '<div class="mill-form-section"><div class="mill-form-section-title">' + escHtml(sec.title) + '</div><div class="mill-form-grid">';
+      sec.fields.forEach(function(f) {
+        html += ttpModalFieldHtml_(f, data);
+      });
+      html += '</div></div>';
+    });
+    grid.innerHTML = html;
+    initCustomSelects(grid);
+  }
+
+  function ttpBuildAddPrefill_(ctx, sampleRow) {
+    const prefill = {};
+    const groupCol = ttpPickField_(['GROUP NAME']);
+    const companyCol = ttpPickField_(['COMPANY NAME']);
+    const millCol = ttpPickField_(['MILL NAME']);
+    const yearCol = ttpPickField_(['YEAR', /^year$/i]);
+    const quarterCol = ttpPickField_(['QUARTER', /^quarter$/i]);
+    let millName = ctx.millName || '';
+    if ((!millName || millName === '(No Mill Name)') && sampleRow && millCol) {
+      const fromRow = String(sampleRow[millCol] || '').trim();
+      if (fromRow) millName = fromRow;
+    }
+    if (groupCol && ctx.groupName && ctx.groupName !== '—') prefill[groupCol] = ctx.groupName;
+    if (companyCol && ctx.companyName && ctx.companyName !== '—') prefill[companyCol] = ctx.companyName;
+    if (millCol && millName && millName !== '(No Mill Name)') prefill[millCol] = millName;
+    if (yearCol && ttpPeriodYear) prefill[yearCol] = ttpPeriodYear;
+    if (quarterCol && ttpPeriodQuarter) prefill[quarterCol] = ttpPeriodQuarter;
+    if (sampleRow) {
+      ['COMPANY CODE', 'UML ID'].forEach(function(pattern) {
+        const col = ttpPickField_([pattern]);
+        if (!col) return;
+        const v = sampleRow[col];
+        if (v !== undefined && v !== null && String(v).trim() !== '') prefill[col] = String(v).trim();
+      });
+    }
+    return prefill;
+  }
+
+  function openTtpAddFromGroup_(btn) {
+    if (!btn) return;
+    const ctx = {
+      groupName: btn.dataset.groupName || '',
+      companyName: btn.dataset.companyName || '',
+      millName: btn.dataset.millName || '',
+    };
+    let sampleRow = null;
+    try {
+      if (btn.dataset.sampleRow) {
+        sampleRow = JSON.parse(btn.dataset.sampleRow.replace(/&#39;/g, "'"));
+      }
+    } catch (err) {
+      console.warn('[TTP] Could not parse sample row for add prefill', err);
+    }
+    ttpModalAddContext = { millName: ctx.millName };
+    const prefill = ttpBuildAddPrefill_(ctx, sampleRow);
+    openModal('ttp', ttpFields.length ? ttpFields : [''], 'add', prefill);
+    const titleEl = document.getElementById('modalTitle');
+    if (titleEl) {
+      titleEl.textContent = ctx.millName ? 'Add TTP — ' + ctx.millName : 'Add TTP';
+    }
+  }
+
+  function ttpRestoreExpandedGroups_() {
+    const body = document.getElementById('ttpTableBody');
+    if (!body || !ttpExpandedMills_.size) return;
+    let scrollTarget = null;
+    body.querySelectorAll('.ttp-group-row').forEach(function(row) {
+      const millEl = row.querySelector('.mill-name');
+      const mill = millEl ? millEl.textContent.trim() : '';
+      if (!mill || !ttpExpandedMills_.has(mill)) return;
+      const groupId = row.dataset.group;
+      if (!groupId) return;
+      const children = body.querySelectorAll('[data-parent="' + groupId + '"]');
+      children.forEach(function(c) { c.classList.remove('hidden'); });
+      row.dataset.expanded = '1';
+      row.classList.add('expanded');
+      if (ttpScrollToMillAfterRender_ && mill === ttpScrollToMillAfterRender_) {
+        scrollTarget = row;
+      }
+    });
+    if (scrollTarget) {
+      scrollTarget.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      ttpScrollToMillAfterRender_ = '';
+    }
+  }
+
   /** Nested supplier grid when a mill group row is expanded (grouped view only). */
-  function ttpGroupedNestedTableHtml_(rows) {
+  function ttpGroupedNestedTableHtml_(rows, ctx) {
     const cols = [
       { label: 'FFB Supplier Group Name', get: function(d) { return ttpRowField_(d, ['FFB SUPPLIER GROUP NAME']); } },
       { label: 'FFB Supplier Name', get: function(d) { return ttpRowField_(d, ['FFB SUPPLIER NAME']); } },
@@ -8138,7 +8414,20 @@ function initDashboardApp() {
       });
       html += '</div>';
     });
-    html += '<p class="ttp-group-nested-hint">Click a row to open supplier detail.</p></div></div>';
+    const sampleRow = rows.length ? rows[0] : null;
+    const sampleJson = sampleRow ? JSON.stringify(sampleRow).replace(/'/g, '&#39;') : '';
+    const groupName = ctx && ctx.groupName ? ctx.groupName : '';
+    const companyName = ctx && ctx.companyName ? ctx.companyName : '';
+    const millName = ctx && ctx.millName ? ctx.millName : '';
+    html += '<div class="ttp-group-nested-footer">'
+      + '<button type="button" class="btn-sm btn-filled ttp-group-add-btn"'
+      + ' data-group-name="' + escHtml(groupName) + '"'
+      + ' data-company-name="' + escHtml(companyName) + '"'
+      + ' data-mill-name="' + escHtml(millName) + '"'
+      + (sampleJson ? ' data-sample-row=\'' + sampleJson + '\'' : '')
+      + '>+ Add TTP</button>'
+      + '<p class="ttp-group-nested-hint">Click a row to open supplier detail.</p>'
+      + '</div></div></div>';
     return html;
   }
 
@@ -8468,6 +8757,13 @@ function initDashboardApp() {
         return;
       }
 
+      const addTtpBtn = e.target.closest('.ttp-group-add-btn');
+      if (addTtpBtn && body.contains(addTtpBtn)) {
+        e.stopPropagation();
+        openTtpAddFromGroup_(addTtpBtn);
+        return;
+      }
+
       const nestedRow = e.target.closest('.ttp-group-nested-row');
       if (nestedRow && body.contains(nestedRow) && ttpViewMode === 'grouped') {
         if (nestedRow.dataset.row) {
@@ -8485,15 +8781,19 @@ function initDashboardApp() {
       if (groupRow && body.contains(groupRow) && !e.target.closest('.ttp-group-detail-row')) {
         const groupId = groupRow.dataset.group;
         const expanded = groupRow.dataset.expanded === '1';
+        const millEl = groupRow.querySelector('.mill-name');
+        const millKey = millEl ? millEl.textContent.trim() : '';
         const children = body.querySelectorAll('[data-parent="' + groupId + '"]');
         if (expanded) {
           children.forEach(function(c) { c.classList.add('hidden'); });
           groupRow.dataset.expanded = '0';
           groupRow.classList.remove('expanded');
+          if (millKey) ttpExpandedMills_.delete(millKey);
         } else {
           children.forEach(function(c) { c.classList.remove('hidden'); });
           groupRow.dataset.expanded = '1';
           groupRow.classList.add('expanded');
+          if (millKey) ttpExpandedMills_.add(millKey);
         }
       }
     });
@@ -8558,6 +8858,9 @@ function initDashboardApp() {
       const first     = rows[0];
       const groupName = first[groupCol]   || '—';
       const compName  = first[companyCol] || '—';
+      const displayMill = (millCol && first[millCol] && String(first[millCol]).trim())
+        ? String(first[millCol]).trim()
+        : (millName === '(No Mill Name)' ? '' : millName);
       const subCount  = rows.length;
       const groupId   = 'ttpg-' + gIdx;
       const supplierPctHtml = ttpSupplierPctHtml_(rows);
@@ -8581,13 +8884,18 @@ function initDashboardApp() {
 
       html += '<tr class="ttp-group-detail-row hidden" data-parent="' + groupId + '">'
         + '<td colspan="' + ttpMainTableColspan_(true) + '" class="ttp-group-detail-cell">'
-        + ttpGroupedNestedTableHtml_(rows)
+        + ttpGroupedNestedTableHtml_(rows, {
+          groupName: String(groupName),
+          companyName: String(compName),
+          millName: String(displayMill || millName),
+        })
         + '</td></tr>';
 
       gIdx++;
     });
 
     body.innerHTML = html;
+    ttpRestoreExpandedGroups_();
 
   }
 
