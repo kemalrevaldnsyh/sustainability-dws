@@ -109,6 +109,29 @@ function dashTodayIso_() {
   return dashToIsoDate_(new Date());
 }
 
+function dashYearBounds_(centerYear) {
+  const now = new Date().getFullYear();
+  return {
+    min: Math.min(1980, centerYear - 15),
+    max: Math.max(now + 5, centerYear + 15),
+  };
+}
+
+function dashMonthSelectHtml_(selectedMonth) {
+  return DASH_MONTHS.map(function(name, idx) {
+    return '<option value="' + idx + '"' + (idx === selectedMonth ? ' selected' : '') + '>' + name + '</option>';
+  }).join('');
+}
+
+function dashYearSelectHtml_(selectedYear) {
+  const bounds = dashYearBounds_(selectedYear);
+  let html = '';
+  for (let yr = bounds.max; yr >= bounds.min; yr--) {
+    html += '<option value="' + yr + '"' + (yr === selectedYear ? ' selected' : '') + '>' + yr + '</option>';
+  }
+  return html;
+}
+
 function dashRenderCalendar_(popover, viewDate, selectedIso, onSelect) {
   const y = viewDate.getFullYear();
   const m = viewDate.getMonth();
@@ -118,9 +141,15 @@ function dashRenderCalendar_(popover, viewDate, selectedIso, onSelect) {
   const todayIso = dashTodayIso_();
 
   let html = '<div class="dash-cal-head">'
+    + '<div class="dash-cal-pickers">'
+    + '<select class="dash-cal-month" aria-label="Month">' + dashMonthSelectHtml_(m) + '</select>'
+    + '<select class="dash-cal-year" aria-label="Year">' + dashYearSelectHtml_(y) + '</select>'
+    + '</div>'
+    + '<div class="dash-cal-nav-row">'
     + '<button type="button" class="dash-cal-nav" data-nav="-1" aria-label="Previous month">&#8249;</button>'
-    + '<span class="dash-cal-title">' + DASH_MONTHS[m] + ' ' + y + '</span>'
+    + '<button type="button" class="dash-cal-today">Today</button>'
     + '<button type="button" class="dash-cal-nav" data-nav="1" aria-label="Next month">&#8250;</button>'
+    + '</div>'
     + '</div>'
     + '<div class="dash-cal-weekdays">' + DASH_WEEKDAYS.map(function(w) { return '<span>' + w + '</span>'; }).join('') + '</div>'
     + '<div class="dash-cal-grid">';
@@ -136,12 +165,42 @@ function dashRenderCalendar_(popover, viewDate, selectedIso, onSelect) {
   html += '</div>';
   popover.innerHTML = html;
 
+  const monthSel = popover.querySelector('.dash-cal-month');
+  const yearSel = popover.querySelector('.dash-cal-year');
+  function rerenderFromPickers() {
+    const newY = parseInt(yearSel.value, 10);
+    const newM = parseInt(monthSel.value, 10);
+    dashRenderCalendar_(popover, new Date(newY, newM, 1), selectedIso, onSelect);
+  }
+  if (monthSel) {
+    monthSel.addEventListener('change', function(e) {
+      e.stopPropagation();
+      rerenderFromPickers();
+    });
+    monthSel.addEventListener('click', function(e) { e.stopPropagation(); });
+  }
+  if (yearSel) {
+    yearSel.addEventListener('change', function(e) {
+      e.stopPropagation();
+      rerenderFromPickers();
+    });
+    yearSel.addEventListener('click', function(e) { e.stopPropagation(); });
+  }
+
   popover.querySelectorAll('[data-nav]').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();
       dashRenderCalendar_(popover, new Date(y, m + parseInt(btn.dataset.nav, 10), 1), selectedIso, onSelect);
     });
   });
+  const todayBtn = popover.querySelector('.dash-cal-today');
+  if (todayBtn) {
+    todayBtn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      const today = new Date();
+      dashRenderCalendar_(popover, new Date(today.getFullYear(), today.getMonth(), 1), selectedIso, onSelect);
+    });
+  }
   popover.querySelectorAll('.dash-cal-day[data-iso]').forEach(function(btn) {
     btn.addEventListener('click', function(e) {
       e.stopPropagation();

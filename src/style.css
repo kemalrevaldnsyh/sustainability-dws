@@ -6061,7 +6061,7 @@ body.qm-form-open { overflow: hidden; }
   top: calc(100% + 6px);
   right: 0;
   z-index: 1200;
-  width: 280px;
+  width: 300px;
   padding: 12px;
   border: 1px solid rgba(139,26,26,0.14);
   border-radius: 12px;
@@ -6070,15 +6070,52 @@ body.qm-form-open { overflow: hidden; }
 }
 .dash-cal-head {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 8px;
   margin-bottom: 10px;
 }
-.dash-cal-title {
-  font-size: 13px;
-  font-weight: 700;
-  color: #4A1C1C;
+.dash-cal-pickers {
+  display: grid;
+  grid-template-columns: 1fr 88px;
+  gap: 6px;
 }
+.dash-cal-month,
+.dash-cal-year {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1.5px solid rgba(139,26,26,0.18);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4A1C1C;
+  background: #fff;
+  font-family: inherit;
+  cursor: pointer;
+}
+.dash-cal-month:focus,
+.dash-cal-year:focus {
+  outline: none;
+  border-color: #8B1A1A;
+}
+.dash-cal-nav-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.dash-cal-today {
+  flex: 1;
+  height: 28px;
+  border: 1px solid rgba(139,26,26,0.12);
+  border-radius: 8px;
+  background: #fff;
+  color: #8B1A1A;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+}
+.dash-cal-today:hover { background: rgba(139,26,26,0.05); }
 .dash-cal-nav {
   width: 28px;
   height: 28px;
