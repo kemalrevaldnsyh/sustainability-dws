@@ -8,6 +8,7 @@ import {
   dashDateFieldHtml,
   dashDateCollectValues,
   dashDateReadIso,
+  dashIsoToDisplay,
   dashNormalizeToIso,
   initDashDateFields,
 } from './dash-date-field.js';
@@ -9919,29 +9920,17 @@ function initDashboardApp() {
 
   function grvFormatDateDisplay_(raw) {
     if (raw === undefined || raw === null || raw === '') return '—';
-    if (raw instanceof Date && !isNaN(raw.getTime())) {
-      return grvFormatDateObj_(raw);
-    }
+    const iso = grvToInputDate_(raw);
+    if (iso) return dashIsoToDisplay(iso);
     const s = String(raw).trim();
-    if (!s || s === '—') return '—';
-    if (/^\d{4}-\d{2}-\d{2}/.test(s) || s.indexOf('T') !== -1) {
-      const d = new Date(s);
-      if (!isNaN(d.getTime())) return grvFormatDateObj_(d);
-    }
-    const n = parseFloat(String(s).replace(',', '.'));
-    if (!isNaN(n) && n > 20000 && n < 100000 && !/\//.test(s) && !/-/.test(s)) {
-      const d = new Date((n - 25569) * 86400000);
-      if (!isNaN(d.getTime())) return grvFormatDateObj_(d);
-    }
     return s.replace(/T[\d:.]+Z?.*$/i, '').trim() || '—';
   }
 
-  function grvFormatDateObj_(d) {
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    const day = d.getDate();
-    const mon = months[d.getMonth()];
-    const yr = String(d.getFullYear()).slice(-2);
-    return day + '-' + mon + '-' + yr;
+  function grvDateCellHtml_(raw) {
+    return '<div class="grv-date-inline">'
+      + '<span class="grv-row-chevron" aria-hidden="true">▸</span>'
+      + '<span class="grv-date-val">' + escHtml(grvFormatDateDisplay_(raw)) + '</span>'
+      + '</div>';
   }
 
   function prepareGrvRowPerfCache(row) {
@@ -10083,14 +10072,14 @@ function initDashboardApp() {
       const rowJson = JSON.stringify(d).replace(/'/g, '&#39;');
       return `
         <tr class="grv-main-row" data-idx="${i}">
-          <td><span class="grv-row-chevron" aria-hidden="true">▸</span>${escHtml(grvFormatDateDisplay_(d['Date Received']))}</td>
+          <td class="grv-cell-date">${grvDateCellHtml_(d['Date Received'])}</td>
           <td>${escHtml(d['Grievance Category'] || '—')}</td>
           <td><span class="mill-name">${escHtml(d['Complainant'] || '—')}</span></td>
           <td>${escHtml(d['Grievance Subject Group'] || '—')}</td>
           <td>${escHtml(d['Grievance Subject'] || '—')}</td>
           <td>${riskBadge(d['Risk Classification'])}</td>
           <td>${statusBadgeGrv(d['Grievance Status'])}</td>
-          <td>${escHtml(grvFormatDateDisplay_(d['Date Closed']))}</td>
+          <td class="grv-cell-date"><span class="grv-date-val">${escHtml(grvFormatDateDisplay_(d['Date Closed']))}</span></td>
           <td class="grv-cell-action">${escHtml(d['Action Taken'] || '—')}</td>
           <td>${escHtml(d['Published'] || '—')}</td>
         </tr>
