@@ -3811,6 +3811,7 @@
    }
    .form-field > input[type="text"],
    .form-field > input[type="number"],
+   .form-field > input[type="date"],
    .form-field > textarea,
    .form-field > select {
      padding: 8px 10px;
@@ -3826,6 +3827,10 @@
    .form-field > input:focus,
    .form-field > textarea:focus,
    .form-field > select:focus { border-color: #8B1A1A; }
+   .form-field > input[type="date"].grv-form-date {
+     min-height: 36px;
+     color-scheme: light;
+   }
    
    /* â”€â”€ Mill form sections â”€â”€ */
    .mill-form-section {

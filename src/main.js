@@ -9837,6 +9837,7 @@ function initDashboardApp() {
   ];
   const GRV_LONG = ['Grievance Description','Verification Findings','Corrective Action','Preventive Action','Action Taken'];
   const GRV_TEXTAREA_FIELDS = ['Grievance Description','Verification Findings','Corrective Action','Preventive Action'];
+  const GRV_DATE_FIELDS = ['Date Received', 'Date Closed'];
   const GRV_SHORT = ['Grievance ID','Date Received','Grievance Category','Subject','Grievance Subject Group','Risk Classification','Grievance Status','Date Closed'];
   /** Dropdown options aligned with Grievance Monitoring spreadsheet data validation. */
   const GRV_DROPDOWN_FIELDS = {
@@ -9873,6 +9874,11 @@ function initDashboardApp() {
           + '<label>' + escHtml(f) + '</label>'
           + '<textarea data-field="' + escHtml(f) + '" rows="3" placeholder="' + escHtml(f) + '">'
           + escHtml(String(val)) + '</textarea></div>';
+      } else if (GRV_DATE_FIELDS.includes(f)) {
+        html += '<div class="form-field">'
+          + '<label>' + escHtml(f) + '</label>'
+          + '<input type="date" class="grv-form-date" data-field="' + escHtml(f) + '" value="' + escHtml(grvToInputDate_(val)) + '">'
+          + '</div>';
       } else {
         html += '<div class="form-field' + (isFull ? ' full' : '') + '">'
           + '<label>' + escHtml(f) + '</label>'
@@ -9886,6 +9892,49 @@ function initDashboardApp() {
 
   let grvData = [], grvLoaded = false, grvSearch = '';
   let grvTableDelegationBound = false;
+
+  function grvToIsoDate_(d) {
+    return d.getFullYear() + '-'
+      + String(d.getMonth() + 1).padStart(2, '0') + '-'
+      + String(d.getDate()).padStart(2, '0');
+  }
+
+  /** Normalize sheet / legacy values to yyyy-mm-dd for date inputs. */
+  function grvToInputDate_(raw) {
+    if (raw === undefined || raw === null || raw === '') return '';
+    if (raw instanceof Date && !isNaN(raw.getTime())) return grvToIsoDate_(raw);
+    const s = String(raw).trim();
+    if (!s || s === '—') return '';
+    if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    const monMatch = s.match(/^(\d{1,2})-([A-Za-z]{3})-(\d{2,4})$/);
+    if (monMatch) {
+      const months = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+      const mon = months[String(monMatch[2]).toLowerCase().slice(0, 3)];
+      if (mon !== undefined) {
+        let yr = parseInt(monMatch[3], 10);
+        if (yr < 100) yr += 2000;
+        const d = new Date(yr, mon, parseInt(monMatch[1], 10));
+        if (!isNaN(d.getTime())) return grvToIsoDate_(d);
+      }
+    }
+    const slash = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})$/);
+    if (slash) {
+      const dd = slash[1].padStart(2, '0');
+      const mm = slash[2].padStart(2, '0');
+      let yy = slash[3];
+      if (yy.length === 2) yy = '20' + yy;
+      return yy + '-' + mm + '-' + dd;
+    }
+    const n = parseFloat(String(s).replace(',', '.'));
+    if (!isNaN(n) && n > 20000 && n < 100000 && !/\//.test(s) && !/-/.test(s)) {
+      const d = new Date((n - 25569) * 86400000);
+      if (!isNaN(d.getTime())) return grvToIsoDate_(d);
+    }
+    const d = new Date(s);
+    if (!isNaN(d.getTime())) return grvToIsoDate_(d);
+    return '';
+  }
 
   function grvFormatDateDisplay_(raw) {
     if (raw === undefined || raw === null || raw === '') return '—';
