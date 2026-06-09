@@ -9904,6 +9904,19 @@ function initDashboardApp() {
     return dashNormalizeToIso(raw);
   }
 
+  function grvDateSortKey_(raw) {
+    const iso = grvToInputDate_(raw);
+    if (!iso) return 0;
+    const t = Date.parse(iso + 'T12:00:00');
+    return isNaN(t) ? 0 : t;
+  }
+
+  function grvSortByDateReceivedDesc_(rows) {
+    return rows.slice().sort(function(a, b) {
+      return (b._grvDateReceivedTs || 0) - (a._grvDateReceivedTs || 0);
+    });
+  }
+
   function grvFormatDateDisplay_(raw) {
     if (raw === undefined || raw === null || raw === '') return '—';
     if (raw instanceof Date && !isNaN(raw.getTime())) {
@@ -9936,6 +9949,7 @@ function initDashboardApp() {
     row._sddSearchBlob = GRV_FIELDS.map(function(f) {
       return String(row[f] || '').toLowerCase();
     }).join('|');
+    row._grvDateReceivedTs = grvDateSortKey_(row['Date Received']);
     return row;
   }
 
@@ -9991,7 +10005,7 @@ function initDashboardApp() {
       errorEl.style.display = 'none';
       table.style.display = 'none';
       grvData = await apiGet('grievance');
-      grvData = grvData.map(prepareGrvRowPerfCache);
+      grvData = grvSortByDateReceivedDesc_(grvData.map(prepareGrvRowPerfCache));
       grvLoaded = true;
 
       document.getElementById('grv-stat-total').textContent = grvData.length;
@@ -10039,9 +10053,9 @@ function initDashboardApp() {
     if (!body) return;
     bindGrvTableDelegationOnce();
     const q = grvSearch;
-    const filtered = grvData.filter(d =>
-      !q || (d._sddSearchBlob || '').includes(q)
-    );
+    const filtered = grvSortByDateReceivedDesc_(grvData.filter(function(d) {
+      return !q || (d._sddSearchBlob || '').includes(q);
+    }));
     if (filtered.length === 0) {
       body.innerHTML = `<tr><td colspan="10" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>`;
       return;
