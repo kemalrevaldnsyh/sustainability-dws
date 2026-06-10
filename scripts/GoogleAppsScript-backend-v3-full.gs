@@ -54,6 +54,7 @@ const SHEETS = {
   unileverNbl     : 'Unilever NBL',
   supplyDraft     : 'Supply Import Draft',
   blMonitoring    : 'BL Monitoring',
+  blReference     : 'BL Reference',
   questionnaireMonitoring : 'Questionnaire Monitoring',
   eudrPotential           : 'EUDR Potential',
   eudrStatusFormula       : 'EUDR Status Formula',
@@ -68,6 +69,8 @@ const SHEET_TAB_ALIASES = {
   blMonitoring: BL_MONITORING_TAB,
   bl: BL_MONITORING_TAB,
   'BL Monitoring': BL_MONITORING_TAB,
+  blReference: 'BL Reference',
+  'BL Reference': 'BL Reference',
 };
 
 /**
@@ -113,6 +116,33 @@ const BL_MONITORING_SHEET_HEADERS = [
 const BL_MONITORING_JSON_HEADERS = ['TTM LINKS JSON', 'TTP LINKS JSON'];
 
 const BL_MONITORING_HEADERS = BL_MONITORING_SHEET_HEADERS.concat(BL_MONITORING_JSON_HEADERS);
+
+/** BL dropdown lists (commodity + buyer) — TYPE + NAME rows. */
+const BL_REFERENCE_HEADERS = ['TYPE', 'NAME'];
+
+const BL_REFERENCE_DEFAULTS = [
+  ['Commodity', 'CPO'],
+  ['Commodity', 'PK'],
+  ['Commodity', 'RBDPO'],
+  ['Commodity', 'RBDPOLEIN'],
+  ['Commodity', 'RBDPS'],
+  ['Commodity', 'PFAD'],
+  ['Commodity', 'CPKO'],
+  ['Commodity', 'PKE'],
+  ['Buyer', 'COFCO'],
+  ['Buyer', 'FIRST RESOURCES'],
+  ['Buyer', 'ADM'],
+  ['Buyer', '3F INDUSTRIES LIMITED'],
+  ['Buyer', 'EMAMI'],
+  ['Buyer', 'CARGILL'],
+  ['Buyer', 'IOI'],
+  ['Buyer', 'APICAL'],
+  ['Buyer', 'CITY EDIBLE OIL.LTD'],
+  ['Buyer', 'RAJ INDUSTRIES'],
+  ['Buyer', 'SANTHOSHIMATHAA'],
+  ['Buyer', 'HDPC BANK Ltd'],
+  ['Buyer', 'STA GRUP'],
+];
 
 /** Columns appended to existing BL Monitoring tabs when missing. */
 const BL_MONITORING_ENSURE_HEADERS = [
@@ -562,6 +592,7 @@ function doGet(e) {
       if (sheetKey === 'unileverNbl') ensureUnileverNblHeaders_();
       if (sheetKey === 'supplyDraft') ensureSupplyDraftHeaders_();
       if (sheetKey === 'blMonitoring') ensureBlMonitoringHeaders_();
+      if (sheetKey === 'blReference') ensureBlReferenceHeaders_();
       if (sheetKey === 'questionnaireMonitoring') ensureQuestionnaireMonitoringHeaders_();
       if (sheetKey === 'eudrPotential') ensureEudrPotentialHeaders_();
       if (sheetKey === 'eudrStatusFormula') ensureEudrStatusFormulaHeaders_();
@@ -587,6 +618,7 @@ function doGet(e) {
     if (action === 'listSuppliedPkSheets') return respond(listSuppliedPkSheets_());
     if (action === 'getSuppliedPk')        return respond(getSuppliedPkData_(e.parameter.sheet || ''));
     if (action === 'getFacilityMapImage')  return respond(getFacilityMapImage_(e.parameter || {}));
+    if (action === 'seedBlReference')      return respond(seedBlReferenceDefaults_());
 
     return respond({ success: false, error: 'Unknown action: ' + action });
   } catch (err) {
@@ -613,6 +645,7 @@ function doPost(e) {
     }
 
     if (sheetKey === 'blMonitoring') ensureBlMonitoringHeaders_();
+    if (sheetKey === 'blReference') ensureBlReferenceHeaders_();
     if (sheetKey === 'questionnaireMonitoring') ensureQuestionnaireMonitoringHeaders_();
     if (sheetKey === 'eudrPotential') ensureEudrPotentialHeaders_();
     if (sheetKey === 'facilityProfile') ensureFacilityProfileHeaders_();
@@ -621,6 +654,8 @@ function doPost(e) {
     if (action === 'upsertEudr') return respond(upsertEudrPotentialRow_(body.data || {}));
     if (action === 'saveEudrStatusFormula') return respond(saveEudrStatusFormula_(body.criteria || []));
     if (action === 'addTtpBatch') return respond(addTtpBatch_(body.rows || []));
+    if (action === 'upsertBlReference') return respond(upsertBlReferenceItem_(body.type, body.name));
+    if (action === 'seedBlReference') return respond(seedBlReferenceDefaults_());
     if (action === 'add')    return respond(addRow(sheetKey, body.data || {}));
     if (action === 'update') return respond(updateRow(sheetKey, body.row, body.data || {}));
     if (action === 'delete') {
@@ -1228,6 +1263,45 @@ function ensureNblHeaders_() {
 
 function ensureUnileverNblHeaders_() {
   return ensureSheetHeadersGeneric_('unileverNbl', UNILEVER_NBL_HEADERS);
+}
+
+function ensureBlReferenceHeaders_() {
+  const sheet = ensureSheetHeadersGeneric_('blReference', BL_REFERENCE_HEADERS);
+  if (sheet.getLastRow() <= 1 && BL_REFERENCE_DEFAULTS.length) {
+    const startRow = 2;
+    const numRows = BL_REFERENCE_DEFAULTS.length;
+    const numCols = BL_REFERENCE_HEADERS.length;
+    sheet.getRange(startRow, 1, numRows, numCols).setValues(BL_REFERENCE_DEFAULTS);
+  }
+  return sheet;
+}
+
+function seedBlReferenceDefaults_() {
+  ensureBlReferenceHeaders_();
+  return { success: true, count: getData('blReference').length };
+}
+
+function upsertBlReferenceItem_(type, name) {
+  const t = String(type || '').trim();
+  const n = String(name || '').trim();
+  if (!t || !n) throw new Error('TYPE and NAME are required for BL Reference.');
+  const sheet = ensureBlReferenceHeaders_();
+  const rows = sheet.getDataRange().getValues();
+  if (!rows.length) throw new Error('BL Reference sheet has no headers.');
+  const headers = rows[0].map(function(h) { return String(h || '').trim(); });
+  const typeCol = headers.indexOf('TYPE');
+  const nameCol = headers.indexOf('NAME');
+  if (typeCol < 0 || nameCol < 0) throw new Error('BL Reference headers must include TYPE and NAME.');
+  const tLower = t.toLowerCase();
+  const nLower = n.toLowerCase();
+  for (var i = 1; i < rows.length; i++) {
+    if (String(rows[i][typeCol] || '').trim().toLowerCase() === tLower
+        && String(rows[i][nameCol] || '').trim().toLowerCase() === nLower) {
+      return { success: true, existed: true };
+    }
+  }
+  sheet.appendRow([t, n]);
+  return { success: true, added: true };
 }
 
 function detectBlHeaderRow_(sheet) {

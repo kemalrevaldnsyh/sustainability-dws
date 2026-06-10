@@ -3821,8 +3821,8 @@ import {
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyP7VTghEAEdEDRLJuaI3n2Dy2tZDG31M1kkk0za6yxz9EEJ45_7-S2BKjfqw66lInyEQ/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbyP7VTghEAEdEDRLJuaI3n2Dy2tZDG31M1kkk0za6yxz9EEJ45_7-S2BKjfqw66lInyEQ';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx3-uQEPZh0eUWheR71EJcLRPvEGPVRCE9qMDwCTCX-gKIgijHYFi51FzX-FTkY38vnyQ/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbx3-uQEPZh0eUWheR71EJcLRPvEGPVRCE9qMDwCTCX-gKIgijHYFi51FzX-FTkY38vnyQ';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -5368,7 +5368,7 @@ function initDashboardApp() {
   }
 
   function initCustomSelects(container) {
-    container.querySelectorAll('.custom-select-wrap').forEach(wrap => {
+    container.querySelectorAll('.custom-select-wrap:not(.bl-lookup-wrap)').forEach(wrap => {
       const trigger = wrap.querySelector('.custom-select-trigger');
       const dropdown = wrap.querySelector('.custom-select-dropdown');
       const hidden = wrap.parentElement.querySelector('input[data-field]');
@@ -10363,7 +10363,11 @@ function initDashboardApp() {
     'RECEIVED DATE', 'SENT TO REVIEW (DATE)', 'SEND TO EXIM (DATE)', 'BL DATE', 'SENT TO REQUESTER',
   ]);
   const BL_COMODITY_BASE_OPTIONS = [
-    'CPO', 'PK', 'Crude Palm Oil', 'Palm Kernel', 'Palm Kernel Oil', 'Palm Oil', 'CPO & PK',
+    'CPO', 'PK', 'RBDPO', 'RBDPOLEIN', 'RBDPS', 'PFAD', 'CPKO', 'PKE',
+  ];
+  const BL_BUYER_BASE_OPTIONS = [
+    'COFCO', 'FIRST RESOURCES', 'ADM', '3F INDUSTRIES LIMITED', 'EMAMI', 'CARGILL', 'IOI',
+    'APICAL', 'CITY EDIBLE OIL.LTD', 'RAJ INDUSTRIES', 'SANTHOSHIMATHAA', 'HDPC BANK Ltd', 'STA GRUP',
   ];
   const BL_FIELD_LABELS = Object.assign({}, BL_SHIPPING_FIELD_LABELS, BL_DECL_FIELD_LABELS);
   const BL_EXPORT_COLUMN_DEFS = [
@@ -10490,6 +10494,108 @@ function initDashboardApp() {
   let blBuyerNblBlocked_ = false;
   let blBuyerValidateSeq_ = 0;
   let blWarmPickerPromise_ = null;
+  let blReferenceLoaded_ = false;
+  let blReferenceLoadPromise_ = null;
+  let blReferenceCommodities_ = [];
+  let blReferenceBuyers_ = [];
+
+  function blLookupBaseKeys_(baseList) {
+    const keys = {};
+    (baseList || []).forEach(function(v) {
+      const s = String(v || '').trim();
+      if (s) keys[s.toLowerCase()] = true;
+    });
+    return keys;
+  }
+
+  function blReferenceExtrasOnly_(names, baseList) {
+    const baseKeys = blLookupBaseKeys_(baseList);
+    return (names || []).filter(function(n) {
+      const s = String(n || '').trim();
+      return s && !baseKeys[s.toLowerCase()];
+    });
+  }
+
+  function blMergeLookupOptions_(baseList, extraList) {
+    const seen = {};
+    const out = [];
+    function push_(v) {
+      const s = String(v || '').trim();
+      if (!s) return;
+      const k = s.toLowerCase();
+      if (seen[k]) return;
+      seen[k] = true;
+      out.push(s);
+    }
+    (baseList || []).forEach(push_);
+    (extraList || []).forEach(push_);
+    return out.sort(function(a, b) { return a.localeCompare(b, 'en', { sensitivity: 'base' }); });
+  }
+
+  async function loadBlReferenceData_(force) {
+    if (!force && blReferenceLoaded_) return { commodities: blReferenceCommodities_, buyers: blReferenceBuyers_ };
+    if (!force && blReferenceLoadPromise_) return blReferenceLoadPromise_;
+    blReferenceLoadPromise_ = (async function() {
+      try {
+        const rows = await apiGet('blReference');
+        const commodities = [];
+        const buyers = [];
+        (rows || []).forEach(function(r) {
+          const type = String(r.TYPE || '').trim().toLowerCase();
+          const name = String(r.NAME || '').trim();
+          if (!name) return;
+          if (type === 'commodity') commodities.push(name);
+          else if (type === 'buyer') buyers.push(name);
+        });
+        blReferenceCommodities_ = blReferenceExtrasOnly_(commodities, BL_COMODITY_BASE_OPTIONS);
+        blReferenceBuyers_ = blReferenceExtrasOnly_(buyers, BL_BUYER_BASE_OPTIONS);
+        blReferenceLoaded_ = true;
+        if (!commodities.length && !buyers.length) {
+          try {
+            await apiPost({ action: 'seedBlReference' }, { baseUrl: SDD_DEFAULT_WEBAPP_URL });
+            const retryRows = await apiGet('blReference');
+            const retryCommodities = [];
+            const retryBuyers = [];
+            (retryRows || []).forEach(function(r) {
+              const type = String(r.TYPE || '').trim().toLowerCase();
+              const name = String(r.NAME || '').trim();
+              if (!name) return;
+              if (type === 'commodity') retryCommodities.push(name);
+              else if (type === 'buyer') retryBuyers.push(name);
+            });
+            blReferenceCommodities_ = blReferenceExtrasOnly_(retryCommodities, BL_COMODITY_BASE_OPTIONS);
+            blReferenceBuyers_ = blReferenceExtrasOnly_(retryBuyers, BL_BUYER_BASE_OPTIONS);
+          } catch (seedErr) {
+            console.warn('[BL] Reference seed retry failed:', seedErr);
+          }
+        }
+        return { commodities: blReferenceCommodities_, buyers: blReferenceBuyers_ };
+      } catch (err) {
+        console.warn('[BL] Reference list load failed:', err);
+        blReferenceLoaded_ = false;
+        return { commodities: [], buyers: [] };
+      } finally {
+        blReferenceLoadPromise_ = null;
+      }
+    })();
+    return blReferenceLoadPromise_;
+  }
+
+  async function blPersistReferenceItem_(type, name) {
+    const t = String(type || '').trim();
+    const n = String(name || '').trim();
+    if (!t || !n) return;
+    const baseList = t.toLowerCase() === 'buyer' ? BL_BUYER_BASE_OPTIONS : BL_COMODITY_BASE_OPTIONS;
+    if (blLookupBaseKeys_(baseList)[n.toLowerCase()]) return;
+    const list = t.toLowerCase() === 'buyer' ? blReferenceBuyers_ : blReferenceCommodities_;
+    if (list.some(function(x) { return x.toLowerCase() === n.toLowerCase(); })) return;
+    list.push(n);
+    try {
+      await apiPost({ action: 'upsertBlReference', type: t, name: n }, { baseUrl: SDD_DEFAULT_WEBAPP_URL });
+    } catch (err) {
+      console.warn('[BL] Failed to save reference item:', err);
+    }
+  }
 
   function blWarmPickerData_(force) {
     if (!force && blWarmPickerPromise_) return blWarmPickerPromise_;
@@ -10563,21 +10669,11 @@ function initDashboardApp() {
   }
 
   function blComodityOptions_() {
-    const seen = {};
-    const out = [];
-    BL_COMODITY_BASE_OPTIONS.forEach(function(v) {
-      const k = v.toLowerCase();
-      if (!seen[k]) { seen[k] = true; out.push(v); }
-    });
-    (blData || []).forEach(function(d) {
-      ['COMODITY', 'COMMODITY SUPPLY'].forEach(function(col) {
-        const v = String(d[col] || '').trim();
-        if (!v) return;
-        const k = v.toLowerCase();
-        if (!seen[k]) { seen[k] = true; out.push(v); }
-      });
-    });
-    return out.sort(function(a, b) { return a.localeCompare(b, 'en', { sensitivity: 'base' }); });
+    return blMergeLookupOptions_(BL_COMODITY_BASE_OPTIONS, blReferenceCommodities_);
+  }
+
+  function blBuyerOptions_() {
+    return blMergeLookupOptions_(BL_BUYER_BASE_OPTIONS, blReferenceBuyers_);
   }
 
   function blFilteredData_() {
@@ -10587,28 +10683,42 @@ function initDashboardApp() {
     });
   }
 
-  function buildBlSearchableSelect_(field, options, currentVal, label) {
+  function buildBlSearchableSelect_(field, options, currentVal, label, meta) {
+    meta = meta || {};
     const val = String(currentVal || '').trim();
+    const allowAdd = !!meta.allowAdd;
+    const lookupKind = String(meta.lookupKind || '').trim();
+    const searchPh = meta.searchPlaceholder || 'Search...';
+    const extraClass = meta.wrapperClass ? (' ' + meta.wrapperClass) : '';
+    const alertHtml = meta.alertHtml || '';
     const arrowSvg = '<svg class="cs-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>';
     const checkSvg = '<svg class="cs-opt-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>';
     const triggerInner = val
       ? '<span class="cs-value">' + escHtml(val) + '</span>'
       : '<span class="cs-placeholder">— Select or search —</span>';
     const opts = (options || []).slice();
-    if (val && opts.indexOf(val) === -1) opts.unshift(val);
+    if (val && !opts.some(function(o) { return o.toLowerCase() === val.toLowerCase(); })) opts.unshift(val);
     const optionsHtml = '<div class="cs-option cs-option-placeholder" data-val="">— Select —</div>'
       + opts.map(function(o) {
-        return '<div class="cs-option' + (val === o ? ' selected' : '') + '" data-val="' + escAttr_(o) + '">' + checkSvg + escHtml(o) + '</div>';
-      }).join('');
-    return '<div class="form-field bl-searchable-select">'
+        return '<div class="cs-option' + (val.toLowerCase() === o.toLowerCase() ? ' selected' : '') + '" data-val="' + escAttr_(o) + '">' + checkSvg + escHtml(o) + '</div>';
+      }).join('')
+      + (allowAdd
+        ? '<div class="cs-option cs-option-add cs-hidden" data-val="">+ Add new</div>'
+        : '');
+    return '<div class="form-field bl-searchable-select' + extraClass + '">'
       + '<label>' + escHtml(label || field) + '</label>'
       + '<input type="hidden" data-field="' + escHtml(field) + '" value="' + escHtml(val) + '">'
-      + '<div class="custom-select-wrap bl-comodity-wrap">'
+      + '<div class="custom-select-wrap bl-lookup-wrap"'
+      + (allowAdd ? ' data-allow-add="1"' : '')
+      + (lookupKind ? ' data-lookup-kind="' + escAttr_(lookupKind) + '"' : '')
+      + '>'
       + '<div class="custom-select-trigger">' + triggerInner + arrowSvg + '</div>'
       + '<div class="custom-select-dropdown">'
-      + '<input type="text" class="cs-search-input" placeholder="Search commodity..." autocomplete="off" aria-label="Search ' + escHtml(label || field) + '">'
+      + '<input type="text" class="cs-search-input" placeholder="' + escHtml(searchPh) + '" autocomplete="off" aria-label="Search ' + escHtml(label || field) + '">'
       + optionsHtml
-      + '</div></div></div>';
+      + '</div></div>'
+      + alertHtml
+      + '</div>';
   }
 
   function initBlSearchableSelects_(container) {
@@ -10624,7 +10734,9 @@ function initDashboardApp() {
 
       function filterOptions_(q) {
         const needle = String(q || '').toLowerCase().trim();
+        const addOpt = dropdown.querySelector('.cs-option-add');
         dropdown.querySelectorAll('.cs-option').forEach(function(opt) {
+          if (opt.classList.contains('cs-option-add')) return;
           if (opt.classList.contains('cs-option-placeholder')) {
             opt.classList.toggle('cs-hidden', !!needle);
             return;
@@ -10632,6 +10744,41 @@ function initDashboardApp() {
           const text = (opt.dataset.val || opt.textContent || '').toLowerCase();
           opt.classList.toggle('cs-hidden', needle && !text.includes(needle));
         });
+        if (addOpt && wrap.dataset.allowAdd === '1') {
+          const raw = String(q || '').trim();
+          if (!raw) {
+            addOpt.classList.add('cs-hidden');
+            return;
+          }
+          let hasExact = false;
+          dropdown.querySelectorAll('.cs-option:not(.cs-option-placeholder):not(.cs-option-add)').forEach(function(opt) {
+            if (String(opt.dataset.val || '').trim().toLowerCase() === raw.toLowerCase()) hasExact = true;
+          });
+          if (!hasExact) {
+            addOpt.dataset.val = raw;
+            addOpt.innerHTML = '+ Add &ldquo;' + escHtml(raw) + '&rdquo;';
+            addOpt.classList.remove('cs-hidden');
+          } else {
+            addOpt.classList.add('cs-hidden');
+          }
+        }
+      }
+
+      function applySelection_(v, optEl) {
+        hidden.value = v;
+        hidden.dispatchEvent(new Event('change', { bubbles: true }));
+        const arrow = trigger.querySelector('.cs-arrow');
+        const arrowHtml = arrow ? arrow.outerHTML : '';
+        trigger.innerHTML = v
+          ? '<span class="cs-value">' + escHtml(v) + '</span>' + arrowHtml
+          : '<span class="cs-placeholder">— Select or search —</span>' + arrowHtml;
+        dropdown.querySelectorAll('.cs-option').forEach(function(o) {
+          o.classList.toggle('selected', o === optEl);
+        });
+        wrap.classList.remove('open');
+        if (wrap.dataset.allowAdd === '1' && v && wrap.dataset.lookupKind) {
+          blPersistReferenceItem_(wrap.dataset.lookupKind, v);
+        }
       }
 
       trigger.addEventListener('click', function(e) {
@@ -10657,15 +10804,7 @@ function initDashboardApp() {
       dropdown.querySelectorAll('.cs-option').forEach(function(opt) {
         opt.addEventListener('click', function(e) {
           e.stopPropagation();
-          const v = opt.dataset.val || '';
-          hidden.value = v;
-          const arrow = trigger.querySelector('.cs-arrow');
-          const arrowHtml = arrow ? arrow.outerHTML : '';
-          trigger.innerHTML = v
-            ? '<span class="cs-value">' + escHtml(v) + '</span>' + arrowHtml
-            : '<span class="cs-placeholder">— Select or search —</span>' + arrowHtml;
-          dropdown.querySelectorAll('.cs-option').forEach(function(o) { o.classList.toggle('selected', o === opt); });
-          wrap.classList.remove('open');
+          applySelection_(opt.dataset.val || '', opt);
         });
       });
     });
@@ -10674,6 +10813,11 @@ function initDashboardApp() {
   function blFindBuyerInput_() {
     return document.querySelector('#blFormFieldsGrid [data-bl-field="BUYER"]')
       || document.querySelector('#blFormFieldsGrid input[data-field="BUYER"]');
+  }
+
+  function blBuyerFieldVisual_() {
+    return document.querySelector('#blFormFieldsGrid .bl-buyer-field-wrap .custom-select-trigger')
+      || blFindBuyerInput_();
   }
 
   function blBuyerMatchesNblRiser_(buyer, riser) {
@@ -10727,15 +10871,18 @@ function initDashboardApp() {
   function blRenderBuyerNblAlert_(result) {
     const alertEl = document.getElementById('blBuyerNblAlert');
     const buyerInput = blFindBuyerInput_();
+    const buyerVisual = blBuyerFieldVisual_();
     if (!alertEl || !buyerInput) return;
     if (!result || !result.blocked) {
       alertEl.hidden = true;
       alertEl.innerHTML = '';
       buyerInput.classList.remove('bl-field-rejected');
+      if (buyerVisual) buyerVisual.classList.remove('bl-field-rejected');
       return;
     }
     alertEl.hidden = false;
     buyerInput.classList.add('bl-field-rejected');
+    if (buyerVisual) buyerVisual.classList.add('bl-field-rejected');
     const lines = result.matches.map(function(m) {
       const parts = [m.source, 'Riser: ' + m.riser];
       if (m.group) parts.push('Group: ' + m.group);
@@ -10764,7 +10911,9 @@ function initDashboardApp() {
       return true;
     }
     const reqId = ++blBuyerValidateSeq_;
+    const buyerVisual = blBuyerFieldVisual_();
     buyerInput.classList.add('bl-field-checking');
+    if (buyerVisual) buyerVisual.classList.add('bl-field-checking');
     try {
       const result = await blCheckBuyerAgainstNblRiser_(buyer);
       if (reqId !== blBuyerValidateSeq_) return !blBuyerNblBlocked_;
@@ -10773,7 +10922,10 @@ function initDashboardApp() {
       blUpdateSaveBlButtonState_();
       return !result.blocked;
     } finally {
-      if (reqId === blBuyerValidateSeq_) buyerInput.classList.remove('bl-field-checking');
+      if (reqId === blBuyerValidateSeq_) {
+        buyerInput.classList.remove('bl-field-checking');
+        if (buyerVisual) buyerVisual.classList.remove('bl-field-checking');
+      }
     }
   }
 
@@ -10781,10 +10933,14 @@ function initDashboardApp() {
     const buyerInput = blFindBuyerInput_();
     if (!buyerInput || buyerInput._blBuyerBound) return;
     buyerInput._blBuyerBound = true;
-    const debounced = debounce(function() { blValidateBuyerField_(); }, 250);
-    buyerInput.addEventListener('input', debounced);
-    buyerInput.addEventListener('blur', function() {
-      debounced.cancel();
+    buyerInput.addEventListener('change', function() {
+      const buyer = buyerInput.value.trim();
+      if (!buyer) {
+        blBuyerNblBlocked_ = false;
+        blRenderBuyerNblAlert_(null);
+        blUpdateSaveBlButtonState_();
+        return;
+      }
       blValidateBuyerField_();
     });
   }
@@ -11568,6 +11724,7 @@ function initDashboardApp() {
     const type = recordType || blFormRecordType || 'shipping';
     const fields = blFormFieldsForType_(type);
     const comodityOpts = blComodityOptions_();
+    const buyerOpts = blBuyerOptions_();
 
     grid.innerHTML = fields.map(function(f) {
       const label = blFieldLabel_(f, type);
@@ -11591,18 +11748,23 @@ function initDashboardApp() {
           + '</div>';
       }
       if (f === 'BUYER') {
-        return ''
-          + '<div class="form-field bl-buyer-field-wrap">'
-          + '<label>' + escHtml(label) + '</label>'
-          + '<input type="text" data-field="BUYER" value="' + escHtml(val) + '" placeholder="' + escHtml(label) + '">'
-          + '<div id="blBuyerNblAlert" class="bl-buyer-nbl-alert" hidden role="alert"></div>'
-          + '</div>';
+        return buildBlSearchableSelect_(f, buyerOpts, val, label, {
+          allowAdd: true,
+          lookupKind: 'Buyer',
+          searchPlaceholder: 'Search buyer...',
+          wrapperClass: 'bl-buyer-field-wrap',
+          alertHtml: '<div id="blBuyerNblAlert" class="bl-buyer-nbl-alert" hidden role="alert"></div>',
+        });
       }
       if (BL_DATE_FIELDS.has(f)) {
         return dashDateFieldHtml(f, val, { label: label });
       }
       if (f === 'COMODITY' || f === 'COMMODITY SUPPLY') {
-        return buildBlSearchableSelect_(f, comodityOpts, val, label);
+        return buildBlSearchableSelect_(f, comodityOpts, val, label, {
+          allowAdd: true,
+          lookupKind: 'Commodity',
+          searchPlaceholder: 'Search commodity...',
+        });
       }
       return ''
         + '<div class="form-field">'
@@ -11725,6 +11887,7 @@ function initDashboardApp() {
   async function openBlFormModal_(mode, row, recordType) {
     const overlay = mountBlOverlay_('blFormOverlay');
     if (!overlay) return;
+    await loadBlReferenceData_();
     blFormMode = mode || 'add';
     blFormRow = row || null;
     blFormRecordType = row
@@ -11748,7 +11911,7 @@ function initDashboardApp() {
         : (isDecl ? 'Add Declaration' : 'Add Shipping');
     }
     if (subEl) {
-      subEl.textContent = 'Enter record data, then link Monitoring TTM/TTP rows. Each row can be added as TTM only or TTM + TTP.';
+      subEl.textContent = 'Enter record data, pick a buyer from the list (No Buy List is checked after selection), then link Monitoring TTM/TTP rows.';
     }
     if (sectionEl) sectionEl.textContent = isDecl ? 'Declaration details' : 'Shipping details';
     if (saveBtn) saveBtn.textContent = isDecl ? 'Save Declaration' : 'Save Shipping';
@@ -16448,6 +16611,7 @@ function initDashboardApp() {
     if (name === 'bl-monitoring') {
       if (!blLoaded) loadBlData();
       blWarmPickerData_();
+      loadBlReferenceData_();
     }
     if (name === 'questionnaire-monitoring' && !qmLoaded) loadQmData();
     if (name === 'eudr-potential' && !eudrLoaded) loadEudrData();

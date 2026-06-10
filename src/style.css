@@ -5528,6 +5528,21 @@ tr.pf-group-detail-row.hidden {
 .bl-searchable-select .cs-option.cs-hidden {
   display: none;
 }
+.bl-searchable-select .cs-option.cs-option-add {
+  color: #8B1A1A;
+  font-weight: 600;
+  border-top: 1px solid rgba(74, 28, 28, 0.08);
+  margin-top: 4px;
+  padding-top: 10px;
+}
+.bl-buyer-field-wrap .custom-select-trigger.bl-field-rejected,
+.bl-buyer-field-wrap .custom-select-trigger.bl-field-rejected:focus {
+  border-color: #c62828;
+  box-shadow: 0 0 0 2px rgba(198, 40, 40, 0.15);
+}
+.bl-buyer-field-wrap .custom-select-trigger.bl-field-checking {
+  opacity: 0.85;
+}
 .bl-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 #blTable.bl-registry-table {
   width: max-content;
