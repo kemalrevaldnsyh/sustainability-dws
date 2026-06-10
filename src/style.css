@@ -5796,30 +5796,57 @@ body.bl-detail-open { overflow: hidden; }
   border: 1px solid rgba(185, 28, 28, 0.35);
 }
 .bl-buyer-nbl-alert {
-  margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  background: rgba(185, 28, 28, 0.08);
-  border: 1px solid rgba(185, 28, 28, 0.35);
-  font-size: 12px;
-  color: #4a1c1c;
+  margin-top: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(180, 83, 9, 0.06);
+  border: 1px solid rgba(180, 83, 9, 0.22);
+  font-size: 11px;
+  line-height: 1.4;
+  color: #6b4a2e;
 }
-.bl-buyer-nbl-alert strong {
-  display: block;
-  margin-bottom: 4px;
-  color: #991b1b;
+.bl-buyer-nbl-notice-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
 }
-.bl-buyer-nbl-alert p { margin: 0 0 6px; }
-.bl-buyer-nbl-alert ul { margin: 0; padding-left: 18px; }
-.bl-buyer-field-wrap input.bl-field-rejected,
-.bl-buyer-field-wrap input.bl-field-rejected:focus {
-  border-color: #b91c1c !important;
-  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15);
+.bl-buyer-nbl-notice-tag {
+  flex-shrink: 0;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: rgba(180, 83, 9, 0.12);
+  color: #92400e;
 }
-.bl-buyer-field-wrap input.bl-field-checking { opacity: 0.85; }
-#blFormSave.is-disabled-nbl:disabled {
-  opacity: 0.55;
-  cursor: not-allowed;
+.bl-buyer-nbl-notice-text strong {
+  font-weight: 600;
+  color: #78350f;
+}
+.bl-buyer-field-wrap .custom-select-trigger.bl-field-nbl-warn {
+  border-color: rgba(180, 83, 9, 0.45);
+  box-shadow: 0 0 0 1px rgba(180, 83, 9, 0.1);
+}
+.bl-buyer-field-wrap input.bl-field-checking,
+.bl-buyer-field-wrap .custom-select-trigger.bl-field-checking {
+  opacity: 0.85;
+}
+.bl-picker-chip-remove {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 0 4px;
+  border: none;
+  background: transparent;
+  color: #8B1A1A;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+.bl-picker-chip-remove:hover {
+  opacity: 1;
 }
 .bl-picker-empty {
   padding: 16px;

@@ -10370,6 +10370,36 @@ function initDashboardApp() {
     'APICAL', 'CITY EDIBLE OIL.LTD', 'RAJ INDUSTRIES', 'SANTHOSHIMATHAA', 'HDPC BANK Ltd', 'STA GRUP',
   ];
   const BL_FIELD_LABELS = Object.assign({}, BL_SHIPPING_FIELD_LABELS, BL_DECL_FIELD_LABELS);
+  const BL_JSON_TTM = 'TTM LINKS JSON';
+  const BL_JSON_TTP = 'TTP LINKS JSON';
+  const BL_TTM_DETAIL_COLS = [
+    { key: 'COMPANY NAME', label: 'Company Name' },
+    { key: 'GROUP NAME', label: 'Group Name' },
+    { key: 'UML ID', label: 'UML ID' },
+    { key: 'LAT', label: 'Lat' },
+    { key: 'LONG', label: 'Long' },
+  ];
+  const BL_TTP_DETAIL_COLS = [
+    { key: 'CATEGORY', label: 'Category' },
+    { key: 'VILLAGE', label: 'Village' },
+    { key: 'SUBDISTRICT', label: 'Subdistrict' },
+    { key: 'DISTRICT', label: 'District' },
+    { key: 'PROVINCE', label: 'Province' },
+    { key: 'NUMBER OD SMALLHOLDERS', label: 'Number of Smallholders' },
+    { key: 'PLANTED AREA', label: 'Planted Area' },
+    { key: 'FFB SUPPLY to MILL (TON)', label: 'FFB Supply to Mill (Ton)' },
+  ];
+  function blLinkExportColDefs_(prefix, detailCols, kind) {
+    return detailCols.map(function(c) {
+      return {
+        id: prefix + '_' + String(c.key).replace(/[^a-z0-9]+/gi, '_').toLowerCase(),
+        label: prefix.toUpperCase() + ' ' + c.label,
+        header: prefix.toUpperCase() + ' ' + c.label.toUpperCase(),
+        kind: kind,
+        linkKey: c.key,
+      };
+    });
+  }
   const BL_EXPORT_COLUMN_DEFS = [
     { id: 'total_bl', label: 'Total BL', header: 'TOTAL BL', field: 'TOTAL BL' },
     { id: 'loading_port', label: 'Loading Port', header: 'LOADING PORT', field: 'LOADING PORT' },
@@ -10391,7 +10421,10 @@ function initDashboardApp() {
     { id: 'commodity_supply', label: 'Commodity Supply', header: 'COMMODITY SUPPLY', field: 'COMMODITY SUPPLY' },
     { id: 'ttm', label: 'TTM', header: 'TTM', kind: 'ttm' },
     { id: 'ttp', label: 'TTP', header: 'TTP', kind: 'ttp' },
-  ];
+  ].concat(
+    blLinkExportColDefs_('ttm', BL_TTM_DETAIL_COLS, 'ttm_field'),
+    blLinkExportColDefs_('ttp', BL_TTP_DETAIL_COLS, 'ttp_field')
+  );
   const BL_EXPORT_DEFAULT_COL_IDS = BL_EXPORT_COLUMN_DEFS.map(function(c) { return c.id; });
   const BL_REGISTRY_COLUMNS = [
     { label: 'Loading Port', minWidth: 120, cell: function(d) { return escHtml(d['LOADING PORT'] || '—'); } },
@@ -10452,25 +10485,6 @@ function initDashboardApp() {
   ];
   const BL_REQUEST_TYPES = ['TTM', 'TTP'];
   const BL_STATUS_VALUES = ['Onprogress', 'Done'];
-  const BL_JSON_TTM = 'TTM LINKS JSON';
-  const BL_JSON_TTP = 'TTP LINKS JSON';
-  const BL_TTM_DETAIL_COLS = [
-    { key: 'COMPANY NAME', label: 'Company Name' },
-    { key: 'GROUP NAME', label: 'Group Name' },
-    { key: 'UML ID', label: 'UML ID' },
-    { key: 'LAT', label: 'Lat' },
-    { key: 'LONG', label: 'Long' },
-  ];
-  const BL_TTP_DETAIL_COLS = [
-    { key: 'CATEGORY', label: 'Category' },
-    { key: 'VILLAGE', label: 'Village' },
-    { key: 'SUBDISTRICT', label: 'Subdistrict' },
-    { key: 'DISTRICT', label: 'District' },
-    { key: 'PROVINCE', label: 'Province' },
-    { key: 'NUMBER OD SMALLHOLDERS', label: 'Number of Smallholders' },
-    { key: 'PLANTED AREA', label: 'Planted Area' },
-    { key: 'FFB SUPPLY to MILL (TON)', label: 'FFB Supply to Mill (Ton)' },
-  ];
 
   let blData = [];
   let blLoaded = false;
@@ -10491,7 +10505,7 @@ function initDashboardApp() {
   let blTableDelegationBound = false;
   let blExportTargetRow = null;
   let blExportSelectedColIds = BL_EXPORT_DEFAULT_COL_IDS.slice();
-  let blBuyerNblBlocked_ = false;
+  let blBuyerNblWarn_ = false;
   let blBuyerValidateSeq_ = 0;
   let blWarmPickerPromise_ = null;
   let blReferenceLoaded_ = false;
@@ -10901,54 +10915,52 @@ function initDashboardApp() {
     return { blocked: matches.length > 0, matches: matches };
   }
 
-  function blUpdateSaveBlButtonState_() {
-    const btn = document.getElementById('blFormSave');
-    if (!btn) return;
-    btn.disabled = blBuyerNblBlocked_;
-    btn.classList.toggle('is-disabled-nbl', blBuyerNblBlocked_);
-  }
-
-  function blRenderBuyerNblAlert_(result) {
+  function blRenderBuyerNblNotice_(result) {
     const alertEl = document.getElementById('blBuyerNblAlert');
     const buyerInput = blFindBuyerInput_();
     const buyerVisual = blBuyerFieldVisual_();
     if (!alertEl || !buyerInput) return;
-    if (!result || !result.blocked) {
+    if (!result || !result.matches || !result.matches.length) {
       alertEl.hidden = true;
       alertEl.innerHTML = '';
-      buyerInput.classList.remove('bl-field-rejected');
-      if (buyerVisual) buyerVisual.classList.remove('bl-field-rejected');
+      blBuyerNblWarn_ = false;
+      buyerInput.classList.remove('bl-field-nbl-warn');
+      if (buyerVisual) buyerVisual.classList.remove('bl-field-nbl-warn');
       return;
     }
+    blBuyerNblWarn_ = true;
     alertEl.hidden = false;
-    buyerInput.classList.add('bl-field-rejected');
-    if (buyerVisual) buyerVisual.classList.add('bl-field-rejected');
-    const lines = result.matches.map(function(m) {
-      const parts = [m.source, 'Riser: ' + m.riser];
-      if (m.group) parts.push('Group: ' + m.group);
-      if (m.company) parts.push('Company: ' + m.company);
-      if (m.mill) parts.push('Mill: ' + m.mill);
-      return parts.join(' · ');
+    buyerInput.classList.add('bl-field-nbl-warn');
+    if (buyerVisual) buyerVisual.classList.add('bl-field-nbl-warn');
+    const risers = [];
+    const seenRiser = {};
+    result.matches.forEach(function(m) {
+      const r = String(m.riser || '').trim();
+      if (!r || seenRiser[r.toLowerCase()]) return;
+      seenRiser[r.toLowerCase()] = true;
+      risers.push(r);
     });
+    const riserText = risers.length ? risers.join(', ') : 'NBL riser';
+    const extra = result.matches.length > 1
+      ? ' (' + result.matches.length + ' registry matches)'
+      : '';
     alertEl.innerHTML = ''
-      + '<strong>Rejected — buyer is on No Buy List</strong>'
-      + '<p>This buyer name matches an NBL riser and cannot be saved.</p>'
-      + '<ul>' + lines.map(function(l) { return '<li>' + escHtml(l) + '</li>'; }).join('') + '</ul>';
+      + '<div class="bl-buyer-nbl-notice-head">'
+      + '<span class="bl-buyer-nbl-notice-tag">No Buy List</span>'
+      + '<span class="bl-buyer-nbl-notice-text">Buyer matches riser <strong>' + escHtml(riserText) + '</strong>' + escHtml(extra) + '. You can still save this record.</span>'
+      + '</div>';
   }
 
   async function blValidateBuyerField_() {
     const buyerInput = blFindBuyerInput_();
     if (!buyerInput) {
-      blBuyerNblBlocked_ = false;
-      blUpdateSaveBlButtonState_();
-      return true;
+      blRenderBuyerNblNotice_(null);
+      return;
     }
     const buyer = buyerInput.value.trim();
     if (!buyer) {
-      blBuyerNblBlocked_ = false;
-      blRenderBuyerNblAlert_(null);
-      blUpdateSaveBlButtonState_();
-      return true;
+      blRenderBuyerNblNotice_(null);
+      return;
     }
     const reqId = ++blBuyerValidateSeq_;
     const buyerVisual = blBuyerFieldVisual_();
@@ -10956,11 +10968,8 @@ function initDashboardApp() {
     if (buyerVisual) buyerVisual.classList.add('bl-field-checking');
     try {
       const result = await blCheckBuyerAgainstNblRiser_(buyer);
-      if (reqId !== blBuyerValidateSeq_) return !blBuyerNblBlocked_;
-      blBuyerNblBlocked_ = result.blocked;
-      blRenderBuyerNblAlert_(result);
-      blUpdateSaveBlButtonState_();
-      return !result.blocked;
+      if (reqId !== blBuyerValidateSeq_) return;
+      blRenderBuyerNblNotice_(result);
     } finally {
       if (reqId === blBuyerValidateSeq_) {
         buyerInput.classList.remove('bl-field-checking');
@@ -10974,14 +10983,8 @@ function initDashboardApp() {
     if (!buyerInput || buyerInput._blBuyerBound) return;
     buyerInput._blBuyerBound = true;
     buyerInput.addEventListener('change', function() {
-      const buyer = buyerInput.value.trim();
-      if (!buyer) {
-        blBuyerNblBlocked_ = false;
-        blRenderBuyerNblAlert_(null);
-        blUpdateSaveBlButtonState_();
-        return;
-      }
-      blValidateBuyerField_();
+      if (!buyerInput.value.trim()) blRenderBuyerNblNotice_(null);
+      else blValidateBuyerField_();
     });
   }
 
@@ -11290,6 +11293,14 @@ function initDashboardApp() {
     });
   }
 
+  function blExportLinkFieldValue_(links, linkKey) {
+    const parts = (links || []).map(function(item) {
+      const v = blField_(item, [linkKey]);
+      return v && v !== '—' ? String(v).trim() : '';
+    }).filter(Boolean);
+    return parts.join(' | ');
+  }
+
   function blExportColValue_(d, colDef) {
     if (!d || !colDef) return '';
     if (colDef.kind === 'ttm') {
@@ -11299,6 +11310,12 @@ function initDashboardApp() {
     if (colDef.kind === 'ttp') {
       const ttpCount = (d._ttpLinks || []).length;
       return d['TTP'] || blTtpCountLabel_(ttpCount) || '';
+    }
+    if (colDef.kind === 'ttm_field') {
+      return blExportLinkFieldValue_(d._ttmLinks, colDef.linkKey);
+    }
+    if (colDef.kind === 'ttp_field') {
+      return blExportLinkFieldValue_(d._ttpLinks, colDef.linkKey);
     }
     if (colDef.field === 'TOTAL BL') return blTotalBlValue_(d);
     return d[colDef.field] != null ? String(d[colDef.field]) : '';
@@ -11630,8 +11647,13 @@ function initDashboardApp() {
     const wsData = [headers].concat(rows);
     const ws = XLSX.utils.aoa_to_sheet(wsData);
 
-    ws['!cols'] = headers.map(function(h) {
-      return { wch: Math.min(Math.max(String(h).length + 4, 12), 36) };
+    ws['!cols'] = headers.map(function(h, ci) {
+      let maxLen = String(h).length;
+      rows.forEach(function(row) {
+        const cell = row && row[ci] != null ? String(row[ci]) : '';
+        if (cell.length > maxLen) maxLen = cell.length;
+      });
+      return { wch: Math.min(Math.max(maxLen + 2, 12), 48) };
     });
 
     const headerFill = '8B1A1A';
@@ -11682,12 +11704,14 @@ function initDashboardApp() {
     const defs = colDefs || getBlExportColDefs_();
     if (!defs.length) return;
     const headers = defs.map(function(c) { return c.header; });
-    const blNo = blSafeFilePart_(row['BL NO.']);
+    const fileKey = blIsDeclarationRow_(row)
+      ? blSafeFilePart_(row['BUYER'])
+      : blSafeFilePart_(row['BL NO.']);
     writeBlExcelFile_(
       [blRowToExport_(row, defs)],
       headers,
       'BL',
-      'bl_' + blNo + '_' + blExcelStamp_() + '.xlsx'
+      'bl_' + fileKey + '_' + blExcelStamp_() + '.xlsx'
     );
   }
 
@@ -11869,12 +11893,11 @@ function initDashboardApp() {
         label = blField_(item, ['FFB SUPPLIER NAME']) + ' · ' + blField_(item, ['VILLAGE']);
       }
       const rowAttr = item._row ? ' data-row="' + item._row + '"' : '';
-      const removeType = type === 'ttp' ? 'row' : 'ttm';
       return ''
         + '<span class="bl-picker-chip"' + rowAttr + ' data-idx="' + idx + '">'
         + '<span>' + escHtml(label) + '</span>'
-        + (type === 'ttm'
-          ? '<button type="button" data-type="' + removeType + '" data-row="' + item._row + '" data-idx="' + idx + '" aria-label="Remove">×</button>'
+        + (type === 'ttm' && item._row
+          ? '<button type="button" class="bl-picker-chip-remove" data-row="' + item._row + '" aria-label="Remove">×</button>'
           : '')
         + '</span>';
     }).join('');
@@ -11921,7 +11944,7 @@ function initDashboardApp() {
     blTtmRowsWithTtp_ = new Set();
     blPeriodYear = '';
     blPeriodQuarter = '';
-    blBuyerNblBlocked_ = false;
+    blBuyerNblWarn_ = false;
     blBuyerValidateSeq_++;
     blFormRecordType = 'shipping';
   }
@@ -11953,15 +11976,14 @@ function initDashboardApp() {
         : (isDecl ? 'Add Declaration' : 'Add Shipping');
     }
     if (subEl) {
-      subEl.textContent = 'Enter record data, pick a buyer from the list (No Buy List is checked after selection), then link Monitoring TTM/TTP rows.';
+      subEl.textContent = 'Enter record data, pick a buyer from the list, then link Monitoring TTM/TTP rows. No Buy List matches are shown as warnings only.';
     }
     if (sectionEl) sectionEl.textContent = isDecl ? 'Declaration details' : 'Shipping details';
     if (saveBtn) saveBtn.textContent = isDecl ? 'Save Declaration' : 'Save Shipping';
     buildBlFormFields_(row, blFormRecordType);
     bindBlBuyerValidation_();
-    blBuyerNblBlocked_ = false;
-    blRenderBuyerNblAlert_(null);
-    blUpdateSaveBlButtonState_();
+    blBuyerNblWarn_ = false;
+    blRenderBuyerNblNotice_(null);
     blRenderLinkedPickers_();
 
     const ttmSearch = document.getElementById('blTtmSearch');
@@ -12008,16 +12030,7 @@ function initDashboardApp() {
       alert('Buyer is required.');
       return;
     }
-    const buyerOk = await blValidateBuyerField_();
-    if (!buyerOk || blBuyerNblBlocked_) {
-      const rejectMsg = 'Buyer is on No Buy List (riser match). Record cannot be saved.';
-      if (typeof window.showSddToast === 'function') {
-        window.showSddToast(rejectMsg, 'error');
-      } else {
-        alert(rejectMsg);
-      }
-      return;
-    }
+    await blValidateBuyerField_();
     const payload = Object.assign({}, fields);
     payload[BL_RECORD_TYPE_FIELD] = isDecl ? BL_TYPE_DECLARATION : BL_TYPE_SHIPPING;
     if (!isDecl) {
@@ -12048,8 +12061,8 @@ function initDashboardApp() {
       alert('Error saving record: ' + err.message);
     } finally {
       if (btn) {
+        btn.disabled = false;
         btn.textContent = isDecl ? 'Save Declaration' : 'Save Shipping';
-        blUpdateSaveBlButtonState_();
       }
     }
   }
@@ -12231,9 +12244,10 @@ function initDashboardApp() {
     });
 
     document.getElementById('blTtmSelected')?.addEventListener('click', function(e) {
-      const btn = e.target.closest('button[data-type="row"]');
+      const btn = e.target.closest('.bl-picker-chip-remove');
       if (!btn) return;
       const rowNum = parseInt(btn.dataset.row, 10);
+      if (!rowNum) return;
       blRemoveMonitoringRowPick_(rowNum);
       blRenderLinkedPickers_();
       renderBlTtmResults_(ttmSearch ? ttmSearch.value : '');
