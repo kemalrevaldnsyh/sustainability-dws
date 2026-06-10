@@ -10379,6 +10379,11 @@ function initDashboardApp() {
     { key: 'LAT', label: 'Lat' },
     { key: 'LONG', label: 'Long' },
   ];
+  const BL_TTM_EXPORT_COLS = [
+    { key: 'COMPANY NAME', label: 'Company Name' },
+    { key: 'GROUP NAME', label: 'Group Name' },
+    { key: 'UML ID', label: 'UML ID' },
+  ];
   const BL_TTP_DETAIL_COLS = [
     { key: 'CATEGORY', label: 'Category' },
     { key: 'VILLAGE', label: 'Village' },
@@ -10422,7 +10427,7 @@ function initDashboardApp() {
     { id: 'ttm', label: 'TTM', header: 'TTM', kind: 'ttm' },
     { id: 'ttp', label: 'TTP', header: 'TTP', kind: 'ttp' },
   ].concat(
-    blLinkExportColDefs_('ttm', BL_TTM_DETAIL_COLS, 'ttm_field'),
+    blLinkExportColDefs_('ttm', BL_TTM_EXPORT_COLS, 'ttm_field'),
     blLinkExportColDefs_('ttp', BL_TTP_DETAIL_COLS, 'ttp_field')
   );
   const BL_EXPORT_DEFAULT_COL_IDS = BL_EXPORT_COLUMN_DEFS.map(function(c) { return c.id; });
