@@ -2,7 +2,7 @@
  * Monthly Report (Detail) — read-only compliance snapshot (fast, in-memory first).
  */
 
-import { buildMonthlyReportPdf_, MRD_PDF_SECTIONS } from './monthly-report-pdf.js';
+import { buildMonthlyReportPdfPair_, MRD_PDF_SECTIONS } from './monthly-report-pdf.js';
 
 const MRD_ROW_LIMIT = 200;
 const MRD_SDD_LIMIT = 150;
@@ -227,11 +227,6 @@ function mrdCloseExportModal_() {
   modal.setAttribute('aria-hidden', 'true');
 }
 
-function mrdExportDetailLevel_() {
-  const r = document.querySelector('input[name="mrdExportDetail"]:checked');
-  return r && r.value === 'full' ? 'full' : 'summary';
-}
-
 function mrdExportSelectedSections_() {
   const boxes = document.querySelectorAll('input[name="mrdExportSection"]:checked');
   const sections = Array.from(boxes).map(function(el) { return el.value; });
@@ -292,14 +287,14 @@ async function exportMonthlyReport_(exportOpts) {
       function(item) { return matchesSearch(item.search); }
     );
 
-    await buildMonthlyReportPdf_({
+    await buildMonthlyReportPdfPair_({
       getJsPDF: _deps.getJsPDF,
       year: _year,
       month: _month,
-      detailLevel: exportOpts.detailLevel || 'summary',
       sections: sections,
       data: {
         stats: s.stats,
+        facility: s.facility,
         sdd: filterForExport_(s.sdd, function(r) {
           return matchesSearch([
             r['SCR - Screening Status'], r['Group Name'], r['Grup Name'], r['Mill Name'],
@@ -321,7 +316,7 @@ async function exportMonthlyReport_(exportOpts) {
     });
 
     if (typeof window.showSddToast === 'function') {
-      window.showSddToast('PDF Monthly Report downloaded successfully.', 'success');
+      window.showSddToast('2 PDF files downloaded: Summary + Detail.', 'success');
     }
   } catch (err) {
     console.error('[MRD PDF]', err);
@@ -329,7 +324,7 @@ async function exportMonthlyReport_(exportOpts) {
   } finally {
     if (btn) {
       btn.disabled = false;
-      btn.textContent = prevTxt || (btn.id === 'mrdExportConfirm' ? 'Generate PDF' : 'Export PDF');
+      btn.textContent = prevTxt || (btn.id === 'mrdExportConfirm' ? 'Generate 2 PDFs' : 'Export PDF');
     }
   }
 }
@@ -372,10 +367,7 @@ function mrdBindExportModalOnce_() {
         return;
       }
       mrdCloseExportModal_();
-      await exportMonthlyReport_({
-        detailLevel: mrdExportDetailLevel_(),
-        sections: sections,
-      });
+      await exportMonthlyReport_({ sections: sections });
     });
   }
 }

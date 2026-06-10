@@ -87,6 +87,8 @@ function createPdfContext_(jsPDFLib) {
     cW: cW,
     periodText: '',
     generatedAt: '',
+    reportTitle: 'Monthly Report',
+    reportSubtitle: 'Compliance snapshot — SDD, Mill, Traceability, Grievance, NBL, Facility, EUDR',
     detailLevel: 'summary',
   };
 
@@ -143,7 +145,7 @@ function createPdfContext_(jsPDFLib) {
       doc.addPage();
       y = drawCompactHeader_();
     } else if (sectionStarted) {
-      y += 6;
+      y += 3;
     }
     sectionStarted = true;
     drawSectionBar_(title, accent);
@@ -274,10 +276,10 @@ function createPdfContext_(jsPDFLib) {
     doc.setTextColor.apply(doc, WHITE);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(17);
-    doc.text('Monthly Report', mL, 13);
+    doc.text(ctx.reportTitle || 'Monthly Report', mL, 13);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(8.5);
-    doc.text('Compliance snapshot — SDD, Mill, Traceability, Grievance, NBL, Facility, EUDR', mL, 20);
+    doc.text(ctx.reportSubtitle || 'Compliance snapshot — SDD, Mill, Traceability, Grievance, NBL, Facility, EUDR', mL, 20);
     doc.setFontSize(8);
     doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 26);
     markContent_(36);
@@ -822,41 +824,326 @@ function drawEudrSection_(ctx, rows) {
   );
 }
 
-export async function buildMonthlyReportPdf_(opts) {
-  const jsPDFLib = opts.getJsPDF();
-  if (!jsPDFLib) throw new Error('PDF library is not ready.');
+function drawFacilitySummaryTables_(ctx, facility) {
+  if (!facility) return;
+  const cpo = facility.cpo || [];
+  const pk = facility.pk || [];
+  if (!cpo.length && !pk.length) return;
 
+  const cols = [['Facility', 'Companies', 'High Risk', 'NBL', 'Grievance', '% Traceable']];
+  const w6 = colWidths_([28, 12, 12, 10, 12, 14], ctx.cW);
+
+  if (cpo.length) {
+    ctx.beginSubsection_('CPO Facility Performance', BRAND);
+    ctx.drawAutoTable_(
+      cols,
+      cpo.map(function(g) {
+        return [
+          pdfSanitize(g.facility), pdfSanitize(g.companies), pdfSanitize(g.highRisk),
+          pdfSanitize(g.nbl), pdfSanitize(g.grievance), pdfSanitize(g.tracePct),
+        ];
+      }),
+      BRAND,
+      {
+        0: { cellWidth: w6[0] }, 1: { cellWidth: w6[1], halign: 'center' },
+        2: { cellWidth: w6[2], halign: 'center' }, 3: { cellWidth: w6[3], halign: 'center' },
+        4: { cellWidth: w6[4], halign: 'center' }, 5: { cellWidth: w6[5], halign: 'right' },
+      },
+      { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 }
+    );
+  }
+  if (pk.length) {
+    ctx.beginSubsection_('PK Facility Performance', PK_GREEN);
+    ctx.drawAutoTable_(
+      cols,
+      pk.map(function(g) {
+        return [
+          pdfSanitize(g.facility), pdfSanitize(g.companies), pdfSanitize(g.highRisk),
+          pdfSanitize(g.nbl), pdfSanitize(g.grievance), pdfSanitize(g.tracePct),
+        ];
+      }),
+      PK_GREEN,
+      {
+        0: { cellWidth: w6[0] }, 1: { cellWidth: w6[1], halign: 'center' },
+        2: { cellWidth: w6[2], halign: 'center' }, 3: { cellWidth: w6[3], halign: 'center' },
+        4: { cellWidth: w6[4], halign: 'center' }, 5: { cellWidth: w6[5], halign: 'right' },
+      },
+      { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 }
+    );
+  }
+}
+
+function websiteKpiItems_(stats) {
+  const s = stats || {};
+  return [
+    { label: 'SDD Submitted', value: String(s.sddSubmitted != null ? s.sddSubmitted : 0), sub: (s.sddDraft || 0) + ' draft' },
+    { label: 'Total Mills', value: String(s.totalMills != null ? s.totalMills : 0), sub: (s.totalGroups || 0) + ' groups' },
+    { label: 'High Risk', value: String(s.highRisk != null ? s.highRisk : 0), sub: (s.nblMills || 0) + ' NBL mills', hot: true },
+    { label: 'Empty Traceability', value: String(s.emptyTraceMills != null ? s.emptyTraceMills : 0), sub: 'mills without suppliers' },
+    { label: 'Grievances', value: String(s.grievances != null ? s.grievances : 0), sub: 'in period' },
+    { label: 'EUDR Potential', value: String(s.eudrPotential != null ? s.eudrPotential : 0), sub: 'by formula' },
+  ];
+}
+
+function drawMetricCardGrid_(ctx, items, opts) {
+  opts = opts || {};
+  if (!items.length) return;
+  const doc = ctx.doc;
+  const mL = ctx.mL;
+  const cW = ctx.cW;
+  const cols = opts.cols || 3;
+  const gap = opts.gap != null ? opts.gap : 4;
+  const cardH = opts.cardH || 20;
+  const cardW = (cW - gap * (cols - 1)) / cols;
+  const rowCount = Math.ceil(items.length / cols);
+  const blockH = rowCount * cardH + Math.max(0, rowCount - 1) * gap;
+  ctx.ensureSpace_(blockH + 2);
+  const y0 = ctx.getY();
+
+  items.forEach(function(item, i) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = mL + col * (cardW + gap);
+    const cy = y0 + row * (cardH + gap);
+    const accent = item.hot ? NBL_RED : (opts.accent || BRAND);
+
+    doc.setDrawColor.apply(doc, BORDER);
+    doc.setFillColor.apply(doc, WHITE);
+    doc.setLineWidth(0.2);
+    doc.roundedRect(x, cy, cardW, cardH, 2, 2, 'FD');
+    doc.setFillColor.apply(doc, accent);
+    doc.rect(x + 2, cy + 2, cardW - 4, 0.8, 'F');
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(6.2);
+    doc.setTextColor.apply(doc, INK_MUTED);
+    doc.text(item.label.toUpperCase(), x + cardW / 2, cy + 6.5, { align: 'center' });
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(item.value.length > 6 ? 10 : 12);
+    doc.setTextColor.apply(doc, item.hot ? NBL_RED : INK);
+    doc.text(item.value, x + cardW / 2, cy + 12.5, { align: 'center' });
+
+    if (item.sub) {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.8);
+      doc.setTextColor.apply(doc, INK_LIGHT);
+      doc.text(String(item.sub), x + cardW / 2, cy + 16.5, { align: 'center' });
+    }
+  });
+
+  ctx.setY(y0 + blockH + (opts.gapAfter == null ? 4 : opts.gapAfter));
+}
+
+function sectionSummaryConfig_(id, stats, data, year) {
+  const s = stats || {};
+  const grvOpen = (data.grv || []).filter(function(item) {
+    return String(item.row['Grievance Status'] || '').toLowerCase().includes('open');
+  }).length;
+  const configs = {
+    sdd: {
+      num: '01', title: 'Supplier Due Diligence', accent: BRAND,
+      desc: s.sddSubmitted + ' submitted · ' + s.sddDraft + ' draft',
+      metrics: [
+        { label: 'Submitted', value: String(s.sddSubmitted || 0) },
+        { label: 'Draft', value: String(s.sddDraft || 0) },
+        { label: 'Total SDD', value: String(s.sddTotal || ((s.sddSubmitted || 0) + (s.sddDraft || 0))) },
+      ],
+    },
+    mill: {
+      num: '02', title: 'Mill Onboarding', accent: BRAND,
+      desc: (s.totalMills || 0) + ' mills · ' + (s.highRisk || 0) + ' high risk',
+      metrics: [
+        { label: 'Total Mills', value: String(s.totalMills || 0), sub: (s.totalGroups || 0) + ' groups' },
+        { label: 'High Risk', value: String(s.highRisk || 0), hot: true },
+        { label: 'NBL Mills', value: String(s.nblMills || 0) },
+        { label: 'Groups', value: String(s.totalGroups || 0) },
+      ],
+    },
+    trace: {
+      num: '03', title: 'Traceability ' + pdfSanitize(year), accent: TRACE_ORANGE,
+      desc: (s.emptyTraceMills || 0) + ' mills without supplier data',
+      metrics: [
+        { label: 'Empty Mills', value: String(s.emptyTraceMills || 0), hot: (s.emptyTraceMills || 0) > 0 },
+        { label: 'Total Mills', value: String(s.totalMills || 0) },
+      ],
+    },
+    grv: {
+      num: '04', title: 'Grievance Monitoring', accent: GRV_PURPLE,
+      desc: (s.grievances || 0) + ' in period · ' + grvOpen + ' open',
+      metrics: [
+        { label: 'Total', value: String(s.grievances || 0) },
+        { label: 'Open', value: String(grvOpen), hot: grvOpen > 0 },
+        { label: 'Closed', value: String(Math.max(0, (s.grievances || 0) - grvOpen)) },
+      ],
+    },
+    nbl: {
+      num: '05', title: 'No Buy List', accent: NBL_RED,
+      desc: (s.nblEntries || 0) + ' entries',
+      metrics: [
+        { label: 'Total Entries', value: String(s.nblEntries || 0) },
+        { label: 'NBL Mills', value: String(s.nblMills || 0) },
+      ],
+    },
+    facility: {
+      num: '06', title: 'Facility Performance', accent: PK_GREEN,
+      desc: 'CPO & PK summary',
+      metrics: [
+        { label: 'CPO Facilities', value: String((data.facility && data.facility.cpo || []).length) },
+        { label: 'PK Facilities', value: String((data.facility && data.facility.pk || []).length) },
+        { label: 'Total Facilities', value: String(s.facilities || 0) },
+      ],
+    },
+    eudr: {
+      num: '07', title: 'EUDR Potential', accent: EUDR_TEAL,
+      desc: (s.eudrPotential || 0) + ' potential mills',
+      metrics: [
+        { label: 'Potential', value: String(s.eudrPotential || 0) },
+        { label: 'Total Mills', value: String(s.totalMills || 0) },
+      ],
+    },
+  };
+  return configs[id] || null;
+}
+
+function drawSectionSummaryBlock_(ctx, cfg) {
+  if (!cfg) return;
+  ctx.beginSection_(cfg.num + ' · ' + cfg.title, cfg.accent);
+  const doc = ctx.doc;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7.5);
+  doc.setTextColor.apply(doc, INK_MUTED);
+  doc.text(cfg.desc, ctx.mL, ctx.getY());
+  ctx.setY(ctx.getY() + 5);
+  drawMetricCardGrid_(ctx, cfg.metrics, { cols: Math.min(4, cfg.metrics.length), accent: cfg.accent, cardH: 19, gapAfter: 3 });
+}
+
+function drawSummaryReportBody_(ctx, data, sections, stats, year) {
+  const bodySections = sections.filter(function(id) { return id !== 'kpi'; });
+  bodySections.forEach(function(id) {
+    const cfg = sectionSummaryConfig_(id, stats, data, year);
+    if (!cfg) return;
+    drawSectionSummaryBlock_(ctx, cfg);
+    if (id === 'facility') drawFacilitySummaryTables_(ctx, data.facility);
+  });
+}
+
+function drawDetailReportBody_(ctx, data, sections, year) {
+  if (sections.indexOf('sdd') !== -1) drawSddSection_(ctx, data.sdd || []);
+  if (sections.indexOf('mill') !== -1) drawMillSection_(ctx, data, true);
+  if (sections.indexOf('trace') !== -1) drawTraceSection_(ctx, data.emptyMills || [], year);
+  if (sections.indexOf('grv') !== -1) drawGrvSection_(ctx, data.grv || [], true);
+  if (sections.indexOf('nbl') !== -1) drawNblSection_(ctx, data.nblAll || []);
+  if (sections.indexOf('facility') !== -1) drawFacilitySection_(ctx, data.facilityBundles || [], true);
+  if (sections.indexOf('eudr') !== -1) drawEudrSection_(ctx, data.eudrPotential || []);
+}
+
+function pdfFileLabel_(year, month) {
+  return (year || 'all') + (month ? '_' + monthLabel(month) : '');
+}
+
+function saveMonthlyReportPdf_(doc, variant, year, month) {
+  const tag = variant === 'summary' ? 'Summary' : 'Detail';
+  const fileLabel = pdfFileLabel_(year, month).replace(/\s+/g, '-');
+  doc.save('Monthly-Report-' + tag + '-' + fileLabel + '.pdf');
+}
+
+function finalizePdf_(ctx) {
+  ctx.pruneBlankPages_();
+  drawFooters_(ctx.doc, ctx.pageW, ctx.pageH, ctx.mL, ctx.mR, ctx.mFoot);
+  return ctx.doc;
+}
+
+function buildSummaryPdfDoc_(jsPDFLib, opts) {
   const data = opts.data || {};
+  const stats = data.stats || {};
   const sections = (opts.sections && opts.sections.length) ? opts.sections : DEFAULT_SECTIONS.slice();
-  const full = opts.detailLevel === 'full';
   const ctx = createPdfContext_(jsPDFLib);
   ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
   ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
-  ctx.detailLevel = full ? 'full' : 'summary';
+  ctx.reportTitle = 'Monthly Report — Summary';
+  ctx.reportSubtitle = 'KPI overview and section metric cards';
 
   ctx.drawMainHeader_();
-  const coverEnd = drawCoverPage_(ctx, data.stats || {}, sections, full);
-  ctx.startBodyAfterCover_(coverEnd);
+  ctx.setY(38);
 
-  if (sections.indexOf('sdd') !== -1) drawSddSection_(ctx, data.sdd || []);
-  if (sections.indexOf('mill') !== -1) drawMillSection_(ctx, data, full);
-  if (sections.indexOf('trace') !== -1) drawTraceSection_(ctx, data.emptyMills || [], opts.year);
-  if (sections.indexOf('grv') !== -1) drawGrvSection_(ctx, data.grv || [], full);
-  if (sections.indexOf('nbl') !== -1) drawNblSection_(ctx, data.nblAll || []);
-  if (sections.indexOf('facility') !== -1) drawFacilitySection_(ctx, data.facilityBundles || [], full);
-  if (sections.indexOf('eudr') !== -1) drawEudrSection_(ctx, data.eudrPotential || []);
+  if (sections.indexOf('kpi') !== -1) {
+    docSetSubhead_(ctx, 'Overview');
+    drawMetricCardGrid_(ctx, websiteKpiItems_(stats), { cols: 3, cardH: 22, gapAfter: 6 });
+  }
 
-  ctx.pruneBlankPages_();
-  drawFooters_(ctx.doc, ctx.pageW, ctx.pageH, ctx.mL, ctx.mR, ctx.mFoot);
+  drawSummaryReportBody_(ctx, data, sections, stats, opts.year);
+  return finalizePdf_(ctx);
+}
 
-  const detailTag = full ? 'Full' : 'Summary';
-  const fileLabel = (opts.year || 'all') + (opts.month ? '_' + monthLabel(opts.month) : '');
-  const fname = 'Monthly-Report-' + detailTag + '-' + fileLabel.replace(/\s+/g, '-') + '.pdf';
-  ctx.doc.save(fname);
+function docSetSubhead_(ctx, text) {
+  const doc = ctx.doc;
+  ctx.ensureSpace_(10);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.setTextColor.apply(doc, INK);
+  doc.text(text, ctx.mL, ctx.getY() + 2);
+  ctx.setY(ctx.getY() + 8);
+}
+
+function buildDetailPdfDoc_(jsPDFLib, opts) {
+  const data = opts.data || {};
+  const sections = (opts.sections && opts.sections.length) ? opts.sections : DEFAULT_SECTIONS.slice();
+  const detailSections = sections.filter(function(id) { return id !== 'kpi'; });
+  const ctx = createPdfContext_(jsPDFLib);
+  ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
+  ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
+
+  ctx.setY(drawCompactHeaderForExport_(ctx));
+  if (!detailSections.length) {
+    const doc = ctx.doc;
+    ctx.ensureSpace_(12);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor.apply(doc, INK_MUTED);
+    doc.text('No detail sections selected. Include at least one section besides Overview.', ctx.mL, ctx.getY() + 4);
+    ctx.markContent_(ctx.getY() + 8);
+  } else {
+    drawDetailReportBody_(ctx, data, detailSections, opts.year);
+  }
+  return finalizePdf_(ctx);
+}
+
+function drawCompactHeaderForExport_(ctx) {
+  const doc = ctx.doc;
+  doc.setFillColor.apply(doc, BRAND);
+  doc.rect(0, 0, ctx.pageW, 22, 'F');
+  doc.setTextColor.apply(doc, WHITE);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('Monthly Report — Detail', ctx.mL, 9);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, ctx.mL, 15.5);
+  ctx.markContent_(20);
+  return 22;
+}
+
+/** @deprecated Use buildMonthlyReportPdfPair_ */
+export async function buildMonthlyReportPdf_(opts) {
+  return buildMonthlyReportPdfPair_(opts);
+}
+
+export async function buildMonthlyReportPdfPair_(opts) {
+  const jsPDFLib = opts.getJsPDF();
+  if (!jsPDFLib) throw new Error('PDF library is not ready.');
+
+  const summaryDoc = buildSummaryPdfDoc_(jsPDFLib, opts);
+  saveMonthlyReportPdf_(summaryDoc, 'summary', opts.year, opts.month);
+
+  await new Promise(function(resolve) { setTimeout(resolve, 350); });
+
+  const detailDoc = buildDetailPdfDoc_(jsPDFLib, opts);
+  saveMonthlyReportPdf_(detailDoc, 'detail', opts.year, opts.month);
 }
 
 export const MRD_PDF_SECTIONS = [
-  { id: 'kpi', label: MRD_SECTION_LABELS.kpi },
+  { id: 'kpi', label: 'Overview · KPI cards' },
   { id: 'sdd', label: MRD_SECTION_LABELS.sdd },
   { id: 'mill', label: MRD_SECTION_LABELS.mill },
   { id: 'trace', label: MRD_SECTION_LABELS.trace },

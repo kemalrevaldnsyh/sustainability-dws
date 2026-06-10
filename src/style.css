@@ -2977,6 +2977,19 @@
      transition: transform 150ms ease;
    }
    .grv-main-row.expanded .grv-row-chevron { transform: rotate(90deg); color: #8b1a1a; }
+
+   /* Highlight row after save — keeps user oriented in long tables */
+   @keyframes dashRowSaveFocus {
+     0%, 100% { background-color: transparent; }
+     25%, 65% { background-color: rgba(139, 26, 26, 0.09); }
+   }
+   tr.dash-row-save-focus td,
+   tr.dash-row-save-focus {
+     animation: dashRowSaveFocus 2s ease;
+   }
+   .ttp-group-row.dash-row-save-focus td {
+     background-color: rgba(139, 26, 26, 0.07);
+   }
    #grvTable th.grv-th-date,
    #grvTable td.grv-cell-date {
      white-space: nowrap;
@@ -5674,6 +5687,56 @@ body.bl-detail-open { overflow: hidden; }
   color: #fff;
 }
 .bl-pick-btn--both:hover { background: #6f1515; }
+.bl-picker-item--warn { background: rgba(180, 83, 9, 0.04); }
+.bl-picker-warn {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+.bl-picker-warn-tag {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+.bl-picker-warn-tag--risk {
+  background: rgba(180, 83, 9, 0.12);
+  color: #92400e;
+  border: 1px solid rgba(180, 83, 9, 0.35);
+}
+.bl-picker-warn-tag--nbl {
+  background: rgba(185, 28, 28, 0.1);
+  color: #991b1b;
+  border: 1px solid rgba(185, 28, 28, 0.35);
+}
+.bl-buyer-nbl-alert {
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(185, 28, 28, 0.08);
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  font-size: 12px;
+  color: #4a1c1c;
+}
+.bl-buyer-nbl-alert strong {
+  display: block;
+  margin-bottom: 4px;
+  color: #991b1b;
+}
+.bl-buyer-nbl-alert p { margin: 0 0 6px; }
+.bl-buyer-nbl-alert ul { margin: 0; padding-left: 18px; }
+.bl-buyer-field-wrap input.bl-field-rejected,
+.bl-buyer-field-wrap input.bl-field-rejected:focus {
+  border-color: #b91c1c !important;
+  box-shadow: 0 0 0 2px rgba(185, 28, 28, 0.15);
+}
+.bl-buyer-field-wrap input.bl-field-checking { opacity: 0.85; }
+#blFormSave.is-disabled-nbl:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
 .bl-picker-empty {
   padding: 16px;
   text-align: center;
