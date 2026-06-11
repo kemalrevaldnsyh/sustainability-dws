@@ -791,6 +791,202 @@ function safeAppendRange_(ws, headers, rowArrays, startRow) {
   });
 }
 
+/**
+ * safeInsertRowAt_ — write one row at a fixed sheet row, then patch coord columns as Text.
+ */
+function safeInsertRowAt_(ws, headers, rowArr, targetRow) {
+  ws.getRange(targetRow, 1, 1, rowArr.length).setValues([rowArr]);
+  COORD_COLUMN_NAMES.forEach(function(name) {
+    const colIdx = headers.indexOf(name);
+    if (colIdx < 0) return;
+    const v = rowArr[colIdx];
+    if (v === null || v === undefined) return;
+    const s = String(v).trim();
+    if (!s) return;
+    const cell = ws.getRange(targetRow, colIdx + 1);
+    cell.setNumberFormat('@');
+    cell.setValue(s);
+  });
+}
+
+var MILL_IDENTITY_HEADERS_ = [
+  'MILL NAME', 'COMPANY NAME', 'GROUP NAME', 'UML ID', 'COMPANY CODE'
+];
+
+var MILL_IDENTITY_PLACEHOLDERS_ = { 'NO DATA': true, '-': true, '—': true, 'N/A': true, 'NA': true };
+
+/** Kolom formula/default (SUPPLY %, dll.) tidak menentukan zona aktif vs kosong. */
+var MILL_NON_IDENTITY_HEADERS_ = {
+  'QUARTER': true, 'YEAR': true, 'SOURCE TYPE': true, 'TRADER NAME': true,
+  'SUPPLY CPO': true, 'SUPPLY PK': true, 'PRODUCT SUPPLY': true,
+  'PERCENTAGE SUPPLY CPO': true, 'PERCENTAGE SUPPLY PK': true,
+  'PERCENTAGE': true, 'SUPPLY': true, 'SCORE': true, 'TOTAL SCORE': true,
+  'SIGN': true, 'DATE IMPORTED': true, 'IMPORTED BY': true,
+};
+
+function millIdentityColumnIndices_(headers) {
+  var out = [];
+  var seen = {};
+  (headers || []).forEach(function(h, i) {
+    var key = String(h || '').trim().toUpperCase();
+    if (!key || seen[key] || MILL_NON_IDENTITY_HEADERS_[key]) return;
+    for (var k = 0; k < MILL_IDENTITY_HEADERS_.length; k++) {
+      if (MILL_IDENTITY_HEADERS_[k] === key) {
+        seen[key] = true;
+        out.push(i);
+        break;
+      }
+    }
+  });
+  return out.length ? out : null;
+}
+
+function millIsPlaceholderIdentity_(v) {
+  var t = String(v === null || v === undefined ? '' : v).trim().toUpperCase();
+  return !t || MILL_IDENTITY_PLACEHOLDERS_[t] === true;
+}
+
+/** Baris dianggap berisi mill hanya jika kolom identitas terisi (bukan SUPPLY % / formula). */
+function millRowHasIdentityContent_(rowValues, identityColIndices) {
+  if (!rowValues || !rowValues.length) return false;
+  if (identityColIndices && identityColIndices.length) {
+    for (var i = 0; i < identityColIndices.length; i++) {
+      if (!millIsPlaceholderIdentity_(rowValues[identityColIndices[i]])) return true;
+    }
+    return false;
+  }
+  return false;
+}
+
+function millKeyColumnIndices_(headers) {
+  return millIdentityColumnIndices_(headers);
+}
+
+function millRowValuesHaveContent_(rowValues, keyColIndices) {
+  return millRowHasIdentityContent_(rowValues, keyColIndices);
+}
+
+/**
+ * Active zone vs archive zone on Mill sheet:
+ *   - Active (atas): baris dengan MILL/COMPANY/GROUP/UML terisi + slot kosong berikutnya
+ *   - Archive (bawah): blok copy/manual jauh di bawah — tidak disentuh insert web
+ *
+ * Baris yang hanya punya formula SUPPLY % / PERCENTAGE (0%, 0.0) dianggap KOSONG
+ * untuk penentuan row insert — supaya web masuk ke row 258, bukan row ujung sheet.
+ */
+var MILL_ARCHIVE_GAP_ROWS = 10;
+
+function millFindActiveZoneLastRow_(sheet, headers) {
+  var headerRow = 1;
+  var lastRow = sheet.getLastRow();
+  if (lastRow <= headerRow) return headerRow;
+
+  var numCols = Math.max(headers.length, sheet.getLastColumn());
+  var rowCount = lastRow - headerRow;
+  if (rowCount <= 0) return headerRow;
+
+  var allData = sheet.getRange(headerRow + 1, 1, rowCount, numCols).getValues();
+  var idCols = millIdentityColumnIndices_(headers);
+  var lastDataRow = headerRow;
+  var emptyStreak = 0;
+
+  for (var i = 0; i < allData.length; i++) {
+    if (millRowHasIdentityContent_(allData[i], idCols)) {
+      lastDataRow = headerRow + 1 + i;
+      emptyStreak = 0;
+    } else {
+      emptyStreak++;
+      if (emptyStreak >= MILL_ARCHIVE_GAP_ROWS && lastDataRow > headerRow) break;
+    }
+  }
+  return lastDataRow;
+}
+
+function millFindNextAppendRow_(sheet, headers) {
+  return millFindActiveZoneLastRow_(sheet, headers) + 1;
+}
+
+/** Ringkasan zona aktif vs archive copy (jalankan dari GAS editor). */
+function millSheetTailReport_() {
+  var sheet = getSheet('mill');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastRow = sheet.getLastRow();
+  var nextWebInsert = millFindNextAppendRow_(sheet, headers);
+  var activeLastRow = Math.max(1, nextWebInsert - 1);
+  var keyCols = millKeyColumnIndices_(headers);
+  var numCols = Math.max(headers.length, sheet.getLastColumn());
+  var archiveRows = 0;
+  var emptyGapRows = 0;
+
+  for (var r = nextWebInsert; r <= lastRow; r++) {
+    var vals = sheet.getRange(r, 1, 1, numCols).getValues()[0];
+    if (millRowValuesHaveContent_(vals, keyCols)) archiveRows++;
+    else emptyGapRows++;
+  }
+
+  return {
+    sheetLastRow: lastRow,
+    activeZoneLastRow: activeLastRow,
+    nextWebInsertRow: nextWebInsert,
+    emptyGapRows: emptyGapRows,
+    archiveCopyRows: archiveRows,
+    hint: archiveRows > 0
+      ? 'Archive copy di bawah aman. Input web masuk ke row ' + nextWebInsert + '.'
+      : 'Tidak ada archive copy terpisah; input web masuk ke row ' + nextWebInsert + '.',
+  };
+}
+
+/**
+ * Hapus HANYA baris kosong di celah antara zona aktif dan archive copy.
+ * Baris berisi data mill (archive copy) tidak dihapus.
+ * trimMillSheetEmptyGapRows_(true)  — dry-run
+ * trimMillSheetEmptyGapRows_(false) — eksekusi
+ */
+function trimMillSheetEmptyGapRows_(dryRun) {
+  var sheet = getSheet('mill');
+  var headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+  var lastRow = sheet.getLastRow();
+  var fromRow = millFindNextAppendRow_(sheet, headers);
+  if (fromRow > lastRow) {
+    return { ok: true, message: 'Nothing to trim', nextWebInsertRow: fromRow };
+  }
+
+  var numCols = Math.max(headers.length, sheet.getLastColumn());
+  var keyCols = millKeyColumnIndices_(headers);
+  var emptyRows = [];
+  var preservedRows = 0;
+
+  for (var r = fromRow; r <= lastRow; r++) {
+    var vals = sheet.getRange(r, 1, 1, numCols).getValues()[0];
+    if (millRowValuesHaveContent_(vals, keyCols)) preservedRows++;
+    else emptyRows.push(r);
+  }
+
+  if (dryRun !== false) {
+    return {
+      ok: true, dryRun: true,
+      wouldDeleteEmptyRows: emptyRows.length,
+      preservedArchiveRows: preservedRows,
+      fromRow: fromRow, toRow: lastRow,
+    };
+  }
+
+  for (var i = emptyRows.length - 1; i >= 0; i--) {
+    sheet.deleteRow(emptyRows[i]);
+  }
+  return {
+    ok: true, dryRun: false,
+    deletedEmptyRows: emptyRows.length,
+    preservedArchiveRows: preservedRows,
+    newLastRow: sheet.getLastRow(),
+  };
+}
+
+/** @deprecated Pakai trimMillSheetEmptyGapRows_ — jangan hapus archive copy. */
+function trimMillSheetOrphanTail_(dryRun) {
+  return trimMillSheetEmptyGapRows_(dryRun);
+}
+
 // ═══════════════════════════════════════════════════════════
 //  ONE-TIME MIGRATION — run once from GAS editor after deploy
 // ═══════════════════════════════════════════════════════════
@@ -983,6 +1179,17 @@ function facilityProfileRowHasContent_(obj) {
     String(obj.PLANT || '').trim() ||
     String(obj['COMPANY NAME'] || '').trim() ||
     String(obj['SITE NAME'] || '').trim()
+  );
+}
+
+function millRowHasContent_(obj) {
+  if (!obj) return false;
+  return !!(
+    String(obj['MILL NAME'] || '').trim() ||
+    String(obj['COMPANY NAME'] || '').trim() ||
+    String(obj['GROUP NAME'] || '').trim() ||
+    String(obj['UML ID'] || '').trim() ||
+    String(obj['COMPANY CODE'] || '').trim()
   );
 }
 
@@ -2448,6 +2655,7 @@ function getData(sheetKey) {
     return obj;
   }).filter(function(obj) {
     if (sheetKey === 'facilityProfile') return facilityProfileRowHasContent_(obj);
+    if (sheetKey === 'mill') return millRowHasContent_(obj);
     if (sheetKey !== 'blMonitoring') return true;
     return blRowHasContent_(obj);
   });
@@ -2495,7 +2703,14 @@ function addRow(sheetKey, data) {
     sheet.appendRow(newRow);
     return { success: true };
   }
-  if (sheetKey === 'mill') resolveMillQuarterYearKeys_(data, headers);
+  if (sheetKey === 'mill') {
+    resolveMillQuarterYearKeys_(data, headers);
+    const newRow = headers.map(function(h) { return data[h] !== undefined ? data[h] : ''; });
+    forceCoordStrings_(headers, newRow);
+    const targetRow = millFindNextAppendRow_(sheet, headers);
+    safeInsertRowAt_(sheet, headers, newRow, targetRow);
+    return { success: true, row: targetRow };
+  }
   const newRow  = headers.map(function(h) { return data[h] !== undefined ? data[h] : ''; });
   sheet.appendRow(newRow);
   return { success: true };
