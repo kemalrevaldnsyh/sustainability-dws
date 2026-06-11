@@ -64,8 +64,9 @@ function drawFooters_(doc, pageW, pageH, mL, mR, mFoot) {
   }
 }
 
-function createPdfContext_(jsPDFLib) {
-  const doc = new jsPDFLib({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+function createPdfContext_(jsPDFLib, opts) {
+  opts = opts || {};
+  const doc = new jsPDFLib({ orientation: opts.orientation || 'portrait', unit: 'mm', format: 'a4' });
   const pageW = doc.internal.pageSize.getWidth();
   const pageH = doc.internal.pageSize.getHeight();
   const mL = 14;
@@ -329,15 +330,11 @@ function createPdfContext_(jsPDFLib) {
 function kpiCardItems_(stats) {
   const s = stats || {};
   return [
-    { label: 'SDD Submitted', value: String(s.sddSubmitted != null ? s.sddSubmitted : 0) },
-    { label: 'SDD Draft', value: String(s.sddDraft != null ? s.sddDraft : 0) },
+    { label: 'SDD Requested', value: String(s.sddRequested != null ? s.sddRequested : (s.sddTotal || 0)) },
+    { label: 'SDD Done', value: String(s.sddDone != null ? s.sddDone : (s.sddSubmitted || 0)) },
     { label: 'Total Mills', value: String(s.totalMills != null ? s.totalMills : 0) },
     { label: 'Groups', value: String(s.totalGroups != null ? s.totalGroups : 0) },
-    { label: 'High Risk', value: String(s.highRisk != null ? s.highRisk : 0) },
-    { label: 'NBL Mills', value: String(s.nblMills != null ? s.nblMills : 0) },
-    { label: 'Empty Traceability', value: String(s.emptyTraceMills != null ? s.emptyTraceMills : 0) },
-    { label: 'Grievances', value: String(s.grievances != null ? s.grievances : 0) },
-    { label: 'NBL Entries', value: String(s.nblEntries != null ? s.nblEntries : 0) },
+    { label: 'Untraceable Mills', value: String(s.emptyTraceMills != null ? s.emptyTraceMills : 0) },
     { label: 'EUDR Potential', value: String(s.eudrPotential != null ? s.eudrPotential : 0) },
   ];
 }
@@ -348,7 +345,7 @@ const MRD_SECTION_LABELS = {
   mill: 'Mill Onboarding',
   trace: 'Traceability (empty mills)',
   grv: 'Grievance Monitoring',
-  nbl: 'No Buy List',
+  nbl: 'Active NBL Mills',
   facility: 'Facility Performance',
   eudr: 'EUDR Potential',
 };
@@ -426,9 +423,9 @@ function drawCoverPage_(ctx, stats, sections, full) {
   return y;
 }
 
-function drawSddSection_(ctx, rows) {
+function drawSddSection_(ctx, rows, noHeader) {
   if (!rows.length) return;
-  ctx.beginSection_('01 · Supplier Due Diligence', BRAND);
+  if (!noHeader) ctx.beginSection_('01 · Supplier Due Diligence', BRAND);
   const w = colWidths_([14, 12, 18, 22, 14], ctx.cW);
   ctx.drawAutoTable_(
     [['Status', 'Type', 'Group', 'Mill', 'Updated']],
@@ -468,9 +465,9 @@ function drawMillSection_(ctx, data, full) {
 
   if (mills.length) {
     if (full) {
-      const w = colWidths_([12, 14, 14, 8, 7, 10, 10, 10, 8, 8, 9], ctx.cW);
+      const w = colWidths_([14, 16, 16, 9, 7, 11, 11, 9, 7, 14, 14], ctx.cW);
       ctx.drawAutoTable_(
-        [['Group', 'Company', 'Mill', 'Risk', 'NBL', 'Province', 'Supplier Status', 'Certification', 'Grievances', 'Facility CPO', 'Facility PK']],
+        [['Group', 'Company', 'Mill', 'Risk', 'NBL', 'Province', 'Suppl. Status', 'Cert.', 'Griev.', 'Facility CPO', 'Facility PK']],
         mills.map(function(item) {
           const r = item.row;
           const d = millDetailCells_(item);
@@ -543,24 +540,42 @@ function drawMillSection_(ctx, data, full) {
   }
 }
 
-function drawTraceSection_(ctx, rows, year) {
+function drawTraceSection_(ctx, rows, year, noHeader) {
   if (!rows.length) return;
-  ctx.beginSection_('03 · Traceability — Mills Without Supplier (' + pdfSanitize(year) + ')', TRACE_ORANGE);
-  const w = colWidths_([22, 26, 30, 12], ctx.cW);
+  if (!noHeader) ctx.beginSection_('03 · Traceability — TTM & TTP % (' + pdfSanitize(year) + ')', TRACE_ORANGE);
+  const w = colWidths_([14, 16, 16, 10, 10, 10, 10, 10], ctx.cW);
   ctx.drawAutoTable_(
-    [['Group', 'Company', 'Mill', 'Status']],
+    [['Group', 'Company', 'Mill', 'TTM CPO %', 'TTM PK %', 'TTP CPO %', 'TTP PK %', 'Status']],
     rows.map(function(item) {
-      const r = item.millRow;
-      return [pdfSanitize(r['GROUP NAME']), pdfSanitize(r['COMPANY NAME']), pdfSanitize(r['MILL NAME']), 'Empty'];
+      const r = item.row || item.millRow || item;
+      function pctCell(n) {
+        if (n == null || isNaN(n)) return '—';
+        return pctFmt_(n);
+      }
+      return [
+        pdfSanitize(r['GROUP NAME']),
+        pdfSanitize(r['COMPANY NAME']),
+        pdfSanitize(r['MILL NAME']),
+        pctCell(item.ttmCpo),
+        pctCell(item.ttmPk),
+        pctCell(item.ttpCpo),
+        pctCell(item.ttpPk),
+        item.hasSupplier ? 'OK' : 'Empty',
+      ];
     }),
     TRACE_ORANGE,
-    { 0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] } }
+    {
+      0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
+      3: { cellWidth: w[3], halign: 'right' }, 4: { cellWidth: w[4], halign: 'right' },
+      5: { cellWidth: w[5], halign: 'right' }, 6: { cellWidth: w[6], halign: 'right' },
+      7: { cellWidth: w[7], halign: 'center' },
+    }
   );
 }
 
-function drawGrvSection_(ctx, rows, full) {
+function drawGrvSection_(ctx, rows, full, noHeader) {
   if (!rows.length) return;
-  ctx.beginSection_('04 · Grievance Monitoring', GRV_PURPLE);
+  if (!noHeader) ctx.beginSection_('04 · Grievance Monitoring', GRV_PURPLE);
   if (!full) {
     const w = colWidths_([14, 14, 18, 16, 18, 10, 10], ctx.cW);
     ctx.drawAutoTable_(
@@ -615,15 +630,55 @@ function drawGrvSection_(ctx, rows, full) {
 
 function drawNblSection_(ctx, rows) {
   if (!rows.length) return;
-  ctx.beginSection_('05 · No Buy List', NBL_RED);
-  const w = colWidths_([18, 18, 24, 30], ctx.cW);
+  ctx.beginSection_('05 · Active NBL Mills', NBL_RED);
+  const w = colWidths_([18, 22, 24, 14, 12, 8], ctx.cW);
   ctx.drawAutoTable_(
-    [['Source', 'Riser', 'Group', 'Company']],
-    rows.map(function(r) {
-      return [pdfSanitize(r.source), pdfSanitize(r.riser), pdfSanitize(r.group), pdfSanitize(r.company)];
+    [['Group', 'Company', 'Mill', 'Province', 'Risk', 'NBL']],
+    rows.map(function(item) {
+      const r = item.row || item;
+      return [
+        pdfSanitize(r['GROUP NAME']),
+        pdfSanitize(r['COMPANY NAME']),
+        pdfSanitize(r['MILL NAME']),
+        pdfSanitize(r['PROVINCE']),
+        pdfSanitize(item.risk || r['RESULT RISK LEVEL']),
+        'Yes',
+      ];
     }),
     NBL_RED,
-    { 0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] } }
+    { 0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] }, 4: { cellWidth: w[4] }, 5: { cellWidth: w[5] } }
+  );
+}
+
+/** Summary PDF — NBL list in 2 columns (Mill · Company). */
+function drawNblSummaryList_(ctx, rows) {
+  if (!rows.length) return;
+  const half = Math.ceil(rows.length / 2);
+  const left = rows.slice(0, half);
+  const right = rows.slice(half);
+  const body = [];
+  for (let i = 0; i < half; i++) {
+    const l = left[i];
+    const r = right[i];
+    const lr = l ? (l.row || l) : null;
+    const rr = r ? (r.row || r) : null;
+    body.push([
+      lr ? pdfSanitize(lr['MILL NAME']) : '',
+      lr ? pdfSanitize(lr['COMPANY NAME']) : '',
+      rr ? pdfSanitize(rr['MILL NAME']) : '',
+      rr ? pdfSanitize(rr['COMPANY NAME']) : '',
+    ]);
+  }
+  const w = colWidths_([22, 24, 22, 24], ctx.cW);
+  ctx.drawAutoTable_(
+    [['Mill', 'Company', 'Mill', 'Company']],
+    body,
+    NBL_RED,
+    {
+      0: { cellWidth: w[0], fontSize: 6.8 }, 1: { cellWidth: w[1], fontSize: 6.8 },
+      2: { cellWidth: w[2], fontSize: 6.8 }, 3: { cellWidth: w[3], fontSize: 6.8 },
+    },
+    { fontSize: 7, cellPadding: 2, gapAfter: 3 }
   );
 }
 
@@ -800,9 +855,9 @@ function drawFacilitySection_(ctx, bundles, full) {
   });
 }
 
-function drawEudrSection_(ctx, rows) {
+function drawEudrSection_(ctx, rows, noHeader) {
   if (!rows.length) return;
-  ctx.beginSection_('07 · EUDR Potential', EUDR_TEAL);
+  if (!noHeader) ctx.beginSection_('07 · EUDR Potential', EUDR_TEAL);
   const w = colWidths_([12, 18, 20, 20, 14, 16], ctx.cW);
   ctx.drawAutoTable_(
     [['Status', 'Group', 'Company', 'Mill', 'Province', 'Supply To']],
@@ -824,63 +879,59 @@ function drawEudrSection_(ctx, rows) {
   );
 }
 
-function drawFacilitySummaryTables_(ctx, facility) {
-  if (!facility) return;
-  const cpo = facility.cpo || [];
-  const pk = facility.pk || [];
-  if (!cpo.length && !pk.length) return;
+function facilityBundleSummaryRow_(bundle) {
+  const sum = bundle.summary || {};
+  const isPk = bundle.type === 'pk';
+  const pct = (bundle.traceCalc && bundle.traceCalc.formatted)
+    ? bundle.traceCalc.formatted
+    : (isPk ? (sum.avgPk || '—') : (sum.avgCpo || '—'));
+  return [
+    pdfSanitize(bundle.facility),
+    pdfSanitize((bundle.companies || []).length),
+    pdfSanitize(sum.highRisk != null ? sum.highRisk : 0),
+    pdfSanitize(sum.nblYes != null ? sum.nblYes : 0),
+    pdfSanitize(sum.grievanceSum != null ? sum.grievanceSum : 0),
+    pdfSanitize(pct),
+  ];
+}
 
+function drawFacilitySummaryFromBundles_(ctx, bundles) {
+  const active = (bundles || []).filter(function(b) {
+    return (b.companies || []).length > 0 && pdfSanitize(b.facility) !== '—';
+  });
+  if (!active.length) return;
+
+  const cpo = active.filter(function(b) { return b.type !== 'pk'; });
+  const pk = active.filter(function(b) { return b.type === 'pk'; });
   const cols = [['Facility', 'Companies', 'High Risk', 'NBL', 'Grievance', '% Traceable']];
   const w6 = colWidths_([28, 12, 12, 10, 12, 14], ctx.cW);
+  const colStyles = {
+    0: { cellWidth: w6[0] }, 1: { cellWidth: w6[1], halign: 'center' },
+    2: { cellWidth: w6[2], halign: 'center' }, 3: { cellWidth: w6[3], halign: 'center' },
+    4: { cellWidth: w6[4], halign: 'center' }, 5: { cellWidth: w6[5], halign: 'right', fontStyle: 'bold' },
+  };
 
   if (cpo.length) {
     ctx.beginSubsection_('CPO Facility Performance', BRAND);
-    ctx.drawAutoTable_(
-      cols,
-      cpo.map(function(g) {
-        return [
-          pdfSanitize(g.facility), pdfSanitize(g.companies), pdfSanitize(g.highRisk),
-          pdfSanitize(g.nbl), pdfSanitize(g.grievance), pdfSanitize(g.tracePct),
-        ];
-      }),
-      BRAND,
-      {
-        0: { cellWidth: w6[0] }, 1: { cellWidth: w6[1], halign: 'center' },
-        2: { cellWidth: w6[2], halign: 'center' }, 3: { cellWidth: w6[3], halign: 'center' },
-        4: { cellWidth: w6[4], halign: 'center' }, 5: { cellWidth: w6[5], halign: 'right' },
-      },
-      { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 }
-    );
+    ctx.drawAutoTable_(cols, cpo.map(facilityBundleSummaryRow_), BRAND, colStyles, { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 });
   }
   if (pk.length) {
     ctx.beginSubsection_('PK Facility Performance', PK_GREEN);
-    ctx.drawAutoTable_(
-      cols,
-      pk.map(function(g) {
-        return [
-          pdfSanitize(g.facility), pdfSanitize(g.companies), pdfSanitize(g.highRisk),
-          pdfSanitize(g.nbl), pdfSanitize(g.grievance), pdfSanitize(g.tracePct),
-        ];
-      }),
-      PK_GREEN,
-      {
-        0: { cellWidth: w6[0] }, 1: { cellWidth: w6[1], halign: 'center' },
-        2: { cellWidth: w6[2], halign: 'center' }, 3: { cellWidth: w6[3], halign: 'center' },
-        4: { cellWidth: w6[4], halign: 'center' }, 5: { cellWidth: w6[5], halign: 'right' },
-      },
-      { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 }
-    );
+    ctx.drawAutoTable_(cols, pk.map(facilityBundleSummaryRow_), PK_GREEN, colStyles, { fontSize: 7.5, cellPadding: 2.2, gapAfter: 3 });
   }
+}
+
+/** @deprecated Use drawFacilitySummaryFromBundles_ */
+function drawFacilitySummaryTables_(ctx, facility) {
+  drawFacilitySummaryFromBundles_(ctx, []);
 }
 
 function websiteKpiItems_(stats) {
   const s = stats || {};
   return [
-    { label: 'SDD Submitted', value: String(s.sddSubmitted != null ? s.sddSubmitted : 0), sub: (s.sddDraft || 0) + ' draft' },
+    { label: 'SDD Requested', value: String(s.sddRequested != null ? s.sddRequested : (s.sddTotal || 0)), sub: (s.sddDone != null ? s.sddDone : (s.sddSubmitted || 0)) + ' done' },
     { label: 'Total Mills', value: String(s.totalMills != null ? s.totalMills : 0), sub: (s.totalGroups || 0) + ' groups' },
-    { label: 'High Risk', value: String(s.highRisk != null ? s.highRisk : 0), sub: (s.nblMills || 0) + ' NBL mills', hot: true },
-    { label: 'Empty Traceability', value: String(s.emptyTraceMills != null ? s.emptyTraceMills : 0), sub: 'mills without suppliers' },
-    { label: 'Grievances', value: String(s.grievances != null ? s.grievances : 0), sub: 'in period' },
+    { label: 'Untraceable Mills', value: String(s.emptyTraceMills != null ? s.emptyTraceMills : 0), sub: 'mills without suppliers', hot: (s.emptyTraceMills || 0) > 0 },
     { label: 'EUDR Potential', value: String(s.eudrPotential != null ? s.eudrPotential : 0), sub: 'by formula' },
   ];
 }
@@ -943,11 +994,11 @@ function sectionSummaryConfig_(id, stats, data, year) {
   const configs = {
     sdd: {
       num: '01', title: 'Supplier Due Diligence', accent: BRAND,
-      desc: s.sddSubmitted + ' submitted · ' + s.sddDraft + ' draft',
+      desc: (s.sddRequested || s.sddTotal || 0) + ' requested · ' + (s.sddDone || s.sddSubmitted || 0) + ' done',
       metrics: [
-        { label: 'Submitted', value: String(s.sddSubmitted || 0) },
+        { label: 'Requested', value: String(s.sddRequested || s.sddTotal || 0) },
+        { label: 'Done', value: String(s.sddDone || s.sddSubmitted || 0) },
         { label: 'Draft', value: String(s.sddDraft || 0) },
-        { label: 'Total SDD', value: String(s.sddTotal || ((s.sddSubmitted || 0) + (s.sddDraft || 0))) },
       ],
     },
     mill: {
@@ -956,16 +1007,16 @@ function sectionSummaryConfig_(id, stats, data, year) {
       metrics: [
         { label: 'Total Mills', value: String(s.totalMills || 0), sub: (s.totalGroups || 0) + ' groups' },
         { label: 'High Risk', value: String(s.highRisk || 0), hot: true },
-        { label: 'NBL Mills', value: String(s.nblMills || 0) },
+        { label: 'Active NBL Mills', value: String(s.nblMills || 0) },
         { label: 'Groups', value: String(s.totalGroups || 0) },
       ],
     },
     trace: {
       num: '03', title: 'Traceability ' + pdfSanitize(year), accent: TRACE_ORANGE,
-      desc: (s.emptyTraceMills || 0) + ' mills without supplier data',
+      desc: (s.totalMills || 0) + ' mills · TTM & TTP % · ' + (s.emptyTraceMills || 0) + ' empty',
       metrics: [
-        { label: 'Empty Mills', value: String(s.emptyTraceMills || 0), hot: (s.emptyTraceMills || 0) > 0 },
         { label: 'Total Mills', value: String(s.totalMills || 0) },
+        { label: 'Empty Mills', value: String(s.emptyTraceMills || 0), hot: (s.emptyTraceMills || 0) > 0 },
       ],
     },
     grv: {
@@ -978,11 +1029,11 @@ function sectionSummaryConfig_(id, stats, data, year) {
       ],
     },
     nbl: {
-      num: '05', title: 'No Buy List', accent: NBL_RED,
-      desc: (s.nblEntries || 0) + ' entries',
+      num: '05', title: 'Active NBL Mills', accent: NBL_RED,
+      desc: (s.nblMills || 0) + ' mills on No Buy List',
       metrics: [
-        { label: 'Total Entries', value: String(s.nblEntries || 0) },
-        { label: 'NBL Mills', value: String(s.nblMills || 0) },
+        { label: 'Active NBL Mills', value: String(s.nblMills || 0), hot: (s.nblMills || 0) > 0 },
+        { label: 'Total Mills', value: String(s.totalMills || 0) },
       ],
     },
     facility: {
@@ -1024,14 +1075,19 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
     const cfg = sectionSummaryConfig_(id, stats, data, year);
     if (!cfg) return;
     drawSectionSummaryBlock_(ctx, cfg);
-    if (id === 'facility') drawFacilitySummaryTables_(ctx, data.facility);
+    if (id === 'sdd') drawSddSection_(ctx, data.sdd || [], true);
+    else if (id === 'trace') drawTraceSection_(ctx, data.traceRows || [], year, true);
+    else if (id === 'grv') drawGrvSection_(ctx, data.grv || [], false, true);
+    else if (id === 'nbl') drawNblSummaryList_(ctx, data.nblAll || []);
+    else if (id === 'facility') drawFacilitySummaryFromBundles_(ctx, data.facilityBundles || []);
+    else if (id === 'eudr') drawEudrSection_(ctx, data.eudrPotential || [], true);
   });
 }
 
 function drawDetailReportBody_(ctx, data, sections, year) {
   if (sections.indexOf('sdd') !== -1) drawSddSection_(ctx, data.sdd || []);
   if (sections.indexOf('mill') !== -1) drawMillSection_(ctx, data, true);
-  if (sections.indexOf('trace') !== -1) drawTraceSection_(ctx, data.emptyMills || [], year);
+  if (sections.indexOf('trace') !== -1) drawTraceSection_(ctx, data.traceRows || data.emptyMills || [], year);
   if (sections.indexOf('grv') !== -1) drawGrvSection_(ctx, data.grv || [], true);
   if (sections.indexOf('nbl') !== -1) drawNblSection_(ctx, data.nblAll || []);
   if (sections.indexOf('facility') !== -1) drawFacilitySection_(ctx, data.facilityBundles || [], true);
@@ -1062,14 +1118,14 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
   ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
   ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
   ctx.reportTitle = 'Monthly Report — Summary';
-  ctx.reportSubtitle = 'KPI overview and section metric cards';
+  ctx.reportSubtitle = 'KPI overview with section tables — SDD, Traceability, Grievance, NBL, Facility, EUDR';
 
   ctx.drawMainHeader_();
   ctx.setY(38);
 
   if (sections.indexOf('kpi') !== -1) {
     docSetSubhead_(ctx, 'Overview');
-    drawMetricCardGrid_(ctx, websiteKpiItems_(stats), { cols: 3, cardH: 22, gapAfter: 6 });
+    drawMetricCardGrid_(ctx, websiteKpiItems_(stats), { cols: 4, cardH: 22, gapAfter: 6 });
   }
 
   drawSummaryReportBody_(ctx, data, sections, stats, opts.year);
@@ -1090,7 +1146,7 @@ function buildDetailPdfDoc_(jsPDFLib, opts) {
   const data = opts.data || {};
   const sections = (opts.sections && opts.sections.length) ? opts.sections : DEFAULT_SECTIONS.slice();
   const detailSections = sections.filter(function(id) { return id !== 'kpi'; });
-  const ctx = createPdfContext_(jsPDFLib);
+  const ctx = createPdfContext_(jsPDFLib, { orientation: 'landscape' });
   ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
   ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
 

@@ -19456,6 +19456,9 @@ function initDashboardApp() {
           facilityKey: g.facilityKey,
           companies: g.companies || [],
           summary: pfGroupSummary_(g),
+          traceCalc: g.traceCalc || null,
+          traceSource: g.traceSource || '',
+          ispoCalc: g.ispoCalc || null,
           profiles: pfCplRowsForPlant_(g.facilityKey || g.facility),
         });
       });
@@ -19466,6 +19469,9 @@ function initDashboardApp() {
           facilityKey: g.facilityKey,
           companies: g.companies || [],
           summary: pfPkGroupSummary_(g),
+          traceCalc: g.traceCalc || null,
+          traceSource: g.traceSource || '',
+          ispoCalc: g.ispoCalc || null,
           profiles: pfCplRowsForPlant_(g.facilityKey || g.facility),
         });
       });
@@ -21719,17 +21725,74 @@ function initDashboardApp() {
   let _mrdInited = false;
   let _mrdEudrCache = null;
 
-  function mrdBuildFacilitySummary_(mills, ttpRows) {
-    function splitFacilities(raw) {
-      return String(raw || '').split(/[,;]/).map(function(s) { return s.trim(); }).filter(Boolean);
+  function mrdMillTtmRowPct_(row, product) {
+    if (!millSourceTypeIsForTtm_(row)) return NaN;
+    if (product === 'cpo') {
+      if (!millProductSupplyMatchesCpo_(row)) return NaN;
+      if (millSupplyCpoQty_(row) <= 0) return NaN;
+    } else if (millSupplyPkQty_(row) <= 0) {
+      return NaN;
     }
-    function avgTtpPct(companyKey) {
+    return millHasValidCoordinate_(row) ? 100 : 0;
+  }
+
+  function mrdBuildTraceRowsForReport_(mills, ttpRows, ttpByMill, supplierCol) {
+    const cpoCol = ttpPctCol || '% CPO TRACEABLE';
+    const pkCol = ttpPkPctCol || '% PK TRACEABLE';
+    const ttpCpoLk = {};
+    const ttpPkLk = {};
+    (ttpRows || []).forEach(function(r) {
+      const co = String(r['COMPANY NAME'] || r['Company Name'] || '').trim().toUpperCase();
+      if (!co) return;
+      [[cpoCol, ttpCpoLk], [pkCol, ttpPkLk]].forEach(function(pair) {
+        const col = pair[0];
+        const lk = pair[1];
+        const raw = r[col];
+        if (raw == null || raw === '') return;
+        const num = ttpNormalizePctNumber_(ttpParsePctValue_(raw));
+        if (isNaN(num)) return;
+        if (!lk[co]) lk[co] = { sum: 0, count: 0 };
+        lk[co].sum += num;
+        lk[co].count += 1;
+      });
+    });
+
+    return (mills || []).map(function(r) {
+      const coUpper = String(r['COMPANY NAME'] || '').trim().toUpperCase();
+      const cpoEntry = ttpCpoLk[coUpper];
+      const pkEntry = ttpPkLk[coUpper];
+      const millName = String(r['MILL NAME'] || '').trim();
+      const subRows = (ttpByMill && typeof ttpByMill.get === 'function') ? (ttpByMill.get(millName) || []) : [];
+      return {
+        row: r,
+        ttmCpo: mrdMillTtmRowPct_(r, 'cpo'),
+        ttmPk: mrdMillTtmRowPct_(r, 'pk'),
+        ttpCpo: cpoEntry ? cpoEntry.sum / cpoEntry.count : NaN,
+        ttpPk: pkEntry ? pkEntry.sum / pkEntry.count : NaN,
+        hasSupplier: subRows.some(function(tr) {
+          return !!(supplierCol && String(tr[supplierCol] || '').trim());
+        }),
+        search: [r['GROUP NAME'], r['COMPANY NAME'], r['MILL NAME'], r['PROVINCE']].join(' ').toLowerCase(),
+      };
+    });
+  }
+
+  function mrdBuildFacilitySummary_(mills, ttpRows) {
+    function isValidFacility_(name) {
+      const s = String(name || '').trim();
+      if (!s || /^[-–—]+$/.test(s) || /^(n\/a|na|none|null)$/i.test(s)) return false;
+      return true;
+    }
+    function splitFacilities(raw) {
+      return String(raw || '').split(/[,;]/).map(function(s) { return s.trim(); }).filter(isValidFacility_);
+    }
+    function avgTtpPctForCompanies(coKeys, col) {
       let sum = 0;
       let n = 0;
-      (ttpRows || []).forEach(function(r) {
-        const co = String(r['COMPANY NAME'] || '').trim().toUpperCase();
-        if (co !== companyKey) return;
-        ['% CPO TRACEABLE', '% PK TRACEABLE'].forEach(function(col) {
+      coKeys.forEach(function(coKey) {
+        (ttpRows || []).forEach(function(r) {
+          const co = String(r['COMPANY NAME'] || '').trim().toUpperCase();
+          if (co !== coKey) return;
           if (r[col] == null || r[col] === '') return;
           const v = parseFloat(String(r[col]).replace('%', '').replace(',', '.'));
           if (!isNaN(v)) { sum += v; n++; }
@@ -21737,7 +21800,7 @@ function initDashboardApp() {
       });
       return n ? (Math.round((sum / n) * 10) / 10) + '%' : '—';
     }
-    function buildForColumn(colName) {
+    function buildForColumn(colName, traceCol) {
       const map = new Map();
       (mills || []).forEach(function(r) {
         splitFacilities(r[colName]).forEach(function(fac) {
@@ -21759,7 +21822,7 @@ function initDashboardApp() {
       });
       return Array.from(map.values()).map(function(g) {
         const coList = Array.from(g.coKeys);
-        const trace = coList.length === 1 ? avgTtpPct(coList[0]) : '—';
+        const trace = coList.length ? avgTtpPctForCompanies(coList, traceCol) : '—';
         return {
           facility: g.facility,
           companies: String(g.companies),
@@ -21768,11 +21831,13 @@ function initDashboardApp() {
           grievance: String(g.grievance),
           tracePct: trace,
         };
+      }).filter(function(g) {
+        return parseInt(g.companies, 10) > 0;
       }).sort(function(a, b) { return a.facility.localeCompare(b.facility); });
     }
     return {
-      cpo: buildForColumn('FACILITY NAME CPO'),
-      pk: buildForColumn('FACILITY NAME PK'),
+      cpo: buildForColumn('FACILITY NAME CPO', '% CPO TRACEABLE'),
+      pk: buildForColumn('FACILITY NAME PK', '% PK TRACEABLE'),
     };
   }
 
@@ -21830,6 +21895,8 @@ function initDashboardApp() {
           return info;
         },
         buildFacilitySummary: mrdBuildFacilitySummary_,
+        buildTraceRows: mrdBuildTraceRowsForReport_,
+        formatPct: ttpFormatCellPct_,
         getJsPDF: getJsPDF,
         preparePdfExport: async function() {
           await this.ensureCoreData();
@@ -21841,6 +21908,11 @@ function initDashboardApp() {
             try { eudr = await this.fetchEudrPotential(); } catch (_) { eudr = []; }
           }
           return { eudr: eudr || [] };
+        },
+        preparePfDataForReport: async function() {
+          if (typeof window.mrdPreparePfDataForReport_ === 'function') {
+            await window.mrdPreparePfDataForReport_();
+          }
         },
         getFacilityBundles: function(year) {
           if (typeof window.mrdGetFacilityBundlesForReport_ === 'function') {

@@ -16,8 +16,10 @@ let _month = '';
 let _expanded = new Set();
 let _loadGen = 0;
 let _eudrPending = false;
+let _facilityPending = false;
 let _nblByCache = new Map();
 let _sddCache = [];
+let _facilityBundles = [];
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -131,7 +133,9 @@ function renderSmartTable(columns, rows, opts) {
       html += '</td>';
     });
     html += '</tr>';
-    if (row._after) html += row._after;
+    if (row._after) {
+      html += row._after.replace(/colspan="99"/g, 'colspan="' + colCount + '"');
+    }
   });
   html += '</tbody></table></div>';
   return html;
@@ -147,6 +151,16 @@ function sectionHtml(id, title, desc, bodyHtml, num) {
     + '<div class="mrd-section-head-text"><h3>' + esc(title) + '</h3><p>' + esc(desc) + '</p></div>'
     + '<span class="mrd-section-chev" aria-hidden="true"></span>'
     + '</button></div>'
+    + '<div class="mrd-section-body">' + bodyHtml + '</div></div>';
+}
+
+function flatSectionHtml(id, title, desc, bodyHtml, num) {
+  return ''
+    + '<div class="table-card mrd-section mrd-section--flat mrd-section--' + esc(id) + ' is-open" data-mrd-section="' + esc(id) + '">'
+    + '<div class="mrd-section-head mrd-section-head--flat">'
+    + '<span class="mrd-section-badge">' + esc(num) + '</span>'
+    + '<div class="mrd-section-head-text"><h3>' + esc(title) + '</h3><p>' + esc(desc) + '</p></div>'
+    + '</div>'
     + '<div class="mrd-section-body">' + bodyHtml + '</div></div>';
 }
 
@@ -266,6 +280,7 @@ async function exportMonthlyReport_(exportOpts) {
     }
 
     const extra = await _deps.preparePdfExport();
+    _snapshot = rebuildSnapshot_({});
     const s = _snapshot;
 
     const mills = await resolveAllNblForExport_(
@@ -308,8 +323,12 @@ async function exportMonthlyReport_(exportOpts) {
             item.millRow['GROUP NAME'], item.millRow['COMPANY NAME'], item.millRow['MILL NAME'],
           ].join(' ').toLowerCase());
         }),
+        traceRows: filterForExport_(s.traceRows, function(item) { return matchesSearch(item.search); }),
         grv: filterForExport_(s.grv, function(item) { return matchesSearch(item.search); }),
-        nblAll: filterForExport_(s.nblAll, function(item) { return matchesSearch(item.search); }),
+        nblAll: filterForExport_(
+          s.mills.filter(function(item) { return isNblYes(item.nbl); }),
+          function(item) { return matchesSearch(item.search); }
+        ),
         facilityBundles: facilityBundles,
         eudrPotential: eudrList,
       },
@@ -499,6 +518,7 @@ function buildSnapshotSync(opts) {
     mills: millRows,
     millsTotal: millRows.length,
     emptyMills: emptyMills,
+    traceRows: _deps.buildTraceRows ? _deps.buildTraceRows(mills, ttpFiltered, ttpByMill, supplierCol) : [],
     ttpByMill: ttpByMill,
     grv: grvRows,
     nblAll: nblAll,
@@ -506,12 +526,18 @@ function buildSnapshotSync(opts) {
     eudrPotential: eudrInput,
     eudrLoading: !!opts.eudrLoading,
     sddLoading: !!opts.sddLoading,
+    facilityBundles: opts.facilityBundles != null ? opts.facilityBundles : _facilityBundles,
+    facilityLoading: !!opts.facilityLoading,
     stats: {
       sddTotal: sddFiltered.length,
+      sddRequested: sddFiltered.length,
       sddDraft: sddFiltered.filter(function(r) {
         return String(r['SCR - Screening Status'] || '').toLowerCase() === 'draft';
       }).length,
       sddSubmitted: sddFiltered.filter(function(r) {
+        return String(r['SCR - Screening Status'] || '').toLowerCase() === 'submitted';
+      }).length,
+      sddDone: sddFiltered.filter(function(r) {
         return String(r['SCR - Screening Status'] || '').toLowerCase() === 'submitted';
       }).length,
       totalMills: mills.length,
@@ -531,11 +557,9 @@ function renderKpis(stats) {
   const el = document.getElementById('mrdKpiRow');
   if (!el) return;
   const items = [
-    { n: stats.sddSubmitted, l: 'SDD Submitted', s: stats.sddDraft + ' draft' },
+    { n: stats.sddRequested != null ? stats.sddRequested : stats.sddTotal, l: 'SDD Requested', s: (stats.sddDone != null ? stats.sddDone : stats.sddSubmitted) + ' done' },
     { n: stats.totalMills, l: 'Total Mills', s: stats.totalGroups + ' groups' },
-    { n: stats.highRisk, l: 'High Risk', s: stats.nblMills + ' NBL mills', hot: true },
-    { n: stats.emptyTraceMills, l: 'Empty Traceability', s: 'mills without suppliers' },
-    { n: stats.grievances, l: 'Grievances', s: 'in period' },
+    { n: stats.emptyTraceMills, l: 'Untraceable Mills', s: 'mills without suppliers', hot: stats.emptyTraceMills > 0 },
     { n: stats.eudrPotential, l: 'EUDR Potential', s: 'by formula' },
   ];
   el.innerHTML = items.map(function(it) {
@@ -634,42 +658,65 @@ function detailItem(label, val) {
   return '<div class="mrd-detail-item"><span class="mrd-detail-lbl">' + esc(label) + '</span><span class="mrd-detail-val">' + esc(val) + '</span></div>';
 }
 
-function renderTraceSection(emptyMills, ttpByMill) {
-  const items = emptyMills.filter(function(item) {
-    return matchesSearch([
-      item.millRow['GROUP NAME'], item.millRow['COMPANY NAME'], item.millRow['MILL NAME'],
-    ].join(' ').toLowerCase());
+function formatPctNum_(n) {
+  if (n == null || isNaN(n)) return '—';
+  if (_deps && _deps.formatPct) return _deps.formatPct(n);
+  return (Math.round(n * 10) / 10) + '%';
+}
+
+function renderTraceSection(traceRows) {
+  const items = (traceRows || []).filter(function(item) {
+    return matchesSearch(item.search);
   }).slice(0, MRD_ROW_LIMIT);
-  const tableRows = items.map(function(item, idx) {
-    const r = item.millRow;
-    const expId = 'ttp-' + idx;
-    const isExp = _expanded.has(expId);
-    const millName = String(r['MILL NAME'] || '').trim();
-    const subRows = ttpByMill.get(millName) || [];
-    const out = { _render: { r: r, expId: expId, isExp: isExp, millName: millName, subRows: subRows } };
-    out._after = isExp
-      ? '<tr class="mrd-detail-row"><td colspan="99"><div class="mrd-detail-panel mrd-detail-panel--trace">'
-        + '<p class="mrd-detail-note">No FFB supplier yet (year ' + esc(_year) + ').'
-        + (subRows.length ? ' · ' + subRows.length + ' TTP rows without supplier.' : '')
-        + '</p></div></td></tr>'
-      : '';
-    return out;
-  });
   const cols = [
-    { label: '', always: true, thCls: 'mrd-th-expand', tdCls: 'mrd-td-expand',
-      render: function(row) {
-        const d = row._render;
-        return '<button type="button" class="mrd-expand-btn' + (d.isExp ? ' is-open' : '') + '" data-mrd-expand-btn="' + esc(d.expId) + '">›</button>';
-      }},
-    { label: 'Group', raw: function(row) { return row._render.r['GROUP NAME']; } },
-    { label: 'Company', raw: function(row) { return row._render.r['COMPANY NAME']; } },
-    { label: 'Mill', raw: function(row) { return row._render.millName; } },
-    { label: 'Status', always: true, render: function() { return '<span class="mrd-pill mrd-pill--warn">Empty</span>'; } },
+    { label: 'Group', always: true, raw: function(item) { return item.row['GROUP NAME']; } },
+    { label: 'Company', raw: function(item) { return item.row['COMPANY NAME']; } },
+    { label: 'Mill', raw: function(item) { return item.row['MILL NAME']; } },
+    { label: 'TTM CPO %', hasData: function(item) { return !isNaN(item.ttmCpo); }, render: function(item) { return formatPctNum_(item.ttmCpo); }, tdCls: 'mrd-td-pct' },
+    { label: 'TTM PK %', hasData: function(item) { return !isNaN(item.ttmPk); }, render: function(item) { return formatPctNum_(item.ttmPk); }, tdCls: 'mrd-td-pct' },
+    { label: 'TTP CPO %', hasData: function(item) { return !isNaN(item.ttpCpo); }, render: function(item) { return formatPctNum_(item.ttpCpo); }, tdCls: 'mrd-td-pct' },
+    { label: 'TTP PK %', hasData: function(item) { return !isNaN(item.ttpPk); }, render: function(item) { return formatPctNum_(item.ttpPk); }, tdCls: 'mrd-td-pct' },
+    { label: 'Status', always: true, render: function(item) {
+      return item.hasSupplier
+        ? '<span class="mrd-pill mrd-pill--ok">OK</span>'
+        : '<span class="mrd-pill mrd-pill--warn">Empty</span>';
+    }},
   ];
-  return renderSmartTable(cols, tableRows, {
-    empty: '<p class="mrd-empty mrd-empty--ok">All mills already have supplier data for ' + esc(_year) + '.</p>',
-    note: limitNote(emptyMills.length, MRD_ROW_LIMIT),
+  return renderSmartTable(cols, items, {
+    empty: '<p class="mrd-empty">No mill traceability data for this period.</p>',
+    note: limitNote((traceRows || []).length, MRD_ROW_LIMIT),
   });
+}
+
+function renderNblSection(millRows) {
+  const filtered = millRows.filter(function(item) {
+    return isNblYes(item.nbl) && matchesSearch(item.search);
+  });
+  if (!filtered.length) {
+    return '<p class="mrd-empty">No active NBL mills for this period.</p>';
+  }
+  function colHtml(items) {
+    return items.map(function(item) {
+      const r = item.row;
+      return '<div class="mrd-nbl-item">'
+        + '<span class="mrd-nbl-item-mill">' + esc(r['MILL NAME']) + '</span>'
+        + '<span class="mrd-nbl-item-co">' + esc(r['COMPANY NAME']) + '</span>'
+        + '<span class="mrd-nbl-item-grp">' + esc(r['GROUP NAME']) + '</span>'
+        + (hasCellValue(item.risk) ? '<span class="mrd-nbl-item-risk">' + riskPill(item.risk) + '</span>' : '')
+        + '</div>';
+    }).join('');
+  }
+  let html = '';
+  if (filtered.length > MRD_ROW_LIMIT) {
+    html += limitNote(filtered.length, MRD_ROW_LIMIT);
+  }
+  const visible = filtered.slice(0, MRD_ROW_LIMIT);
+  const visHalf = Math.ceil(visible.length / 2);
+  html += '<div class="mrd-nbl-grid">'
+    + '<div class="mrd-nbl-col">' + colHtml(visible.slice(0, visHalf)) + '</div>'
+    + '<div class="mrd-nbl-col">' + colHtml(visible.slice(visHalf)) + '</div>'
+    + '</div>';
+  return html;
 }
 
 function renderGrvSection(rows) {
@@ -682,99 +729,99 @@ function renderGrvSection(rows) {
     { key: 'Subject', label: 'Subject' },
     { key: 'Risk Classification', label: 'Risk', pill: 'risk' },
     { key: 'Grievance Status', label: 'Status', pill: 'grv' },
+    { key: 'Grievance Description', label: 'Description' },
+    { key: 'Verification Findings', label: 'Verification' },
+    { key: 'Corrective Action', label: 'Corrective Action' },
+    { key: 'Preventive Action', label: 'Preventive Action' },
+    { key: 'Date Closed', label: 'Date Closed' },
   ];
   const activeFields = fieldDefs.filter(function(f) {
     return filtered.some(function(item) { return hasCellValue(item.row[f.key]); });
   });
-  const tableRows = filtered.map(function(item, idx) {
-    const r = item.row;
-    const expId = 'grv-' + idx;
-    const isExp = _expanded.has(expId);
-    const detailFields = [
-      ['Description', r['Grievance Description']],
-      ['Verification', r['Verification Findings']],
-      ['Corrective Action', r['Corrective Action']],
-      ['Preventive Action', r['Preventive Action']],
-      ['Action Taken', r['Action Taken']],
-      ['Date Closed', r['Date Closed']],
-    ].filter(function(pair) { return hasCellValue(pair[1]); });
-    const out = { _render: { r: r, expId: expId, isExp: isExp, fields: activeFields } };
-    if (isExp && detailFields.length) {
-      let grid = detailFields.map(function(pair) { return detailItem(pair[0], pair[1]); }).join('');
-      out._after = '<tr class="mrd-detail-row"><td colspan="99"><div class="mrd-detail-panel"><div class="mrd-detail-grid">' + grid + '</div></div></td></tr>';
-    }
-    return out;
-  });
-  const cols = [
-    { label: '', always: true, thCls: 'mrd-th-expand', tdCls: 'mrd-td-expand',
-      render: function(row) {
-        const d = row._render;
-        return '<button type="button" class="mrd-expand-btn' + (d.isExp ? ' is-open' : '') + '" data-mrd-expand-btn="' + esc(d.expId) + '">›</button>';
-      }},
-  ].concat(activeFields.map(function(f) {
+  const cols = activeFields.map(function(f) {
     return {
       label: f.label,
-      render: function(row) {
-        const v = row._render.r[f.key];
+      always: f.key === 'Grievance ID' || f.key === 'Date Received',
+      render: function(item) {
+        const v = item.row[f.key];
         if (f.pill === 'grv') return statusPill(v, 'grv');
         if (f.pill === 'risk') return riskPill(v);
         return esc(v || '—');
       },
-      hasData: function(row) { return hasCellValue(row._render.r[f.key]); },
+      hasData: function(item) { return hasCellValue(item.row[f.key]); },
     };
-  }));
-  return renderSmartTable(cols, tableRows, {
+  });
+  return renderSmartTable(cols, filtered, {
     empty: '<p class="mrd-empty">No grievances for this period.</p>',
     note: limitNote(rows.length, MRD_ROW_LIMIT),
   });
 }
 
-function renderNblSection(rows) {
-  const filtered = rows.filter(function(item) { return matchesSearch(item.search); }).slice(0, MRD_ROW_LIMIT);
-  const cols = [
-    { label: 'Source', always: true, raw: function(r) { return r.source; } },
-    { label: 'Riser', raw: function(r) { return r.riser; } },
-    { label: 'Group', raw: function(r) { return r.group; } },
-    { label: 'Company', raw: function(r) { return r.company; } },
-  ];
-  return renderSmartTable(cols, filtered, {
-    empty: '<p class="mrd-empty">No NBL entries.</p>',
-    note: limitNote(rows.length, MRD_ROW_LIMIT),
+function renderFacilitySection(bundles, loading) {
+  if (loading) return '<p class="mrd-empty mrd-empty--loading">Loading facility performance…</p>';
+  const active = (bundles || []).filter(function(b) {
+    return (b.companies || []).length > 0 && hasCellValue(b.facility);
   });
-}
+  if (!active.length) return '<p class="mrd-empty">No facility performance data for this period.</p>';
 
-function renderFacilitySection(facility) {
-  function renderBlock(title, groups, accent) {
-    const visible = groups.filter(function(g) {
-      return matchesSearch([g.facility, g.companies, g.tracePct].join(' ').toLowerCase());
+  return active.map(function(bundle) {
+    const isPk = bundle.type === 'pk';
+    const accent = isPk ? 'pk' : 'cpo';
+    const sum = bundle.summary || {};
+    const pctLabel = isPk ? '% PK Traceable' : '% Traceable';
+    const facilityPct = (bundle.traceCalc && bundle.traceCalc.formatted)
+      ? bundle.traceCalc.formatted
+      : (isPk ? (sum.avgPk || '—') : (sum.avgCpo || '—'));
+    const companies = (bundle.companies || []).slice().sort(function(a, b) {
+      return String(a.company || '').localeCompare(String(b.company || ''), undefined, { sensitivity: 'base' });
+    });
+    const visible = companies.filter(function(c) {
+      return matchesSearch([bundle.facility, c.company, c.group, c.certification, c.riskLevel].join(' ').toLowerCase());
     }).slice(0, MRD_ROW_LIMIT);
+
+    const kpis = [
+      { l: 'No Buy List', v: String(sum.nblYes || 0) },
+      { l: 'High Risk', v: String(sum.highRisk || 0), warn: (sum.highRisk || 0) > 0 },
+      { l: 'Total Grievance', v: String(sum.grievanceSum || 0) },
+      { l: 'Est. ISPO Supply %', v: sum.ispoPct || '—' },
+      { l: pctLabel, v: facilityPct, pct: true },
+    ];
+    const kpiHtml = kpis.map(function(k) {
+      return '<div class="mrd-facility-kpi' + (k.pct ? ' mrd-facility-kpi--pct' : '') + (k.warn ? ' mrd-facility-kpi--warn' : '') + '">'
+        + '<span class="mrd-facility-kpi-val">' + esc(k.v) + '</span>'
+        + '<span class="mrd-facility-kpi-lbl">' + esc(k.l) + '</span></div>';
+    }).join('');
+
     const cols = [
-      { label: 'Facility', always: true, raw: function(g) { return g.facility; }, tdCls: 'mrd-td-facility' },
-      { label: 'Companies', hasData: function(g) { return !isZeroish(g.companies); }, raw: function(g) { return g.companies; }, tdCls: 'mrd-td-num' },
-      { label: 'High Risk', hasData: function(g) { return !isZeroish(g.highRisk); }, raw: function(g) { return g.highRisk; }, tdCls: 'mrd-td-num mrd-td-warn' },
-      { label: 'NBL', hasData: function(g) { return !isZeroish(g.nbl); }, raw: function(g) { return g.nbl; }, tdCls: 'mrd-td-num mrd-td-danger' },
-      { label: 'Grievance', hasData: function(g) { return !isZeroish(g.grievance); }, raw: function(g) { return g.grievance; }, tdCls: 'mrd-td-num' },
-      { label: '% Traceable', hasData: function(g) { return !isZeroish(g.tracePct); }, raw: function(g) { return g.tracePct; }, tdCls: 'mrd-td-pct' },
+      { label: 'Company', always: true, raw: function(c) { return c.company; } },
+      { label: 'Group', raw: function(c) { return c.group; } },
+      { label: 'Certification', raw: function(c) { return c.certification; } },
+      { label: 'NBL', hasData: function(c) { return isNblYes(c.nbl); }, render: function(c) {
+        return isNblYes(c.nbl) ? '<span class="mrd-pill mrd-pill--high">Yes</span>' : esc(c.nbl || '—');
+      }},
+      { label: 'Risk', hasData: function(c) { return hasCellValue(c.riskLevel); }, render: function(c) { return riskPill(c.riskLevel); } },
+      { label: 'Grievance', hasData: function(c) { return !isZeroish(c.grievance); }, raw: function(c) { return c.grievance; }, tdCls: 'mrd-td-num' },
+      { label: pctLabel, always: true, render: function(c) { return formatPctNum_(c.ttpPctNum); }, tdCls: 'mrd-td-pct' },
     ];
     const table = renderSmartTable(cols, visible, {
-      empty: '<p class="mrd-empty">No ' + esc(title) + ' data.</p>',
-      note: limitNote(groups.length, MRD_ROW_LIMIT),
+      empty: '<p class="mrd-empty">No companies for this facility.</p>',
+      note: limitNote(companies.length, MRD_ROW_LIMIT),
     });
-    return '<div class="mrd-facility-block mrd-facility-block--' + accent + '"><div class="mrd-facility-title">' + esc(title) + '</div>' + table + '</div>';
-  }
-  const cpo = renderBlock('CPO Facility Performance', facility.cpo, 'cpo');
-  const pk = renderBlock('PK Facility Performance', facility.pk, 'pk');
-  if (cpo.indexOf('mrd-empty') !== -1 && pk.indexOf('mrd-empty') !== -1) {
-    return '<p class="mrd-empty">No facility performance data.</p>';
-  }
-  return cpo + pk;
+
+    return '<div class="mrd-facility-block mrd-facility-block--' + accent + '">'
+      + '<div class="mrd-facility-head">'
+      + '<span class="mrd-facility-badge">' + esc(isPk ? 'PK' : 'CPO') + '</span>'
+      + '<span class="mrd-facility-name">' + esc(bundle.facility) + '</span>'
+      + '<span class="mrd-facility-meta">' + esc(companies.length) + ' companies · ' + esc(facilityPct) + ' ' + esc(pctLabel.replace('% ', '')) + '</span>'
+      + '</div>'
+      + '<div class="mrd-facility-kpi-row">' + kpiHtml + '</div>'
+      + table
+      + '</div>';
+  }).join('');
 }
 
 function renderEudrSection(rows, loading) {
   if (loading) return '<p class="mrd-empty mrd-empty--loading">Loading EUDR Potential…</p>';
-  if (!rows.length && !_eudrPending) {
-    return '<p class="mrd-empty">Click the section header to load EUDR Potential data.</p>';
-  }
   const filtered = rows.filter(function(item) { return matchesSearch(item.search); }).slice(0, MRD_ROW_LIMIT);
   const cols = [
     { label: 'Status', always: true, render: function() { return statusPill('Potential', 'eudr'); } },
@@ -798,13 +845,13 @@ function renderAll() {
   const s = _snapshot;
   const stats = s.stats || {};
   let html = '';
-  html += sectionHtml('sdd', 'Supplier Due Diligence', stats.sddSubmitted + ' submitted · ' + stats.sddDraft + ' draft', renderSddSection(s.sdd, s.sddLoading), '01');
+  html += flatSectionHtml('sdd', 'Supplier Due Diligence', stats.sddRequested + ' requested · ' + stats.sddDone + ' done', renderSddSection(s.sdd, s.sddLoading), '01');
   html += sectionHtml('mill', 'Mill Onboarding', stats.totalMills + ' mills · ' + stats.highRisk + ' high risk', renderMillSection(s.mills), '02');
-  html += sectionHtml('trace', 'Traceability ' + _year, stats.emptyTraceMills + ' mill kosong', renderTraceSection(s.emptyMills, s.ttpByMill), '03');
-  html += sectionHtml('grv', 'Grievance', stats.grievances + ' in period', renderGrvSection(s.grv), '04');
-  html += sectionHtml('nbl', 'No Buy List', stats.nblEntries + ' entries', renderNblSection(s.nblAll), '05');
-  html += sectionHtml('facility', 'Facility Performance', 'CPO & PK summary', renderFacilitySection(s.facility), '06');
-  html += sectionHtml('eudr', 'EUDR Potential', stats.eudrPotential + ' potential · expand to load', renderEudrSection(s.eudrPotential, s.eudrLoading), '07');
+  html += sectionHtml('trace', 'Traceability ' + _year, stats.totalMills + ' mills · TTM & TTP %', renderTraceSection(s.traceRows), '03');
+  html += flatSectionHtml('grv', 'Grievance', stats.grievances + ' in period', renderGrvSection(s.grv), '04');
+  html += sectionHtml('nbl', 'Active NBL Mills', stats.nblMills + ' mills', renderNblSection(s.mills), '05');
+  html += sectionHtml('facility', 'Facility Performance', 'CPO & PK · traceability & ISPO', renderFacilitySection(s.facilityBundles, s.facilityLoading), '06');
+  html += sectionHtml('eudr', 'EUDR Potential', stats.eudrPotential + ' potential mills', renderEudrSection(s.eudrPotential, s.eudrLoading), '07');
   sections.innerHTML = html;
 }
 
@@ -826,6 +873,33 @@ function setUiLoading(show) {
   const content = document.getElementById('mrdContent');
   if (loading) loading.hidden = !show;
   if (content) content.hidden = show;
+}
+
+async function loadFacilityInBackground(gen) {
+  if (_facilityPending || !_deps.getFacilityBundles) return;
+  _facilityPending = true;
+  if (_snapshot) {
+    _snapshot.facilityLoading = true;
+    renderAll();
+  }
+  try {
+    if (_deps.preparePfDataForReport) await _deps.preparePfDataForReport();
+    if (gen !== _loadGen) return;
+    _facilityBundles = _deps.getFacilityBundles(_year) || [];
+    if (_snapshot) {
+      _snapshot.facilityBundles = _facilityBundles;
+      _snapshot.facilityLoading = false;
+      renderAll();
+    }
+  } catch (_) {
+    if (gen === _loadGen && _snapshot) {
+      _snapshot.facilityLoading = false;
+      _snapshot.facilityBundles = [];
+      renderAll();
+    }
+  } finally {
+    _facilityPending = false;
+  }
 }
 
 async function loadEudrInBackground(gen) {
@@ -861,6 +935,8 @@ function rebuildSnapshot_(opts) {
     eudrPotential: opts.eudrPotential != null ? opts.eudrPotential : (prev.eudrPotential || []),
     eudrLoading: opts.eudrLoading != null ? opts.eudrLoading : !!prev.eudrLoading,
     sddLoading: opts.sddLoading != null ? opts.sddLoading : !!prev.sddLoading,
+    facilityBundles: opts.facilityBundles != null ? opts.facilityBundles : (prev.facilityBundles || _facilityBundles),
+    facilityLoading: opts.facilityLoading != null ? opts.facilityLoading : !!prev.facilityLoading,
   });
 }
 
@@ -935,6 +1011,8 @@ async function loadAndRender() {
   loadMillInBackground(gen);
   loadSupplementalInBackground(gen);
   loadSddInBackground(gen);
+  loadEudrInBackground(gen);
+  loadFacilityInBackground(gen);
 }
 
 async function resolveMillNblOnExpand(cacheKey, row) {
@@ -976,6 +1054,7 @@ function bindOnce() {
     yearSel.addEventListener('change', function() {
       _year = yearSel.value || '2025';
       _nblByCache.clear();
+      _facilityBundles = [];
       loadAndRender();
     });
   }
@@ -1002,6 +1081,7 @@ function bindOnce() {
 
   document.getElementById('mrdBtnRefresh')?.addEventListener('click', function() {
     _nblByCache.clear();
+    _facilityBundles = [];
     if (_deps.clearEudrCache) _deps.clearEudrCache();
     loadAndRender();
   });
@@ -1018,7 +1098,6 @@ function bindOnce() {
       if (wasClosed) _expanded.delete(key);
       else _expanded.add(key);
       renderAll();
-      if (!wasClosed && id === 'eudr') loadEudrInBackground(_loadGen);
       return;
     }
     const expBtn = e.target.closest('[data-mrd-expand-btn]');
@@ -1043,11 +1122,8 @@ function bindOnce() {
   });
 }
 
-const MRD_SECTION_IDS = ['sdd', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'];
-
 export function initMonthlyReport_(deps) {
   _deps = deps;
-  MRD_SECTION_IDS.forEach(function(id) { _expanded.add(id + ':closed'); });
   window.refreshMonthlyReport_ = function() { loadAndRender(); };
   window.exportMonthlyReport_ = exportMonthlyReport_;
   bindOnce();
