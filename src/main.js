@@ -21736,8 +21736,19 @@ function initDashboardApp() {
     return millHasValidCoordinate_(row) ? 100 : 0;
   }
 
-  function mrdBuildTraceTotalsForReport_(mills) {
-    const rows = mills || [];
+  /** Same mill pool as Traceability Data panel (allDataRaw, exact year, all quarters). */
+  function mrdMillRowsForReportYear_(yearFilter) {
+    const wantY = String(yearFilter || '');
+    const src = (allDataRaw && allDataRaw.length) ? allDataRaw : allData;
+    if (!wantY || !src || !src.length) return [];
+    return src.filter(function(row) {
+      const yTok = String(parseMillYearSort(millYearVal(row)) || millYearVal(row) || '').trim();
+      return yTok === wantY;
+    });
+  }
+
+  function mrdBuildTraceTotalsForReport_(yearFilter) {
+    const rows = mrdMillRowsForReportYear_(yearFilter);
     const ttmCpo = ttpCalcTtmCoordinatePct_(rows, 'cpo');
     const ttmPk = ttpCalcTtmCoordinatePct_(rows, 'pk');
     return {

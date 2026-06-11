@@ -516,7 +516,7 @@ function buildSnapshotSync(opts) {
   });
 
   const facility = _deps.buildFacilitySummary(mills, ttpFiltered);
-  const traceTotals = _deps.buildTraceTotals ? _deps.buildTraceTotals(mills) : {};
+  const traceTotals = _deps.buildTraceTotals ? _deps.buildTraceTotals(_year) : {};
 
   return {
     sdd: sddFiltered,
