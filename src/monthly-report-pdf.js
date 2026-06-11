@@ -424,12 +424,10 @@ function drawCoverPage_(ctx, stats, sections, full) {
 }
 
 function drawSddSection_(ctx, rows, noHeader) {
-  if (!rows.length) return;
   if (!noHeader) ctx.beginSection_('01 · Supplier Due Diligence', BRAND);
   const w = colWidths_([14, 12, 18, 22, 14], ctx.cW);
-  ctx.drawAutoTable_(
-    [['Status', 'Type', 'Group', 'Mill', 'Updated']],
-    rows.map(function(r) {
+  const body = (rows || []).length
+    ? rows.map(function(r) {
       return [
         pdfSanitize(r['SCR - Screening Status']),
         pdfSanitize(r.supplier_type || r['Supplier Type']),
@@ -437,7 +435,11 @@ function drawSddSection_(ctx, rows, noHeader) {
         pdfSanitize(r['Mill Name']),
         pdfSanitize(r.updated_at || r['SCR - Last Updated']).slice(0, 10),
       ];
-    }),
+    })
+    : [['—', '—', '—', 'No SDD records for this period.', '—']];
+  ctx.drawAutoTable_(
+    [['Status', 'Type', 'Group', 'Mill', 'Updated']],
+    body,
     BRAND,
     {
       0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
@@ -540,37 +542,13 @@ function drawMillSection_(ctx, data, full) {
   }
 }
 
-function drawTraceSection_(ctx, rows, year, noHeader) {
-  if (!rows.length) return;
-  if (!noHeader) ctx.beginSection_('03 · Traceability — TTM & TTP % (' + pdfSanitize(year) + ')', TRACE_ORANGE);
-  const w = colWidths_([14, 16, 16, 10, 10, 10, 10, 10], ctx.cW);
-  ctx.drawAutoTable_(
-    [['Group', 'Company', 'Mill', 'TTM CPO %', 'TTM PK %', 'TTP CPO %', 'TTP PK %', 'Status']],
-    rows.map(function(item) {
-      const r = item.row || item.millRow || item;
-      function pctCell(n) {
-        if (n == null || isNaN(n)) return '—';
-        return pctFmt_(n);
-      }
-      return [
-        pdfSanitize(r['GROUP NAME']),
-        pdfSanitize(r['COMPANY NAME']),
-        pdfSanitize(r['MILL NAME']),
-        pctCell(item.ttmCpo),
-        pctCell(item.ttmPk),
-        pctCell(item.ttpCpo),
-        pctCell(item.ttpPk),
-        item.hasSupplier ? 'OK' : 'Empty',
-      ];
-    }),
-    TRACE_ORANGE,
-    {
-      0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
-      3: { cellWidth: w[3], halign: 'right' }, 4: { cellWidth: w[4], halign: 'right' },
-      5: { cellWidth: w[5], halign: 'right' }, 6: { cellWidth: w[6], halign: 'right' },
-      7: { cellWidth: w[7], halign: 'center' },
-    }
-  );
+function drawTraceTotalsSection_(ctx, totals, year, noHeader) {
+  const t = totals || {};
+  if (!noHeader) ctx.beginSection_('03 · Traceability ' + pdfSanitize(year), TRACE_ORANGE);
+  drawMetricCardGrid_(ctx, [
+    { label: 'TTM CPO %', value: pdfSanitize(t.ttmCpoFmt || '—') },
+    { label: 'TTM PK %', value: pdfSanitize(t.ttmPkFmt || '—') },
+  ], { cols: 2, cardH: 24, accent: TRACE_ORANGE, gapAfter: 3 });
 }
 
 function drawGrvSection_(ctx, rows, full, noHeader) {
@@ -1013,10 +991,10 @@ function sectionSummaryConfig_(id, stats, data, year) {
     },
     trace: {
       num: '03', title: 'Traceability ' + pdfSanitize(year), accent: TRACE_ORANGE,
-      desc: (s.totalMills || 0) + ' mills · TTM & TTP % · ' + (s.emptyTraceMills || 0) + ' empty',
+      desc: 'TTM supply-weighted · ' + (s.emptyTraceMills || 0) + ' mills without supplier',
       metrics: [
-        { label: 'Total Mills', value: String(s.totalMills || 0) },
-        { label: 'Empty Mills', value: String(s.emptyTraceMills || 0), hot: (s.emptyTraceMills || 0) > 0 },
+        { label: 'TTM CPO %', value: pdfSanitize((data.traceTotals && data.traceTotals.ttmCpoFmt) || s.ttmCpoPct || '—') },
+        { label: 'TTM PK %', value: pdfSanitize((data.traceTotals && data.traceTotals.ttmPkFmt) || s.ttmPkPct || '—') },
       ],
     },
     grv: {
@@ -1076,7 +1054,7 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
     if (!cfg) return;
     drawSectionSummaryBlock_(ctx, cfg);
     if (id === 'sdd') drawSddSection_(ctx, data.sdd || [], true);
-    else if (id === 'trace') drawTraceSection_(ctx, data.traceRows || [], year, true);
+    else if (id === 'trace') { /* totals shown in metric cards above */ }
     else if (id === 'grv') drawGrvSection_(ctx, data.grv || [], false, true);
     else if (id === 'nbl') drawNblSummaryList_(ctx, data.nblAll || []);
     else if (id === 'facility') drawFacilitySummaryFromBundles_(ctx, data.facilityBundles || []);
@@ -1087,7 +1065,7 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
 function drawDetailReportBody_(ctx, data, sections, year) {
   if (sections.indexOf('sdd') !== -1) drawSddSection_(ctx, data.sdd || []);
   if (sections.indexOf('mill') !== -1) drawMillSection_(ctx, data, true);
-  if (sections.indexOf('trace') !== -1) drawTraceSection_(ctx, data.traceRows || data.emptyMills || [], year);
+  if (sections.indexOf('trace') !== -1) drawTraceTotalsSection_(ctx, data.traceTotals || {}, year);
   if (sections.indexOf('grv') !== -1) drawGrvSection_(ctx, data.grv || [], true);
   if (sections.indexOf('nbl') !== -1) drawNblSection_(ctx, data.nblAll || []);
   if (sections.indexOf('facility') !== -1) drawFacilitySection_(ctx, data.facilityBundles || [], true);

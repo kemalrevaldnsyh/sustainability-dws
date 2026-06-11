@@ -21736,6 +21736,18 @@ function initDashboardApp() {
     return millHasValidCoordinate_(row) ? 100 : 0;
   }
 
+  function mrdBuildTraceTotalsForReport_(mills) {
+    const rows = mills || [];
+    const ttmCpo = ttpCalcTtmCoordinatePct_(rows, 'cpo');
+    const ttmPk = ttpCalcTtmCoordinatePct_(rows, 'pk');
+    return {
+      ttmCpoPct: ttmCpo.pct,
+      ttmPkPct: ttmPk.pct,
+      ttmCpoFmt: ttpFormatTtmPct_(ttmCpo.pct),
+      ttmPkFmt: ttpFormatTtmPct_(ttmPk.pct),
+    };
+  }
+
   function mrdBuildTraceRowsForReport_(mills, ttpRows, ttpByMill, supplierCol) {
     const cpoCol = ttpPctCol || '% CPO TRACEABLE';
     const pkCol = ttpPkPctCol || '% PK TRACEABLE';
@@ -21896,6 +21908,7 @@ function initDashboardApp() {
         },
         buildFacilitySummary: mrdBuildFacilitySummary_,
         buildTraceRows: mrdBuildTraceRowsForReport_,
+        buildTraceTotals: mrdBuildTraceTotalsForReport_,
         formatPct: ttpFormatCellPct_,
         getJsPDF: getJsPDF,
         preparePdfExport: async function() {

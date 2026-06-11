@@ -7536,6 +7536,60 @@ body.eudr-ffb-modal-open { overflow: hidden; }
     grid-template-columns: 1fr;
   }
 }
+#panel-monthly-report-detail .mrd-empty-row {
+  text-align: center;
+  color: #9c8a8a;
+  font-style: italic;
+  padding: 14px 10px !important;
+}
+#panel-monthly-report-detail .mrd-trace-totals {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+#panel-monthly-report-detail .mrd-trace-total-card {
+  padding: 16px 14px;
+  border-radius: 10px;
+  text-align: center;
+  background: #fff;
+  border: 1px solid rgba(230, 81, 0, 0.15);
+}
+#panel-monthly-report-detail .mrd-trace-total-card--cpo {
+  border-left: 4px solid #8b1a1a;
+}
+#panel-monthly-report-detail .mrd-trace-total-card--pk {
+  border-left: 4px solid #2e7d32;
+}
+#panel-monthly-report-detail .mrd-trace-total-val {
+  display: block;
+  font-size: 28px;
+  font-weight: 800;
+  color: #2a1010;
+  line-height: 1.1;
+}
+#panel-monthly-report-detail .mrd-trace-total-card--cpo .mrd-trace-total-val { color: #8b1a1a; }
+#panel-monthly-report-detail .mrd-trace-total-card--pk .mrd-trace-total-val { color: #2e7d32; }
+#panel-monthly-report-detail .mrd-trace-total-lbl {
+  display: block;
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #4a3030;
+}
+#panel-monthly-report-detail .mrd-trace-total-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 9px;
+  color: #9c8a8a;
+}
+#panel-monthly-report-detail .mrd-trace-total-note {
+  margin: 0;
+  font-size: 11px;
+  color: #8a6e6e;
+}
 #panel-monthly-report-detail .mrd-facility-block {
   padding: 0 0 16px;
   margin-bottom: 8px;

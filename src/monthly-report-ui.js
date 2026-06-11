@@ -116,7 +116,7 @@ function filterColumns(columns, rows) {
 
 function renderSmartTable(columns, rows, opts) {
   opts = opts || {};
-  if (!rows.length) return opts.empty || '<p class="mrd-empty">No data.</p>';
+  if (!rows.length && !opts.alwaysShowTable) return opts.empty || '<p class="mrd-empty">No data.</p>';
   const active = filterColumns(columns, rows);
   const colCount = active.length;
   let html = (opts.note || '') + '<div class="table-scroll mrd-table-scroll"><table class="mrd-table"><thead><tr>';
@@ -124,6 +124,9 @@ function renderSmartTable(columns, rows, opts) {
     html += '<th' + (col.thCls ? ' class="' + col.thCls + '"' : '') + '>' + esc(col.label) + '</th>';
   });
   html += '</tr></thead><tbody>';
+  if (!rows.length && opts.alwaysShowTable) {
+    html += '<tr><td colspan="' + colCount + '" class="mrd-empty-row">' + esc(opts.emptyRowText || 'No data for this period.') + '</td></tr>';
+  }
   rows.forEach(function(row, idx) {
     if (row._before) html += row._before;
     html += '<tr' + (row._trClass ? ' class="' + row._trClass + '"' : '') + '>';
@@ -324,6 +327,7 @@ async function exportMonthlyReport_(exportOpts) {
           ].join(' ').toLowerCase());
         }),
         traceRows: filterForExport_(s.traceRows, function(item) { return matchesSearch(item.search); }),
+        traceTotals: s.traceTotals || {},
         grv: filterForExport_(s.grv, function(item) { return matchesSearch(item.search); }),
         nblAll: filterForExport_(
           s.mills.filter(function(item) { return isNblYes(item.nbl); }),
@@ -512,6 +516,7 @@ function buildSnapshotSync(opts) {
   });
 
   const facility = _deps.buildFacilitySummary(mills, ttpFiltered);
+  const traceTotals = _deps.buildTraceTotals ? _deps.buildTraceTotals(mills) : {};
 
   return {
     sdd: sddFiltered,
@@ -519,6 +524,7 @@ function buildSnapshotSync(opts) {
     millsTotal: millRows.length,
     emptyMills: emptyMills,
     traceRows: _deps.buildTraceRows ? _deps.buildTraceRows(mills, ttpFiltered, ttpByMill, supplierCol) : [],
+    traceTotals: traceTotals,
     ttpByMill: ttpByMill,
     grv: grvRows,
     nblAll: nblAll,
@@ -549,6 +555,8 @@ function buildSnapshotSync(opts) {
       nblEntries: nblAll.length,
       eudrPotential: eudrInput.length,
       facilities: facility.cpo.length + facility.pk.length,
+      ttmCpoPct: traceTotals.ttmCpoFmt || '—',
+      ttmPkPct: traceTotals.ttmPkFmt || '—',
     },
   };
 }
@@ -580,13 +588,14 @@ function renderSddSection(data, loading) {
   }).slice(0, MRD_SDD_LIMIT);
   const cols = [
     { label: 'Status', always: true, render: function(r) { return statusPill(r['SCR - Screening Status'], 'sdd'); } },
-    { label: 'Type', raw: function(r) { return r.supplier_type || r['Supplier Type']; } },
-    { label: 'Group', raw: function(r) { return r['Group Name'] || r['Grup Name']; } },
-    { label: 'Mill', raw: function(r) { return r['Mill Name']; } },
-    { label: 'Updated', raw: function(r) { return String(r.updated_at || r['SCR - Last Updated'] || '').slice(0, 10); } },
+    { label: 'Type', always: true, raw: function(r) { return r.supplier_type || r['Supplier Type']; } },
+    { label: 'Group', always: true, raw: function(r) { return r['Group Name'] || r['Grup Name']; } },
+    { label: 'Mill', always: true, raw: function(r) { return r['Mill Name']; } },
+    { label: 'Updated', always: true, raw: function(r) { return String(r.updated_at || r['SCR - Last Updated'] || '').slice(0, 10); } },
   ];
   return renderSmartTable(cols, rows, {
-    empty: '<p class="mrd-empty">No SDD data for this period yet.</p>',
+    alwaysShowTable: true,
+    emptyRowText: 'No SDD records for this period.',
     note: limitNote(data.length, MRD_SDD_LIMIT),
   });
 }
@@ -664,28 +673,25 @@ function formatPctNum_(n) {
   return (Math.round(n * 10) / 10) + '%';
 }
 
-function renderTraceSection(traceRows) {
-  const items = (traceRows || []).filter(function(item) {
-    return matchesSearch(item.search);
-  }).slice(0, MRD_ROW_LIMIT);
-  const cols = [
-    { label: 'Group', always: true, raw: function(item) { return item.row['GROUP NAME']; } },
-    { label: 'Company', raw: function(item) { return item.row['COMPANY NAME']; } },
-    { label: 'Mill', raw: function(item) { return item.row['MILL NAME']; } },
-    { label: 'TTM CPO %', hasData: function(item) { return !isNaN(item.ttmCpo); }, render: function(item) { return formatPctNum_(item.ttmCpo); }, tdCls: 'mrd-td-pct' },
-    { label: 'TTM PK %', hasData: function(item) { return !isNaN(item.ttmPk); }, render: function(item) { return formatPctNum_(item.ttmPk); }, tdCls: 'mrd-td-pct' },
-    { label: 'TTP CPO %', hasData: function(item) { return !isNaN(item.ttpCpo); }, render: function(item) { return formatPctNum_(item.ttpCpo); }, tdCls: 'mrd-td-pct' },
-    { label: 'TTP PK %', hasData: function(item) { return !isNaN(item.ttpPk); }, render: function(item) { return formatPctNum_(item.ttpPk); }, tdCls: 'mrd-td-pct' },
-    { label: 'Status', always: true, render: function(item) {
-      return item.hasSupplier
-        ? '<span class="mrd-pill mrd-pill--ok">OK</span>'
-        : '<span class="mrd-pill mrd-pill--warn">Empty</span>';
-    }},
-  ];
-  return renderSmartTable(cols, items, {
-    empty: '<p class="mrd-empty">No mill traceability data for this period.</p>',
-    note: limitNote((traceRows || []).length, MRD_ROW_LIMIT),
-  });
+function renderTraceSection(traceTotals, stats) {
+  const t = traceTotals || {};
+  const s = stats || {};
+  return ''
+    + '<div class="mrd-trace-totals">'
+    + '<div class="mrd-trace-total-card mrd-trace-total-card--cpo">'
+    + '<span class="mrd-trace-total-val">' + esc(t.ttmCpoFmt || '—') + '</span>'
+    + '<span class="mrd-trace-total-lbl">TTM CPO %</span>'
+    + '<span class="mrd-trace-total-hint">Supply-weighted · valid coordinate</span>'
+    + '</div>'
+    + '<div class="mrd-trace-total-card mrd-trace-total-card--pk">'
+    + '<span class="mrd-trace-total-val">' + esc(t.ttmPkFmt || '—') + '</span>'
+    + '<span class="mrd-trace-total-lbl">TTM PK %</span>'
+    + '<span class="mrd-trace-total-hint">Supply-weighted · valid coordinate</span>'
+    + '</div>'
+    + '</div>'
+    + '<p class="mrd-trace-total-note">'
+    + esc((s.emptyTraceMills || 0) + ' mills without supplier · ' + (s.totalMills || 0) + ' total mills')
+    + '</p>';
 }
 
 function renderNblSection(millRows) {
@@ -847,7 +853,7 @@ function renderAll() {
   let html = '';
   html += flatSectionHtml('sdd', 'Supplier Due Diligence', stats.sddRequested + ' requested · ' + stats.sddDone + ' done', renderSddSection(s.sdd, s.sddLoading), '01');
   html += sectionHtml('mill', 'Mill Onboarding', stats.totalMills + ' mills · ' + stats.highRisk + ' high risk', renderMillSection(s.mills), '02');
-  html += sectionHtml('trace', 'Traceability ' + _year, stats.totalMills + ' mills · TTM & TTP %', renderTraceSection(s.traceRows), '03');
+  html += sectionHtml('trace', 'Traceability ' + _year, 'TTM CPO ' + (stats.ttmCpoPct || '—') + ' · TTM PK ' + (stats.ttmPkPct || '—'), renderTraceSection(s.traceTotals, stats), '03');
   html += flatSectionHtml('grv', 'Grievance', stats.grievances + ' in period', renderGrvSection(s.grv), '04');
   html += sectionHtml('nbl', 'Active NBL Mills', stats.nblMills + ' mills', renderNblSection(s.mills), '05');
   html += sectionHtml('facility', 'Facility Performance', 'CPO & PK · traceability & ISPO', renderFacilitySection(s.facilityBundles, s.facilityLoading), '06');
