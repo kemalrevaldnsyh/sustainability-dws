@@ -214,6 +214,7 @@ window.openTmlScreeningForm = function() {
   document.getElementById('mora-ha').value = '';
   document.getElementById('mora-ha-wrap').style.display = 'none';
   document.getElementById('defbuf-ha').value = '';
+  syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
 
   window._populateTmlScreeningForm(window._tmlSelectedMill);
   document.getElementById('tml-form-overlay').style.display = 'flex';
@@ -261,6 +262,7 @@ window._populateTmlScreeningForm = function(mill) {
     document.getElementById('tml-form-status').textContent = '';
     window._tmlYNState.coord = '';
     window._tmlYNState.mora = '';
+    syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
     return;
   }
 
@@ -296,6 +298,7 @@ window._populateTmlScreeningForm = function(mill) {
     }
   });
   document.getElementById('tml-form-status').textContent = saved.status ? 'Status: ' + saved.status : '';
+  syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
 };
 
 window.tmlSetYN = function(key, val, labelEl) {
@@ -330,6 +333,69 @@ window.tmlToggleHa = function(cb, haId) {
     cb.closest('label').style.borderColor = 'rgba(74,28,28,0.12)';
     cb.closest('label').style.background = 'white';
   }
+};
+
+const TML_FOREST_CFG = { apl: 'fa-apl', others: ['fa-hpk', 'fa-hp', 'fa-hl', 'fa-ksa'] };
+const FFB_FOREST_CFG = { apl: 'ffb-fa-apl', others: ['ffb-fa-hpk', 'ffb-fa-hp', 'ffb-fa-hl', 'ffb-fa-ksa'] };
+
+function setForestRowVisible_(cbId, visible, toggleHaFn) {
+  const cb = document.getElementById(cbId);
+  if (!cb) return;
+  const row = cb.closest('label');
+  if (row) row.style.display = visible ? '' : 'none';
+  if (!visible && cb.checked) {
+    cb.checked = false;
+    toggleHaFn(cb, cbId + '-ha');
+  }
+}
+
+function syncForestAreaGroup_(cfg, toggleHaFn) {
+  const aplCb = document.getElementById(cfg.apl);
+  if (!aplCb) return;
+  const aplChecked = aplCb.checked;
+  const anyOtherChecked = cfg.others.some(function(id) {
+    const c = document.getElementById(id);
+    return c && c.checked;
+  });
+
+  if (aplChecked) {
+    setForestRowVisible_(cfg.apl, true, toggleHaFn);
+    cfg.others.forEach(function(id) { setForestRowVisible_(id, false, toggleHaFn); });
+  } else if (anyOtherChecked) {
+    setForestRowVisible_(cfg.apl, false, toggleHaFn);
+    cfg.others.forEach(function(id) { setForestRowVisible_(id, true, toggleHaFn); });
+  } else {
+    setForestRowVisible_(cfg.apl, true, toggleHaFn);
+    cfg.others.forEach(function(id) { setForestRowVisible_(id, true, toggleHaFn); });
+  }
+}
+
+function onForestAreaChange_(cb, cfg, toggleHaFn) {
+  toggleHaFn(cb, cb.id + '-ha');
+  if (cb.id === cfg.apl && cb.checked) {
+    cfg.others.forEach(function(id) {
+      const other = document.getElementById(id);
+      if (other && other.checked) {
+        other.checked = false;
+        toggleHaFn(other, id + '-ha');
+      }
+    });
+  } else if (cb.id !== cfg.apl && cb.checked) {
+    const apl = document.getElementById(cfg.apl);
+    if (apl && apl.checked) {
+      apl.checked = false;
+      toggleHaFn(apl, cfg.apl + '-ha');
+    }
+  }
+  syncForestAreaGroup_(cfg, toggleHaFn);
+}
+
+window.tmlOnForestAreaChange = function(cb) {
+  onForestAreaChange_(cb, TML_FOREST_CFG, window.tmlToggleHa);
+};
+
+window.ffbOnForestAreaChange = function(cb) {
+  onForestAreaChange_(cb, FFB_FOREST_CFG, window.ffbToggleHa);
 };
 
 /**
@@ -436,6 +502,7 @@ window.openFfbScreeningForm = function() {
   document.getElementById('ffb-defor').value = '';
   document.getElementById('ffb-burn').value = '';
   document.getElementById('ffb-village-risk').value = '';
+  syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
 
   window._populateFfbScreeningForm(window._ffbSelectedSupplier);
   document.getElementById('ffb-form-overlay').style.display = 'flex';
@@ -486,6 +553,7 @@ window._populateFfbScreeningForm = function(supplier) {
     document.getElementById('ffb-form-status').textContent = '';
     window._ffbYNState.coord = '';
     window._ffbYNState.mora = '';
+    syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
     return;
   }
 
@@ -524,6 +592,7 @@ window._populateFfbScreeningForm = function(supplier) {
     }
   });
   document.getElementById('ffb-form-status').textContent = saved.status ? 'Status: ' + saved.status : '';
+  syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
 };
 
 window.ffbSetYN = function(key, val, labelEl) {

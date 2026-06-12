@@ -105,31 +105,31 @@
       <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">2. Forest Area</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="fa-apl" onchange="window.tmlToggleHa(this,'fa-apl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="fa-apl" onchange="window.tmlOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">APL</span>
           <input type="number" id="fa-apl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="fa-hpk" onchange="window.tmlToggleHa(this,'fa-hpk-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="fa-hpk" onchange="window.tmlOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HPK</span>
           <input type="number" id="fa-hpk-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="fa-hp" onchange="window.tmlToggleHa(this,'fa-hp-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="fa-hp" onchange="window.tmlOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HP</span>
           <input type="number" id="fa-hp-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="fa-hl" onchange="window.tmlToggleHa(this,'fa-hl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="fa-hl" onchange="window.tmlOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HL</span>
           <input type="number" id="fa-hl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="fa-ksa" onchange="window.tmlToggleHa(this,'fa-ksa-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="fa-ksa" onchange="window.tmlOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">KSA/KPA</span>
           <input type="number" id="fa-ksa-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
@@ -243,31 +243,31 @@
       <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">2. Forest Area</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-fa-apl" onchange="window.ffbToggleHa(this,'ffb-fa-apl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-fa-apl" onchange="window.ffbOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">APL</span>
           <input type="number" id="ffb-fa-apl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-fa-hpk" onchange="window.ffbToggleHa(this,'ffb-fa-hpk-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-fa-hpk" onchange="window.ffbOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HPK</span>
           <input type="number" id="ffb-fa-hpk-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-fa-hp" onchange="window.ffbToggleHa(this,'ffb-fa-hp-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-fa-hp" onchange="window.ffbOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HP</span>
           <input type="number" id="ffb-fa-hp-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-fa-hl" onchange="window.ffbToggleHa(this,'ffb-fa-hl-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-fa-hl" onchange="window.ffbOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">HL</span>
           <input type="number" id="ffb-fa-hl-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-fa-ksa" onchange="window.ffbToggleHa(this,'ffb-fa-ksa-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-fa-ksa" onchange="window.ffbOnForestAreaChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">KSA/KPA</span>
           <input type="number" id="ffb-fa-ksa-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
