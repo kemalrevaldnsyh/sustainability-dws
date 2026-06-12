@@ -4230,7 +4230,7 @@ async function apiSetSubmissionStatus(payload) {
 }
 
 /**
- * POST deleteSubmission — soft-deletes MAIN + all child rows.
+ * POST deleteSubmission — hard-deletes MAIN + mill list + FFB rows from Sheets.
  * payload: { submission_id }
  */
 async function apiDeleteSubmission(payload) {

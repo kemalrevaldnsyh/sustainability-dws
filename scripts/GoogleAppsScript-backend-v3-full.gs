@@ -3033,6 +3033,76 @@ function softDelRelRow_(ws, headers, sheetRow, user, now) {
   });
 }
 
+/** Physically remove sheet rows (bottom-up so indices stay valid). */
+function hardDeleteSheetRows_(ws, sheetRows) {
+  if (!ws || !sheetRows || !sheetRows.length) return 0;
+  const sorted = sheetRows.slice().sort(function(a, b) { return b - a; });
+  const seen = {};
+  let deleted = 0;
+  sorted.forEach(function(r) {
+    const rowNum = parseInt(r, 10);
+    if (isNaN(rowNum) || rowNum < 2 || seen[rowNum]) return;
+    seen[rowNum] = true;
+    ws.deleteRow(rowNum);
+    deleted++;
+  });
+  return deleted;
+}
+
+function collectRelSheetRowsForSubmission_(sheetKey, sid) {
+  const result = readRelSheet_(sheetKey, true);
+  const sheetRows = [];
+  result.rows.forEach(function(r) {
+    if (String(r.obj['submission_id'] || '').trim() === sid) {
+      sheetRows.push(r._sheetRow);
+    }
+  });
+  return { ws: result.ws, sheetRows: sheetRows, rows: result.rows };
+}
+
+/** Remove matching rows from legacy flat SDD sheet (if any). */
+function deleteLegacySddRowsForSubmission_(mainObj, millObjs, ffbObjs, sid) {
+  let legacyDeleted = 0;
+  try {
+    const sheet = getSheet('sdd');
+    const raw = sheet.getDataRange().getValues();
+    if (!raw.length) return 0;
+
+    const headers = raw[0];
+    const headerIndex = indexByHeader_(headers);
+    const rowsToDelete = [];
+    const seen = {};
+
+    function addRowNum(n) {
+      const rowNum = parseInt(n, 10);
+      if (isNaN(rowNum) || rowNum < 2 || seen[rowNum]) return;
+      seen[rowNum] = true;
+      rowsToDelete.push(rowNum);
+    }
+
+    const sidCol = headerIndex['submission_id'];
+    if (sidCol !== undefined && sid) {
+      for (let i = 1; i < raw.length; i++) {
+        if (String(raw[i][sidCol] || '').trim() === sid) addRowNum(i + 1);
+      }
+    }
+
+    if (!rowsToDelete.length) {
+      const payloads = [mainObj].concat(millObjs || []).concat(ffbObjs || []);
+      payloads.forEach(function(data) {
+        if (!data || typeof data !== 'object') return;
+        const idx = findMatchingSddRowIndex_(raw, headers, headerIndex, data);
+        if (idx > 0) addRowNum(idx + 1);
+      });
+    }
+
+    legacyDeleted = hardDeleteSheetRows_(sheet, rowsToDelete);
+  } catch (err) {
+    console.warn('[deleteLegacySddRowsForSubmission_]', err.message);
+  }
+  return legacyDeleted;
+}
+
 function injectTechKeys_(obj, meta) {
   obj['submission_id'] = meta.submission_id;
   if (meta.line_id !== undefined) obj['line_id'] = meta.line_id;
@@ -3420,43 +3490,43 @@ function setSubmissionStatus(payload) {
 function deleteSubmission(payload) {
   assertRequiredKeys_(payload, ['submission_id'], 'deleteSubmission');
   const sid  = String(payload.submission_id).trim();
-  const now  = nowIso_();
   const user = callerEmail_();
 
   const lock = LockService.getScriptLock();
   lock.waitLock(30000);
   try {
-    const mainHit = findMainRow_('sddMain', sid);
-    if (!mainHit) throw new Error('submission_id not found: ' + sid);
-    if (String(mainHit.obj['is_deleted']) === '1') {
-      throw new Error('Submission already deleted: ' + sid);
+    ensureAllRelationalHeaders_();
+
+    const mainPack = collectRelSheetRowsForSubmission_('sddMain', sid);
+    if (!mainPack.sheetRows.length) {
+      throw new Error('submission_id not found: ' + sid);
     }
 
-    softDelRelRow_(mainHit.ws, mainHit.headers, mainHit._sheetRow, user, now);
+    const mainObj = mainPack.rows.filter(function(r) {
+      return String(r.obj['submission_id'] || '').trim() === sid;
+    }).map(function(r) { return r.obj; })[0] || {};
 
-    let millsDeleted = 0;
-    const millResult = readRelSheet_('sddMill', false);
-    millResult.rows.forEach(function(r) {
-      if (String(r.obj['submission_id'] || '').trim() === sid) {
-        softDelRelRow_(millResult.ws, millResult.headers, r._sheetRow, user, now);
-        millsDeleted++;
-      }
-    });
+    const millPack = collectRelSheetRowsForSubmission_('sddMill', sid);
+    const ffbPack  = collectRelSheetRowsForSubmission_('sddFfb', sid);
+    const millObjs = millPack.rows
+      .filter(function(r) { return String(r.obj['submission_id'] || '').trim() === sid; })
+      .map(function(r) { return r.obj; });
+    const ffbObjs = ffbPack.rows
+      .filter(function(r) { return String(r.obj['submission_id'] || '').trim() === sid; })
+      .map(function(r) { return r.obj; });
 
-    let ffbDeleted = 0;
-    const ffbResult = readRelSheet_('sddFfb', false);
-    ffbResult.rows.forEach(function(r) {
-      if (String(r.obj['submission_id'] || '').trim() === sid) {
-        softDelRelRow_(ffbResult.ws, ffbResult.headers, r._sheetRow, user, now);
-        ffbDeleted++;
-      }
-    });
+    const millsDeleted = hardDeleteSheetRows_(millPack.ws, millPack.sheetRows);
+    const ffbDeleted   = hardDeleteSheetRows_(ffbPack.ws, ffbPack.sheetRows);
+    const mainDeleted  = hardDeleteSheetRows_(mainPack.ws, mainPack.sheetRows);
+    const legacyDeleted = deleteLegacySddRowsForSubmission_(mainObj, millObjs, ffbObjs, sid);
 
     return {
-      success        : true,
-      submission_id  : sid,
-      mills_deleted  : millsDeleted,
-      ffb_deleted    : ffbDeleted,
+      success         : true,
+      submission_id   : sid,
+      main_deleted    : mainDeleted,
+      mills_deleted   : millsDeleted,
+      ffb_deleted     : ffbDeleted,
+      legacy_deleted  : legacyDeleted,
     };
   } finally {
     try { lock.releaseLock(); } catch (e) { /* ignore */ }
