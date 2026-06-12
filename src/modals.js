@@ -215,6 +215,7 @@ window.openTmlScreeningForm = function() {
   document.getElementById('mora-ha-wrap').style.display = 'none';
   document.getElementById('defbuf-ha').value = '';
   syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
+  syncForestAreaGroup_(TML_PEAT_CFG, window.tmlToggleHa);
 
   window._populateTmlScreeningForm(window._tmlSelectedMill);
   document.getElementById('tml-form-overlay').style.display = 'flex';
@@ -263,6 +264,7 @@ window._populateTmlScreeningForm = function(mill) {
     window._tmlYNState.coord = '';
     window._tmlYNState.mora = '';
     syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
+    syncForestAreaGroup_(TML_PEAT_CFG, window.tmlToggleHa);
     return;
   }
 
@@ -299,6 +301,7 @@ window._populateTmlScreeningForm = function(mill) {
   });
   document.getElementById('tml-form-status').textContent = saved.status ? 'Status: ' + saved.status : '';
   syncForestAreaGroup_(TML_FOREST_CFG, window.tmlToggleHa);
+  syncForestAreaGroup_(TML_PEAT_CFG, window.tmlToggleHa);
 };
 
 window.tmlSetYN = function(key, val, labelEl) {
@@ -337,6 +340,8 @@ window.tmlToggleHa = function(cb, haId) {
 
 const TML_FOREST_CFG = { apl: 'fa-apl', others: ['fa-hpk', 'fa-hp', 'fa-hl', 'fa-ksa'] };
 const FFB_FOREST_CFG = { apl: 'ffb-fa-apl', others: ['ffb-fa-hpk', 'ffb-fa-hp', 'ffb-fa-hl', 'ffb-fa-ksa'] };
+const TML_PEAT_CFG = { apl: 'pl-no', others: ['pl-prot', 'pl-cult'] };
+const FFB_PEAT_CFG = { apl: 'ffb-pl-no', others: ['ffb-pl-prot', 'ffb-pl-cult'] };
 
 function setForestRowVisible_(cbId, visible, toggleHaFn) {
   const cb = document.getElementById(cbId);
@@ -396,6 +401,14 @@ window.tmlOnForestAreaChange = function(cb) {
 
 window.ffbOnForestAreaChange = function(cb) {
   onForestAreaChange_(cb, FFB_FOREST_CFG, window.ffbToggleHa);
+};
+
+window.tmlOnPeatlandChange = function(cb) {
+  onForestAreaChange_(cb, TML_PEAT_CFG, window.tmlToggleHa);
+};
+
+window.ffbOnPeatlandChange = function(cb) {
+  onForestAreaChange_(cb, FFB_PEAT_CFG, window.ffbToggleHa);
 };
 
 /**
@@ -503,6 +516,7 @@ window.openFfbScreeningForm = function() {
   document.getElementById('ffb-burn').value = '';
   document.getElementById('ffb-village-risk').value = '';
   syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
+  syncForestAreaGroup_(FFB_PEAT_CFG, window.ffbToggleHa);
 
   window._populateFfbScreeningForm(window._ffbSelectedSupplier);
   document.getElementById('ffb-form-overlay').style.display = 'flex';
@@ -554,6 +568,7 @@ window._populateFfbScreeningForm = function(supplier) {
     window._ffbYNState.coord = '';
     window._ffbYNState.mora = '';
     syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
+    syncForestAreaGroup_(FFB_PEAT_CFG, window.ffbToggleHa);
     return;
   }
 
@@ -593,6 +608,7 @@ window._populateFfbScreeningForm = function(supplier) {
   });
   document.getElementById('ffb-form-status').textContent = saved.status ? 'Status: ' + saved.status : '';
   syncForestAreaGroup_(FFB_FOREST_CFG, window.ffbToggleHa);
+  syncForestAreaGroup_(FFB_PEAT_CFG, window.ffbToggleHa);
 };
 
 window.ffbSetYN = function(key, val, labelEl) {

@@ -142,19 +142,19 @@
       <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">3. Peatland</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="pl-no" onchange="window.tmlToggleHa(this,'pl-no-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="pl-no" onchange="window.tmlOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">No</span>
           <input type="number" id="pl-no-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="pl-prot" onchange="window.tmlToggleHa(this,'pl-prot-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="pl-prot" onchange="window.tmlOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">Protected Peat</span>
           <input type="number" id="pl-prot-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="pl-cult" onchange="window.tmlToggleHa(this,'pl-cult-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="pl-cult" onchange="window.tmlOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">Cultivated Peat</span>
           <input type="number" id="pl-cult-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
@@ -280,19 +280,19 @@
       <div style="font-size:13px;font-weight:700;color:#1A0A0A;margin-bottom:8px;">3. Peatland</div>
       <div style="display:flex;flex-direction:column;gap:8px;">
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-pl-no" onchange="window.ffbToggleHa(this,'ffb-pl-no-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-pl-no" onchange="window.ffbOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">No</span>
           <input type="number" id="ffb-pl-no-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-pl-prot" onchange="window.ffbToggleHa(this,'ffb-pl-prot-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-pl-prot" onchange="window.ffbOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">Protected Peat</span>
           <input type="number" id="ffb-pl-prot-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
         </label>
         <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:9px 14px;border-radius:8px;border:1.5px solid rgba(74,28,28,0.12);font-size:13px;">
-          <input type="checkbox" id="ffb-pl-cult" onchange="window.ffbToggleHa(this,'ffb-pl-cult-ha')" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
+          <input type="checkbox" id="ffb-pl-cult" onchange="window.ffbOnPeatlandChange(this)" style="width:16px;height:16px;cursor:pointer;accent-color:#8B1A1A;">
           <span style="flex:1;font-weight:500;">Cultivated Peat</span>
           <input type="number" id="ffb-pl-cult-ha" disabled placeholder="Ha" min="0" step="0.01" style="width:90px;padding:6px 10px;border:1.5px solid rgba(74,28,28,0.15);border-radius:6px;font-size:12px;font-family:Inter,sans-serif;background:#f8f6f5;color:#9C8080;" onfocus="this.style.borderColor='#8B1A1A'" onblur="this.style.borderColor='rgba(74,28,28,0.15)'">
           <span style="font-size:12px;color:#9C8080;width:20px;">ha</span>
