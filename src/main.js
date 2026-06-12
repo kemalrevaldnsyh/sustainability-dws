@@ -4000,12 +4000,12 @@ window.showSddToast = function(message, type) {
     el = document.createElement('div');
     el.id = 'sdd-global-toast';
     el.setAttribute('role', 'status');
-    el.style.cssText = 'position:fixed;bottom:24px;right:24px;max-width:min(420px,calc(100vw - 48px));padding:14px 18px;border-radius:12px;font-size:13px;font-weight:500;z-index:999999;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:Inter,sans-serif;line-height:1.45;transition:opacity .25s;';
+    el.style.cssText = 'position:fixed;bottom:24px;right:24px;max-width:min(420px,calc(100vw - 48px));padding:14px 18px;border-radius:12px;font-size:13px;font-weight:500;z-index:100060;box-shadow:0 8px 32px rgba(0,0,0,0.18);font-family:Inter,sans-serif;line-height:1.45;transition:opacity .25s;';
     document.body.appendChild(el);
   }
-  el.style.background = type === 'error' ? '#fef2f2' : type === 'success' ? '#ecfdf5' : '#f1f5f9';
-  el.style.color = type === 'error' ? '#991b1b' : type === 'success' ? '#065f46' : '#0f172a';
-  el.style.border = type === 'error' ? '1px solid #fecaca' : type === 'success' ? '1px solid #a7f3d0' : '1px solid #e2e8f0';
+  el.style.background = type === 'error' ? '#fef2f2' : type === 'success' ? '#ecfdf5' : type === 'warning' ? '#fffbeb' : '#f1f5f9';
+  el.style.color = type === 'error' ? '#991b1b' : type === 'success' ? '#065f46' : type === 'warning' ? '#92400e' : '#0f172a';
+  el.style.border = type === 'error' ? '1px solid #fecaca' : type === 'success' ? '1px solid #a7f3d0' : type === 'warning' ? '1px solid #fcd34d' : '1px solid #e2e8f0';
   el.textContent = message;
   el.style.opacity = '1';
   clearTimeout(window.showSddToast._t);
@@ -4020,7 +4020,7 @@ window.showSddNotification = function(title, message, type) {
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'sdd-notification-overlay';
-    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:1000000;display:none;align-items:center;justify-content:center;padding:20px;';
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(15,23,42,0.4);z-index:100050;display:none;align-items:center;justify-content:center;padding:20px;';
     overlay.innerHTML = '<div id="sdd-notification-modal" style="width:min(520px,92vw);background:#fff;border-radius:16px;box-shadow:0 20px 48px rgba(0,0,0,0.28);border:1px solid #e5e7eb;overflow:hidden;">'
       + '<div id="sdd-notification-head" style="padding:14px 16px;font-size:14px;font-weight:700;"></div>'
       + '<div style="padding:14px 16px 18px;"><div id="sdd-notification-msg" style="font-size:13px;line-height:1.55;color:#111827;"></div>'
@@ -4040,6 +4040,10 @@ window.showSddNotification = function(title, message, type) {
       head.style.background = '#fef2f2';
       head.style.color = '#991b1b';
       head.style.borderBottom = '1px solid #fecaca';
+    } else if (type === 'warning') {
+      head.style.background = '#fffbeb';
+      head.style.color = '#92400e';
+      head.style.borderBottom = '1px solid #fcd34d';
     } else if (type === 'success') {
       head.style.background = '#ecfdf5';
       head.style.color = '#065f46';
@@ -10971,6 +10975,10 @@ function initDashboardApp() {
         if (wrap.dataset.allowAdd === '1' && v && wrap.dataset.lookupKind) {
           blPersistReferenceItem_(wrap.dataset.lookupKind, v);
         }
+        if (hidden.dataset.field === 'BUYER') {
+          if (!v) blRenderBuyerNblNotice_(null);
+          else blValidateBuyerField_();
+        }
       }
 
       trigger.addEventListener('click', function(e) {
@@ -11105,6 +11113,15 @@ function initDashboardApp() {
       + '<span class="bl-buyer-nbl-notice-tag">No Buy List</span>'
       + '<span class="bl-buyer-nbl-notice-text">Buyer matches riser <strong>' + escHtml(riserText) + '</strong>' + escHtml(extra) + '. You can still save this record.</span>'
       + '</div>';
+    if (typeof window.showSddNotification === 'function') {
+      window.showSddNotification(
+        'Buyer on No Buy List',
+        'Buyer matches riser ' + riserText + extra + '.\n\nYou can still save this record.',
+        'warning'
+      );
+    } else if (typeof window.showSddToast === 'function') {
+      window.showSddToast('Buyer matches NBL riser: ' + riserText, 'warning');
+    }
   }
 
   async function blValidateBuyerField_() {
@@ -11204,7 +11221,14 @@ function initDashboardApp() {
     if (!warnings.length) return;
     const company = blField_(src, ['COMPANY NAME']);
     const msg = (pickLabel || 'Selected') + ' · ' + company + ': ' + warnings.join(' · ');
-    if (typeof window.showSddToast === 'function') {
+    const hasNbl = warnings.indexOf('No Buy List') !== -1;
+    if (hasNbl && typeof window.showSddNotification === 'function') {
+      window.showSddNotification(
+        'No Buy List warning',
+        msg + '\n\nYou can still link this row and save the record.',
+        'warning'
+      );
+    } else if (typeof window.showSddToast === 'function') {
       window.showSddToast(msg, 'warning');
     } else {
       alert(msg);
@@ -16951,10 +16975,21 @@ function initDashboardApp() {
       applyNblCheckToScrForm_(result.status);
       persistNblCheckToSdd_(result);
       renderSddNblCheckBanner_(result);
+      var toastMsg = 'NBL check: ' + result.status + (result.matches.length
+        ? ' (' + result.matches.length + ' match' + (result.matches.length > 1 ? 'es' : '') + ')'
+        : '');
+      if (result.status === 'Yes') {
+        var nblDetail = result.matches.length
+          ? formatNblMatchesForSave_(result.matches)
+          : 'Supplier matched a name on the NBL or Unilever NBL registry.';
+        if (typeof window.showSddNotification === 'function') {
+          window.showSddNotification('On No Buy List', nblDetail, 'warning');
+        }
+      } else if (typeof window.showSddNotification === 'function') {
+        window.showSddNotification('Not on No Buy List', 'No matching Group, Company, or Mill in NBL registry.', 'success');
+      }
       if (typeof window.showSddToast === 'function') {
-        window.showSddToast('NBL check: ' + result.status + (result.matches.length
-          ? ' (' + result.matches.length + ' match' + (result.matches.length > 1 ? 'es' : '') + ')'
-          : ''), result.status === 'Yes' ? 'warning' : 'success');
+        window.showSddToast(toastMsg, result.status === 'Yes' ? 'warning' : 'success');
       }
     } catch (err) {
       var msg = (err && err.message) ? err.message : String(err);
