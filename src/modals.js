@@ -186,6 +186,18 @@ window.returnToFfbSupplierPicker_ = function() {
   window._openFfbSupplierPicker();
 };
 
+/** After TML save/delete/back — return to mill list (not type picker). */
+window.returnToTmlMillPicker_ = function() {
+  ['tml-form-overlay', 'ffb-form-overlay', 'ffb-pick-overlay', 'tml-result-overlay', 'ffb-result-overlay'].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = 'none';
+  });
+  var typeOverlay = document.getElementById('tml-type-overlay');
+  if (typeOverlay) typeOverlay.style.display = 'none';
+  window._tmlScreeningType = 'traceability';
+  window._openTmlMillPicker();
+};
+
 // ── TRACEABILITY: MILL PICKER ──────────────────────────────────
 window._openTmlMillPicker = function() {
   const mills = window._tmlMillNames || [];
@@ -462,7 +474,7 @@ window.saveTmlScreening = function() {
     date: new Date().toLocaleDateString('id-ID')
   };
 
-  window.returnToScreeningTypePicker_();
+  window.returnToTmlMillPicker_();
   if (typeof window.showSddToast === 'function') {
     window.showSddToast(
       'Saved temporarily. Click Save as Draft on the main form to send to Sheets.',
@@ -480,7 +492,7 @@ window.deleteTmlScreening = function() {
   if (!mill) { alert('Select a Mill first.'); return; }
   if (!confirm('Are you sure you want to delete screening for "' + mill + '"?')) return;
   if (window._tmlScreeningData) delete window._tmlScreeningData[mill];
-  window.returnToScreeningTypePicker_();
+  window.returnToTmlMillPicker_();
   if (typeof window.showSddToast === 'function') {
     window.showSddToast('TML screening for "' + mill + '" removed from memory.', 'info');
   }
