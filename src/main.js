@@ -3898,8 +3898,8 @@ import {
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbx155zUnCxqfG2YN51qrVcFr0FkDui6CuG76ohTyrk0OznVJQ0yQlAbOQEJr7fbY4sMBQ/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbx155zUnCxqfG2YN51qrVcFr0FkDui6CuG76ohTyrk0OznVJQ0yQlAbOQEJr7fbY4sMBQ';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzVGmX2jWp05-kb0ZBvxue-k9_UbkWBZaDT0_A9P__W5kW0lpisrGCubEf_p7PoBVR1DQ/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbzVGmX2jWp05-kb0ZBvxue-k9_UbkWBZaDT0_A9P__W5kW0lpisrGCubEf_p7PoBVR1DQ';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -5639,6 +5639,17 @@ function initDashboardApp() {
         const period = resolveSddPeriodFromMainRow_(sddMain);
         if (period.quarter) data['QUARTER'] = period.quarter;
         if (period.year) data['YEAR'] = period.year;
+        const supplierType = String(
+          sddMain['Supplier Type'] || sddMain['supplier_type'] || 'MILL'
+        ).trim().toUpperCase();
+        data['SOURCE TYPE'] = supplierType;
+        if (modalTaskLineId || supplierType === 'TRADER') {
+          if (!String(data['TRADER NAME'] || '').trim()) {
+            data['TRADER NAME'] = resolveTraderNameFromMain_(sddMain);
+          }
+        } else {
+          data['TRADER NAME'] = 'No Data';
+        }
       }
       const ttpRequired = ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID'];
       const ttpMissing = ttpRequired.filter(function(k) { return !String(data[k] || '').trim(); });
@@ -5694,6 +5705,8 @@ function initDashboardApp() {
             'COMPANY NAME': String(data['COMPANY NAME'] || '').trim(),
             'MILL NAME': String(data['MILL NAME'] || '').trim(),
             'UML ID': String(data['UML ID'] || '').trim(),
+            'QUARTER': String(data['QUARTER'] || '').trim(),
+            'YEAR': String(data['YEAR'] || '').trim(),
           };
           try {
             if (taskLineId) {
@@ -5722,8 +5735,7 @@ function initDashboardApp() {
               }
               delete _millTaskTraderCache[taskKey];
               if (typeof window.__ttpInvalidate === 'function') window.__ttpInvalidate();
-              const ttpPanel = document.getElementById('panel-ttm-ttp');
-              if (ttpPanel && ttpPanel.classList.contains('active') && typeof reloadTTPDataSoft_ === 'function') {
+              if (typeof reloadTTPDataSoft_ === 'function') {
                 await reloadTTPDataSoft_();
               }
               if (typeof window.showSddToast === 'function') {
@@ -5758,8 +5770,7 @@ function initDashboardApp() {
                 window._scrSavedRowsByKey[taskKey]['mill_added'] = 'true';
               }
               if (typeof window.__ttpInvalidate === 'function') window.__ttpInvalidate();
-              const ttpPanel = document.getElementById('panel-ttm-ttp');
-              if (ttpPanel && ttpPanel.classList.contains('active') && typeof reloadTTPDataSoft_ === 'function') {
+              if (typeof reloadTTPDataSoft_ === 'function') {
                 await reloadTTPDataSoft_();
               }
               const ttpSync = updRes && updRes.ttp_sync;
@@ -5771,8 +5782,13 @@ function initDashboardApp() {
                       + String(ttpSync.updated || 0) + ' updated.',
                     'success'
                   );
-                } else if (ttpSync && ttpSync.skipped && ttpSync.reason === 'supplier_type_not_mill_or_kcp') {
-                  window.showSddToast('Mill saved. Traceability sync applies to MILL/KCP only.', 'info');
+                } else if (ttpSync && ttpSync.skipped) {
+                  window.showSddToast(
+                    'Mill saved but Traceability sync skipped: ' + String(ttpSync.reason || 'unknown'),
+                    'error'
+                  );
+                } else if (!ttpSync) {
+                  window.showSddToast('Mill saved but Traceability sync did not run.', 'error');
                 }
               }
             }
@@ -20282,6 +20298,7 @@ function initDashboardApp() {
     const lat = toDot(tmlRow['TML - Latitude']);
     const lng = toDot(tmlRow['TML - Longitude']);
     return applySddPeriodToMillPayload_({
+      'SOURCE TYPE': 'TRADER',
       'TRADER NAME': resolveTraderNameFromMain_(mainRow),
       'GROUP NAME': String(tmlRow['TML - Company Group Name'] || mainRow['Group Name'] || mainRow['Grup Name'] || '').trim(),
       'COMPANY NAME': String(tmlRow['TML - Company Name'] || mainRow['Company Name'] || '').trim(),
@@ -20492,8 +20509,11 @@ function initDashboardApp() {
 
     // ── Mill Category: Mill first, KCP fallback ───────────────────────────────
     const millCat = String(r['Mill Category'] || r['KCP Category'] || '').trim();
+    const supplierType = String(r['Supplier Type'] || r['supplier_type'] || 'MILL').trim().toUpperCase();
 
     return applySddPeriodToMillPayload_({
+      'SOURCE TYPE':              supplierType,
+      'TRADER NAME':              supplierType === 'TRADER' ? resolveTraderNameFromMain_(r) : 'No Data',
       'GROUP NAME':               String(r['Group Name'] || r['Grup Name'] || '').trim(),
       'COMPANY NAME':             String(r['Company Name'] || '').trim(),
       'MILL NAME':                millName,

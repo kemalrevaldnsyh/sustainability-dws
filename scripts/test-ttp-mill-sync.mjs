@@ -25,6 +25,35 @@ function normalizeSddDecisionLabel_(raw) {
   return String(raw || '').trim().toUpperCase();
 }
 
+function readSddMainDecisionLabel_(main) {
+  const merged = main || {};
+  return normalizeSddDecisionLabel_(
+    merged['statusSDD'] || merged['statusSdd'] || merged['Status SDD'] ||
+    merged['statusBossDecision'] || merged['Status Boss Decision'] || ''
+  );
+}
+
+function readSddMainSupplierType_(main) {
+  return String(
+    (main || {})['supplier_type'] || (main || {})['Supplier Type'] || ''
+  ).trim().toUpperCase();
+}
+
+function millTtpPeriodPatch_(identity) {
+  const out = {};
+  const q = String((identity || {})['QUARTER'] || (identity || {})['Quarter'] || '').trim();
+  const y = String((identity || {})['YEAR'] || (identity || {})['Year'] || '').trim();
+  if (q) {
+    out['Quarter'] = q;
+    out['QUARTER'] = q;
+  }
+  if (y) {
+    out['Year'] = y;
+    out['YEAR'] = y;
+  }
+  return out;
+}
+
 function isMeaningfulSddFfbRow_(ffb) {
   if (!ffb || typeof ffb !== 'object') return false;
   if (String(ffb['is_deleted'] || '') === '1') return false;
@@ -40,7 +69,7 @@ function isBlankTtpCell_(v) {
 
 function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
   const identity = millIdentity || {};
-  const supplierType = String(main['supplier_type'] || main['Supplier Type'] || '').trim();
+  const supplierType = readSddMainSupplierType_(main);
   let millName = String(identity['MILL NAME'] || main['Mill Name'] || '').trim();
   if (!millName && /trader/i.test(supplierType)) {
     millName = String(identity['COMPANY NAME'] || main['Company Name'] || '').trim();
@@ -49,7 +78,7 @@ function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
   let lng = String(ffb['FFB - Longitude'] || '').trim();
   if (isBlankTtpCell_(lat)) lat = String(main['Latitude'] || '').trim();
   if (isBlankTtpCell_(lng)) lng = String(main['Longitude'] || '').trim();
-  return {
+  return Object.assign({
     'GROUP NAME': String(identity['GROUP NAME'] || main['Group Name'] || '').trim(),
     'COMPANY NAME': String(identity['COMPANY NAME'] || main['Company Name'] || '').trim(),
     'MILL NAME': millName,
@@ -63,7 +92,7 @@ function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
     'supplier_type': supplierType,
     'synced_at': now,
     'synced_by': user,
-  };
+  }, millTtpPeriodPatch_(identity));
 }
 
 function buildTtpMillHeaderPatch_(main, millIdentity, sid, user, now) {
@@ -245,6 +274,18 @@ assert(!shouldSyncTtp_({ ...mainKcp, supplier_type: 'TRADER' }, millIdentity).ok
 assert(!shouldSyncTtp_({ ...mainKcp, statusSDD: 'Hold' }, millIdentity).ok, 'not approved → skip');
 assert(!shouldSyncTtp_({ ...mainKcp, 'SCR - Screening Status': 'Draft' }, millIdentity).ok, 'not submitted → skip');
 
+console.log('\n3d. Decision read from legacy Status SDD column');
+assert(readSddMainDecisionLabel_({ 'Status SDD': 'Approved' }) === 'APPROVED', 'Status SDD alias → APPROVED');
+assert(readSddMainDecisionLabel_({ statusSdd: 'approve' }) === 'APPROVED', 'statusSdd alias → APPROVED');
+assertEq(readSddMainSupplierType_({ 'Supplier Type': 'mill' }), 'MILL', 'Supplier Type uppercased');
+
+console.log('\n3e. TTP patch includes period from mill identity');
+const periodIdentity = { ...millIdentity, 'QUARTER': 'Q2', 'YEAR': '2026' };
+const periodPatch = buildTtpPatchFromSddFfb_(mainKcp, ffb1, 'SID-1', 'tester', '2026-06-15', periodIdentity);
+assertEq(periodPatch['Quarter'], 'Q2', 'Quarter on TTP patch');
+assertEq(periodPatch['Year'], '2026', 'Year on TTP patch');
+assertEq(periodPatch['supplier_type'], 'KCP', 'supplier_type uppercased');
+
 console.log('\n3c. TRADER mirror patch (identity from Mill Onboarding, one row per TML line)');
 const mainTrader = {
   supplier_type: 'TRADER',
@@ -312,6 +353,12 @@ assert(gs.includes('trader_tml_'), 'trader mirror line id prefix in backend');
 assert(gs.includes('not_submitted'), 'backend checks SCR submitted status');
 assert(mainJs.includes("Fill Group Name, Company Name, Mill Name, and UML ID"), 'frontend validates before save');
 assert(mainJs.includes('Mill saved but Traceability sync failed'), 'frontend shows sync failure to user');
+assert(mainJs.includes("data['SOURCE TYPE'] = supplierType"), 'frontend sets SOURCE TYPE on task list save');
+assert(mainJs.includes("data['TRADER NAME'] = 'No Data'"), 'frontend sets TRADER NAME No Data for MILL/KCP');
+assert(mainJs.includes("'QUARTER': String(data['QUARTER']"), 'frontend passes QUARTER to TTP sync');
+assert(gs.includes('readSddMainDecisionLabel_'), 'backend reads legacy SDD decision columns');
+assert(gs.includes('ttpFindNextAppendRow_'), 'TTP sync inserts into active zone');
+assert(gs.includes('safeInsertRowAt_'), 'TTP sync uses safe insert');
 assert(mainJs.includes('mirrored to Traceability Data'), 'frontend trader success toast mentions TTP');
 
 console.log('\n6. Mill modal includes UML ID field');

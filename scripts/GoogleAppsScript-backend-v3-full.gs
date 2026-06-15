@@ -1678,6 +1678,40 @@ function normalizeSddDecisionLabel_(raw) {
   return String(raw || '').trim().toUpperCase();
 }
 
+/** Read SDD MAIN decision from any legacy/alternate column name. */
+function readSddMainDecisionLabel_(main) {
+  const merged = main || {};
+  return normalizeSddDecisionLabel_(
+    merged['statusSDD'] || merged['statusSdd'] || merged['Status SDD'] ||
+    merged['statusBossDecision'] || merged['Status Boss Decision'] || ''
+  );
+}
+
+function readSddMainScrStatus_(main) {
+  return String((main || {})['SCR - Screening Status'] || '').trim().toLowerCase();
+}
+
+function readSddMainSupplierType_(main) {
+  return String(
+    (main || {})['supplier_type'] || (main || {})['Supplier Type'] || ''
+  ).trim().toUpperCase();
+}
+
+function millTtpPeriodPatch_(identity) {
+  const out = {};
+  const q = String((identity || {})['QUARTER'] || (identity || {})['Quarter'] || '').trim();
+  const y = String((identity || {})['YEAR'] || (identity || {})['Year'] || '').trim();
+  if (q) {
+    out['Quarter'] = q;
+    out['QUARTER'] = q;
+  }
+  if (y) {
+    out['Year'] = y;
+    out['YEAR'] = y;
+  }
+  return out;
+}
+
 function readContactSupplierRows_() {
   const ws = ensureContactSupplierHeaders_();
   const range = ws.getDataRange();
@@ -1937,11 +1971,16 @@ function findTtpRowBySyncKeys_(rows, sid, lineId, patch) {
 }
 
 function appendTtpRow_(ws, headers, obj) {
-  const row = headers.map(function(h) {
+  const hdr = detectTtpHeaderRow_(ws);
+  const headerRow = hdr && hdr.headerRow ? hdr.headerRow : 1;
+  const hdrs = headers && headers.length ? headers : (hdr && hdr.headers ? hdr.headers : TTP_HEADERS.slice());
+  const newRow = hdrs.map(function(h) {
     return obj[h] !== undefined && obj[h] !== null ? obj[h] : '';
   });
-  forceCoordStrings_(headers, row);
-  ws.appendRow(row);
+  forceCoordStrings_(hdrs, newRow);
+  const targetRow = ttpFindNextAppendRow_(ws, hdrs, headerRow);
+  safeInsertRowAt_(ws, hdrs, newRow, targetRow);
+  return targetRow;
 }
 
 /** Add multiple TTP rows in one request (Dealer → one row per village, consecutive active-zone rows). */
@@ -1993,7 +2032,7 @@ function mergeTtpPreserveMonitoring_(existingRow, patch) {
 
 function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
   const identity = millIdentity || {};
-  const supplierType = String(main['supplier_type'] || main['Supplier Type'] || '').trim();
+  const supplierType = readSddMainSupplierType_(main);
   let millName = String(identity['MILL NAME'] || main['Mill Name'] || '').trim();
   if (!millName && /trader/i.test(supplierType)) {
     millName = String(identity['COMPANY NAME'] || main['Company Name'] || '').trim();
@@ -2004,7 +2043,7 @@ function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
   if (isBlankTtpCell_(lat)) lat = String(main['Latitude'] || '').trim();
   if (isBlankTtpCell_(lng)) lng = String(main['Longitude'] || '').trim();
 
-  return {
+  return Object.assign({
     'GROUP NAME'              : String(identity['GROUP NAME'] || main['Group Name'] || '').trim(),
     'COMPANY NAME'            : String(identity['COMPANY NAME'] || main['Company Name'] || '').trim(),
     'MILL NAME'               : millName,
@@ -2031,17 +2070,17 @@ function buildTtpPatchFromSddFfb_(main, ffb, sid, user, now, millIdentity) {
     'supplier_type'           : supplierType,
     'synced_at'               : now,
     'synced_by'               : user,
-  };
+  }, millTtpPeriodPatch_(identity));
 }
 
 function buildTtpMillHeaderPatch_(main, millIdentity, sid, user, now) {
   const identity = millIdentity || {};
-  const supplierType = String(main['supplier_type'] || main['Supplier Type'] || '').trim();
+  const supplierType = readSddMainSupplierType_(main);
   let millName = String(identity['MILL NAME'] || main['Mill Name'] || '').trim();
   if (!millName && /trader/i.test(supplierType)) {
     millName = String(identity['COMPANY NAME'] || main['Company Name'] || '').trim();
   }
-  return {
+  return Object.assign({
     'GROUP NAME'    : String(identity['GROUP NAME'] || main['Group Name'] || '').trim(),
     'COMPANY NAME'  : String(identity['COMPANY NAME'] || main['Company Name'] || '').trim(),
     'MILL NAME'     : millName,
@@ -2051,7 +2090,7 @@ function buildTtpMillHeaderPatch_(main, millIdentity, sid, user, now) {
     'supplier_type' : supplierType,
     'synced_at'     : now,
     'synced_by'     : user,
-  };
+  }, millTtpPeriodPatch_(identity));
 }
 
 function removeTtpMillHeaderStub_(ttpResult, sid) {
@@ -2085,6 +2124,10 @@ function sanitizeMillTtpIdentity_(raw) {
   if (!out['COMPANY NAME']) throw new Error('COMPANY NAME is required for Traceability sync');
   if (!out['MILL NAME'])    throw new Error('MILL NAME is required for Traceability sync');
   if (!out['UML ID'])       throw new Error('UML ID is required for Traceability sync');
+  const q = clip(raw['QUARTER'] || raw['Quarter']);
+  const y = clip(raw['YEAR'] || raw['Year']);
+  if (q) out['QUARTER'] = q;
+  if (y) out['YEAR'] = y;
   return out;
 }
 
@@ -2105,7 +2148,7 @@ function sanitizeMillTtpMirrorFromOnboarding_(raw) {
 
 function buildTtpTraderMillMirrorPatch_(millIdentity, sid, tmlLineId, user, now) {
   const identity = millIdentity || {};
-  return {
+  return Object.assign({
     'GROUP NAME'    : String(identity['GROUP NAME'] || '').trim(),
     'COMPANY NAME'  : String(identity['COMPANY NAME'] || '').trim(),
     'MILL NAME'     : String(identity['MILL NAME'] || '').trim(),
@@ -2117,7 +2160,7 @@ function buildTtpTraderMillMirrorPatch_(millIdentity, sid, tmlLineId, user, now)
     'supplier_type' : 'TRADER',
     'synced_at'     : now,
     'synced_by'     : user,
-  };
+  }, millTtpPeriodPatch_(identity));
 }
 
 /**
@@ -2130,19 +2173,17 @@ function syncTtpMirrorTraderMillFromOnboarding_(sid, tmlLineId, millIdentity, ma
   if (!tmlLineId) return { synced: false, skipped: true, reason: 'missing_tml_line_id' };
 
   const merged = mainObj || {};
-  const decision = normalizeSddDecisionLabel_(
-    merged['statusSDD'] || merged['statusBossDecision'] || ''
-  );
+  const decision = readSddMainDecisionLabel_(merged);
   if (decision !== 'APPROVED') {
     return { synced: false, skipped: true, reason: 'not_approved', decision: decision };
   }
 
-  const scrSt = String(merged['SCR - Screening Status'] || '').trim().toLowerCase();
+  const scrSt = readSddMainScrStatus_(merged);
   if (scrSt !== 'submitted') {
     return { synced: false, skipped: true, reason: 'not_submitted', scr_status: scrSt };
   }
 
-  const supplierType = String(merged['supplier_type'] || merged['Supplier Type'] || '').trim().toUpperCase();
+  const supplierType = readSddMainSupplierType_(merged);
   if (supplierType !== 'TRADER') {
     return { synced: false, skipped: true, reason: 'not_trader', supplier_type: supplierType };
   }
@@ -2160,7 +2201,8 @@ function syncTtpMirrorTraderMillFromOnboarding_(sid, tmlLineId, millIdentity, ma
       patchTtpRow_(ttpResult.ws, ttpResult.headers, hit._sheetRow, mergedPatch);
       updated++;
     } else {
-      appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+      const newRow = appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+      ttpResult.rows.push(Object.assign({ _row: newRow }, patch));
       inserted++;
     }
   } catch (err) {
@@ -2215,19 +2257,17 @@ function syncTtpFromMillOnboarding_(sid, millIdentity, mainObj, user, now) {
   if (!sid) return { synced: false, skipped: true, reason: 'missing_submission_id' };
 
   const merged = mainObj || {};
-  const decision = normalizeSddDecisionLabel_(
-    merged['statusSDD'] || merged['statusBossDecision'] || ''
-  );
+  const decision = readSddMainDecisionLabel_(merged);
   if (decision !== 'APPROVED') {
     return { synced: false, skipped: true, reason: 'not_approved', decision: decision };
   }
 
-  const scrSt = String(merged['SCR - Screening Status'] || '').trim().toLowerCase();
+  const scrSt = readSddMainScrStatus_(merged);
   if (scrSt !== 'submitted') {
     return { synced: false, skipped: true, reason: 'not_submitted', scr_status: scrSt };
   }
 
-  const supplierType = String(merged['supplier_type'] || merged['Supplier Type'] || '').trim().toUpperCase();
+  const supplierType = readSddMainSupplierType_(merged);
   if (supplierType !== 'MILL' && supplierType !== 'KCP') {
     return { synced: false, skipped: true, reason: 'supplier_type_not_mill_or_kcp', supplier_type: supplierType };
   }
@@ -2255,8 +2295,8 @@ function syncTtpFromMillOnboarding_(sid, millIdentity, mainObj, user, now) {
           Object.assign(hit.row, mergedPatch);
           updated++;
         } else {
-          appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
-          ttpResult.rows.push(Object.assign({ _row: ttpResult.ws.getLastRow() }, patch));
+          const newRow = appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+          ttpResult.rows.push(Object.assign({ _row: newRow }, patch));
           inserted++;
         }
       } catch (err) {
@@ -2276,7 +2316,8 @@ function syncTtpFromMillOnboarding_(sid, millIdentity, mainObj, user, now) {
         Object.assign(hit.row, mergedPatch);
         updated++;
       } else {
-        appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+        const newRow = appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+        ttpResult.rows.push(Object.assign({ _row: newRow }, patch));
         inserted++;
       }
     } catch (err) {
