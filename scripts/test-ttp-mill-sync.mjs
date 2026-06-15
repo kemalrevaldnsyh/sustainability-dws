@@ -115,6 +115,63 @@ function buildTtpMillHeaderPatch_(main, millIdentity, sid, user, now) {
   };
 }
 
+function isMeaningfulTmlRow_(tml) {
+  if (!tml || typeof tml !== 'object') return false;
+  if (String(tml['is_deleted'] || '') === '1') return false;
+  const mill = String(tml['TML - Mill Name'] || '').trim();
+  const company = String(tml['TML - Company Name'] || '').trim();
+  const uml = String(tml['TML - UML ID'] || '').trim();
+  return !!(mill || company || uml);
+}
+
+function normalizeTtpMatchKey_(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function tmlMatchKeys_(tml) {
+  const keys = [];
+  ['TML - Mill Name', 'TML - Company Name', 'TML - Company Group Name'].forEach(function(k) {
+    const v = normalizeTtpMatchKey_(tml[k]);
+    if (v && keys.indexOf(v) === -1) keys.push(v);
+  });
+  return keys;
+}
+
+function resolveFfbEffectiveMillNames_(ffbRows) {
+  let carry = '';
+  return (ffbRows || []).filter(isMeaningfulSddFfbRow_).map(function(ffb) {
+    const raw = String(ffb['FFB - Mill Name'] || '').trim();
+    if (raw) carry = raw;
+    return { ffb: ffb, effectiveMill: carry };
+  });
+}
+
+function ffbRowsForTmlLine_(tmlRows, ffbRows, lineId) {
+  lineId = String(lineId || '').trim();
+  const orderedTml = (tmlRows || []).filter(isMeaningfulTmlRow_);
+  const targetIdx = orderedTml.findIndex(function(t) {
+    return String(t['line_id'] || '').trim() === lineId;
+  });
+  if (targetIdx < 0) return [];
+
+  const targetKeys = tmlMatchKeys_(orderedTml[targetIdx]);
+  if (!targetKeys.length) return [];
+
+  const resolved = resolveFfbEffectiveMillNames_(ffbRows);
+  return resolved.filter(function(entry) {
+    const eff = normalizeTtpMatchKey_(entry.effectiveMill);
+    if (!eff) return false;
+    return targetKeys.indexOf(eff) !== -1;
+  }).map(function(entry) { return entry.ffb; });
+}
+
+function resolveTraderNameFromMain_(mainRow) {
+  if (!mainRow) return '';
+  return String(
+    mainRow['Group Name'] || mainRow['Grup Name'] || mainRow['Company Name'] || ''
+  ).trim();
+}
+
 function shouldSyncTtp_(mainObj, millIdentity) {
   const decision = normalizeSddDecisionLabel_(
     mainObj['statusSDD'] || mainObj['statusBossDecision'] || ''
@@ -326,6 +383,36 @@ console.log('\n4. Meaningful FFB filter');
 assert(isMeaningfulSddFfbRow_(ffb1), 'FFB with supplier name is meaningful');
 assert(!isMeaningfulSddFfbRow_({ 'FFB - Supplier Name': '', 'FFB - Supplier Group Name': '' }), 'empty FFB skipped');
 
+console.log('\n4b. FFB rows matched to TML line (Mill List A → Traceability B)');
+const tmlRows = [
+  { line_id: 'tml-1', 'TML - Company Group Name': 'CHE GRUP', 'TML - Company Name': 'MITRASARI PRIMA', 'TML - Mill Name': 'SEGATI', 'TML - UML ID': 'PO0034234320' },
+  { line_id: 'tml-2', 'TML - Company Group Name': 'KPN PLANTATION', 'TML - Company Name': 'JATIM JAYA PERKASA', 'TML - Mill Name': 'MERLUNG', 'TML - UML ID': 'PO1304013031' },
+];
+const ffbRows = [
+  { line_id: 'ffb-1', 'FFB - Mill Name': 'MITRASARI PRIMA', 'FFB - Supplier Name': 'TOGAR' },
+  { line_id: 'ffb-2', 'FFB - Mill Name': '', 'FFB - Supplier Name': 'BUYUNG' },
+  { line_id: 'ffb-3', 'FFB - Mill Name': '', 'FFB - Supplier Name': 'CP' },
+  { line_id: 'ffb-4', 'FFB - Mill Name': 'JATIM JAYA PERKASA', 'FFB - Supplier Name': 'JATIM JAYA PERKASA' },
+];
+const segatiFfb = ffbRowsForTmlLine_(tmlRows, ffbRows, 'tml-1');
+assertEq(segatiFfb.length, 3, 'SEGATI mill gets 3 FFB rows (carry-forward blank mill name)');
+assertEq(segatiFfb[0]['FFB - Supplier Name'], 'TOGAR', 'first FFB TOGAR');
+const merlungFfb = ffbRowsForTmlLine_(tmlRows, ffbRows, 'tml-2');
+assertEq(merlungFfb.length, 1, 'MERLUNG mill gets 1 FFB row');
+assertEq(merlungFfb[0]['FFB - Supplier Name'], 'JATIM JAYA PERKASA', 'MERLUNG FFB matched by company name');
+
+console.log('\n4c. TRADER NAME from SDD header Group Name (not Company Name)');
+assertEq(
+  resolveTraderNameFromMain_({ 'Group Name': 'PT PASIFIK AGRO SENTOSA', 'Company Name': 'PT CIPTA USAHA SEJATI' }),
+  'PT PASIFIK AGRO SENTOSA',
+  'TRADER NAME prefers header Group Name'
+);
+assertEq(
+  resolveTraderNameFromMain_({ 'Grup Name': 'PASIFIK AGRO', 'Company Name': 'OTHER CO' }),
+  'PASIFIK AGRO',
+  'TRADER NAME falls back to Grup Name alias'
+);
+
 console.log('\n5. Source file static checks');
 const gs = readFileSync(join(ROOT, 'scripts/GoogleAppsScript-backend-v3-full.gs'), 'utf8');
 const mainJs = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
@@ -333,6 +420,14 @@ const mainJs = readFileSync(join(ROOT, 'src/main.js'), 'utf8');
 assert(!gs.includes('syncTtpFromApprovedSubmission_'), 'approve-time TTP sync removed from backend');
 assert(gs.includes('syncTtpFromMillOnboarding_'), 'mill onboarding TTP sync present in backend');
 assert(gs.includes('syncTtpMirrorTraderMillFromOnboarding_'), 'trader mirror TTP sync present in backend');
+assert(gs.includes('syncTtpFromMillOnboardingForTmlLine_'), 'per-TML MILL/KCP TTP sync present in backend');
+assert(gs.includes('mill_ttp_mill_tml_sync'), 'audit log for per-TML MILL sync');
+assert(gs.includes('MILL/KCP cannot set mill_added=true directly when mill list exists'), 'MILL/KCP blocked from bulk mill_added when TML exists');
+assert(gs.includes('mill_added_line for MILL/KCP requires mill_ttp_sync'), 'MILL/KCP line requires TTP sync');
+assert(gs.includes('ffbRowsForTmlLine_'), 'FFB-to-TML matching in backend');
+assert(gs.includes('mill_tml_'), 'per-TML header line id prefix in backend');
+assert(mainJs.includes('renderMillTaskGroupedCard_'), 'frontend grouped task list for MILL/KCP');
+assert(mainJs.includes("'TML - Company Group Name'"), 'TML group name used for mill payload (not SDD_MAIN)');
 assert(gs.includes('payload.mill_ttp_sync'), 'updateSubmission accepts mill_ttp_sync');
 assert(!gs.includes('syncTtpFromApprovedSubmission_(sid'), 'no call to old approve sync');
 
@@ -354,6 +449,8 @@ assert(gs.includes('not_submitted'), 'backend checks SCR submitted status');
 assert(mainJs.includes("Fill Group Name, Company Name, Mill Name, and UML ID"), 'frontend validates before save');
 assert(mainJs.includes('Mill saved but Traceability sync failed'), 'frontend shows sync failure to user');
 assert(mainJs.includes("data['SOURCE TYPE'] = supplierType"), 'frontend sets SOURCE TYPE on task list save');
+assert(mainJs.includes("data['TRADER NAME'] = resolveTraderNameFromMain_(sddMain)"), 'TRADER task list save forces header trader name');
+assert(mainJs.includes("mainRow['Group Name'] || mainRow['Grup Name']"), 'TRADER NAME resolves from header group');
 assert(mainJs.includes("data['TRADER NAME'] = 'No Data'"), 'frontend sets TRADER NAME No Data for MILL/KCP');
 assert(mainJs.includes("'QUARTER': String(data['QUARTER']"), 'frontend passes QUARTER to TTP sync');
 assert(gs.includes('readSddMainDecisionLabel_'), 'backend reads legacy SDD decision columns');

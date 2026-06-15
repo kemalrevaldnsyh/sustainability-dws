@@ -5635,29 +5635,27 @@ function initDashboardApp() {
     });
     if (modalSheet === 'mill' && modalTaskKey) {
       const sddMain = window._scrSavedRowsByKey && window._scrSavedRowsByKey[modalTaskKey];
+      const supplierType = sddMain
+        ? String(sddMain['Supplier Type'] || sddMain['supplier_type'] || 'MILL').trim().toUpperCase()
+        : 'MILL';
       if (sddMain) {
         const period = resolveSddPeriodFromMainRow_(sddMain);
         if (period.quarter) data['QUARTER'] = period.quarter;
         if (period.year) data['YEAR'] = period.year;
-        const supplierType = String(
-          sddMain['Supplier Type'] || sddMain['supplier_type'] || 'MILL'
-        ).trim().toUpperCase();
         data['SOURCE TYPE'] = supplierType;
-        if (modalTaskLineId || supplierType === 'TRADER') {
-          if (!String(data['TRADER NAME'] || '').trim()) {
-            data['TRADER NAME'] = resolveTraderNameFromMain_(sddMain);
-          }
+        if (supplierType === 'TRADER') {
+          data['TRADER NAME'] = resolveTraderNameFromMain_(sddMain);
         } else {
           data['TRADER NAME'] = 'No Data';
         }
       }
       const ttpRequired = ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID'];
       const ttpMissing = ttpRequired.filter(function(k) { return !String(data[k] || '').trim(); });
-      if (modalTaskLineId && !String(data['TRADER NAME'] || '').trim()) {
+      if (modalTaskLineId && supplierType === 'TRADER' && !String(data['TRADER NAME'] || '').trim()) {
         ttpMissing.push('TRADER NAME');
       }
       if (ttpMissing.length) {
-        const msg = modalTaskLineId
+        const msg = (modalTaskLineId && supplierType === 'TRADER')
           ? 'Fill Trader Name, Group Name, Company Name, Mill Name, and UML ID before saving from Task List.'
           : 'Fill Group Name, Company Name, Mill Name, and UML ID before saving from Task List.';
         throw new Error(msg);
@@ -5744,17 +5742,27 @@ function initDashboardApp() {
                   ? String(lineRes.mill_added_line.completed_lines || 0) + '/' + String(lineRes.mill_added_line.total_mills || 0)
                   : '';
                 const ttpSync = lineRes && lineRes.ttp_sync;
+                const taskSupplierType = String(
+                  (window._scrSavedRowsByKey && window._scrSavedRowsByKey[taskKey])
+                    ? (window._scrSavedRowsByKey[taskKey]['Supplier Type']
+                      || window._scrSavedRowsByKey[taskKey]['supplier_type'] || 'MILL')
+                    : 'MILL'
+                ).trim().toUpperCase();
                 if (ttpSync && ttpSync.synced) {
                   window.showSddToast(
                     done
-                      ? 'Trader mills saved — all ' + prog + ' mirrored to Traceability Data.'
+                      ? (taskSupplierType === 'TRADER'
+                        ? 'Trader mills saved — all ' + prog + ' mirrored to Traceability Data.'
+                        : 'All mills saved — ' + prog + ' synced to Traceability Data.')
                       : 'Mill saved to Mill Onboarding and Traceability (' + prog + '). Continue remaining mills.',
                     'success'
                   );
                 } else {
                   window.showSddToast(
                     done
-                      ? 'Trader mills saved — all ' + prog + ' added to Mill Onboarding.'
+                      ? (taskSupplierType === 'TRADER'
+                        ? 'Trader mills saved — all ' + prog + ' added to Mill Onboarding.'
+                        : 'All mills saved — ' + prog + ' added to Mill Onboarding.')
                       : 'Mill saved to Mill Onboarding (' + prog + '). Continue remaining mills in Task List.',
                     'success'
                   );
@@ -20277,7 +20285,9 @@ function initDashboardApp() {
 
   function resolveTraderNameFromMain_(mainRow) {
     if (!mainRow) return '';
-    return String(mainRow['Company Name'] || mainRow['Group Name'] || '').trim();
+    return String(
+      mainRow['Group Name'] || mainRow['Grup Name'] || mainRow['Company Name'] || ''
+    ).trim();
   }
 
   function isApprovedSubmittedSddRow_(r) {
@@ -20302,11 +20312,14 @@ function initDashboardApp() {
     const toDot = function(v) { return String(v || '').split(',').join('.'); };
     const lat = toDot(tmlRow['TML - Latitude']);
     const lng = toDot(tmlRow['TML - Longitude']);
+    const supplierType = String(
+      mainRow['Supplier Type'] || mainRow['supplier_type'] || 'MILL'
+    ).trim().toUpperCase();
     return applySddPeriodToMillPayload_({
-      'SOURCE TYPE': 'TRADER',
-      'TRADER NAME': resolveTraderNameFromMain_(mainRow),
-      'GROUP NAME': String(tmlRow['TML - Company Group Name'] || mainRow['Group Name'] || mainRow['Grup Name'] || '').trim(),
-      'COMPANY NAME': String(tmlRow['TML - Company Name'] || mainRow['Company Name'] || '').trim(),
+      'SOURCE TYPE': supplierType,
+      'TRADER NAME': supplierType === 'TRADER' ? resolveTraderNameFromMain_(mainRow) : 'No Data',
+      'GROUP NAME': String(tmlRow['TML - Company Group Name'] || '').trim(),
+      'COMPANY NAME': String(tmlRow['TML - Company Name'] || '').trim(),
       'MILL NAME': String(tmlRow['TML - Mill Name'] || '').trim(),
       'UML ID': String(tmlRow['TML - UML ID'] || '').trim(),
       'COORDINATES': [lat, lng].filter(Boolean).join(', '),
@@ -20349,13 +20362,23 @@ function initDashboardApp() {
       + '</div>';
   }
 
-  function renderMillTaskTraderGroupCard_(key, r, mills, doneLines) {
-    const traderName = resolveTraderNameFromMain_(r) || String(r['Group Name'] || '—').trim();
+  function renderMillTaskGroupedCard_(key, r, mills, doneLines, supplierType) {
+    supplierType = String(supplierType || 'TRADER').trim().toUpperCase();
     const updRaw = String(r['updated_at'] || r['SCR - Last Updated'] || '').trim();
     const updDate = updRaw ? new Date(updRaw).toLocaleDateString('id-ID', { day:'2-digit', month:'short', year:'numeric' }) : '';
     const pendingCount = mills.filter(function(m) {
       return doneLines.indexOf(String(m['line_id'] || '').trim()) === -1;
     }).length;
+
+    let headLabel;
+    if (supplierType === 'TRADER') {
+      headLabel = resolveTraderNameFromMain_(r) || String(r['Group Name'] || '—').trim();
+    } else if (mills.length === 1) {
+      const m = mills[0];
+      headLabel = String(m['TML - Company Group Name'] || m['TML - Company Name'] || 'Mill List').trim();
+    } else {
+      headLabel = 'Mill List (' + mills.length + ' mills)';
+    }
 
     let millsHtml = '';
     if (!mills.length) {
@@ -20364,10 +20387,11 @@ function initDashboardApp() {
       millsHtml = mills.map(function(m) {
         const lineId = String(m['line_id'] || '').trim();
         const millName = String(m['TML - Mill Name'] || '—').trim();
+        const group = String(m['TML - Company Group Name'] || '').trim();
         const company = String(m['TML - Company Name'] || '').trim();
         const uml = String(m['TML - UML ID'] || '').trim();
         const done = doneLines.indexOf(lineId) !== -1;
-        const meta = [company, uml ? 'UML ' + uml : ''].filter(Boolean).join(' · ');
+        const meta = [group, company, uml ? 'UML ' + uml : ''].filter(Boolean).join(' · ');
         return '<div class="mill-task-trader-mill' + (done ? ' is-done' : '') + '">'
           + '<div class="mill-task-trader-mill-info">'
           + '<div class="mill-task-trader-mill-name">' + escapeHtmlMin(millName) + (done ? ' <span class="mill-task-done-badge">✓</span>' : '') + '</div>'
@@ -20376,7 +20400,7 @@ function initDashboardApp() {
           + (done ? '' : '<button type="button" class="mill-task-card-btn mill-task-trader-mill-btn"'
             + ' data-task-key="' + escapeHtmlMin(key) + '"'
             + ' data-task-line-id="' + escapeHtmlMin(lineId) + '"'
-            + ' data-task-group="' + escapeHtmlMin(traderName) + '">+ Add to Mill</button>')
+            + ' data-task-group="' + escapeHtmlMin(headLabel) + '">+ Add to Mill</button>')
           + '</div>';
       }).join('');
     }
@@ -20387,8 +20411,8 @@ function initDashboardApp() {
       + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.2" stroke-linecap="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>'
       + '</div>'
       + '<div class="mill-task-card-info">'
-      + '<div class="mill-task-card-group">' + escapeHtmlMin(traderName) + '</div>'
-      + '<div class="mill-task-card-meta">TRADER'
+      + '<div class="mill-task-card-group">' + escapeHtmlMin(headLabel) + '</div>'
+      + '<div class="mill-task-card-meta">' + escapeHtmlMin(supplierType)
       + (mills.length ? ' · ' + mills.length + ' mill' + (mills.length === 1 ? '' : 's') : '')
       + (pendingCount ? ' · ' + pendingCount + ' pending' : ' · complete')
       + (updDate ? ' · Submitted ' + escapeHtmlMin(updDate) : '')
@@ -20397,6 +20421,10 @@ function initDashboardApp() {
       + '</div>'
       + '<div class="mill-task-trader-mills">' + millsHtml + '</div>'
       + '</div>';
+  }
+
+  function renderMillTaskTraderGroupCard_(key, r, mills, doneLines) {
+    return renderMillTaskGroupedCard_(key, r, mills, doneLines, 'TRADER');
   }
 
   async function renderMillTaskList() {
@@ -20408,8 +20436,6 @@ function initDashboardApp() {
     const rows = window._scrSavedRowsByKey || {};
     const candidates = Object.entries(rows).filter(function([, r]) {
       if (!isApprovedSubmittedSddRow_(r)) return false;
-      const tp = String(r['Supplier Type'] || r['supplier_type'] || '').trim().toUpperCase();
-      if (tp === 'TRADER') return String(r['mill_added'] || '').toLowerCase() !== 'true';
       return String(r['mill_added'] || '').toLowerCase() !== 'true';
     }).sort(function([, a], [, b]) {
       return new Date(b['updated_at'] || 0) - new Date(a['updated_at'] || 0);
@@ -20418,43 +20444,53 @@ function initDashboardApp() {
     body.innerHTML = '<div class="mill-task-loading">Loading task list…</div>';
     if (empty) empty.style.display = 'none';
 
-    const standard = [];
-    const traders = [];
-    candidates.forEach(function(entry) {
-      const tp = String(entry[1]['Supplier Type'] || entry[1]['supplier_type'] || '').trim().toUpperCase();
-      if (tp === 'TRADER') traders.push(entry);
-      else standard.push(entry);
-    });
+    let pendingMillCount = 0;
+    const cards = [];
 
-    let pendingMillCount = standard.length;
-    const traderCards = [];
-    for (let i = 0; i < traders.length; i++) {
-      const key = traders[i][0];
-      const r = traders[i][1];
-      try {
-        const pack = await fetchTraderTaskMills_(key);
-        const doneLines = parseMillAddedLines_(r['mill_added_lines']);
-        const pending = (pack.mills || []).filter(function(m) {
-          return doneLines.indexOf(String(m['line_id'] || '').trim()) === -1;
-        });
-        pendingMillCount += pending.length;
-        if (pending.length) traderCards.push(renderMillTaskTraderGroupCard_(key, r, pack.mills, doneLines));
-      } catch (e) {
-        traderCards.push(
-          '<div class="mill-task-card mill-task-card-error">'
-          + '<div class="mill-task-card-info"><div class="mill-task-card-group">'
-          + escapeHtmlMin(resolveTraderNameFromMain_(r) || 'TRADER')
-          + '</div><div class="mill-task-card-meta">Failed to load mill list: '
-          + escapeHtmlMin((e && e.message) ? e.message : String(e))
-          + '</div></div></div>'
-        );
+    for (let i = 0; i < candidates.length; i++) {
+      const key = candidates[i][0];
+      const r = candidates[i][1];
+      const tp = String(r['Supplier Type'] || r['supplier_type'] || '').trim().toUpperCase();
+
+      if (tp === 'TRADER' || tp === 'MILL' || tp === 'KCP') {
+        try {
+          const pack = await fetchTraderTaskMills_(key);
+          const doneLines = parseMillAddedLines_(r['mill_added_lines']);
+          const mills = pack.mills || [];
+          const pending = mills.filter(function(m) {
+            return doneLines.indexOf(String(m['line_id'] || '').trim()) === -1;
+          });
+
+          if (mills.length > 0) {
+            pendingMillCount += pending.length;
+            if (pending.length) {
+              cards.push(renderMillTaskGroupedCard_(key, r, mills, doneLines, tp));
+            }
+          } else if (tp === 'MILL' || tp === 'KCP') {
+            pendingMillCount += 1;
+            cards.push(renderMillTaskStandardCard_(key, r));
+          }
+        } catch (e) {
+          const errLabel = tp === 'TRADER'
+            ? (resolveTraderNameFromMain_(r) || 'TRADER')
+            : String(r['Group Name'] || r['Company Name'] || tp).trim();
+          cards.push(
+            '<div class="mill-task-card mill-task-card-error">'
+            + '<div class="mill-task-card-info"><div class="mill-task-card-group">'
+            + escapeHtmlMin(errLabel)
+            + '</div><div class="mill-task-card-meta">Failed to load mill list: '
+            + escapeHtmlMin((e && e.message) ? e.message : String(e))
+            + '</div></div></div>'
+          );
+          pendingMillCount += 1;
+        }
+      } else {
         pendingMillCount += 1;
+        cards.push(renderMillTaskStandardCard_(key, r));
       }
     }
 
-    const html = standard.map(function(entry) {
-      return renderMillTaskStandardCard_(entry[0], entry[1]);
-    }).concat(traderCards).join('');
+    const html = cards.join('');
 
     if (countEl) {
       countEl.textContent = pendingMillCount + ' pending mill' + (pendingMillCount === 1 ? '' : 's');

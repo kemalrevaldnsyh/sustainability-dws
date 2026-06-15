@@ -493,9 +493,15 @@ const TTP_HEADERS = [
 const TTP_MILL_HEADER_LINE_ID = '__mill_header__';
 /** Per-mill TTP row id prefix for TRADER (mirrors Mill Onboarding, one row per TML line). */
 const TTP_TRADER_TML_LINE_PREFIX = 'trader_tml_';
+/** Per-mill TTP header stub prefix for MILL/KCP (one TML line, FFB rows use real ffb line_id). */
+const TTP_MILL_TML_LINE_PREFIX = 'mill_tml_';
 
 function ttpTraderMirrorLineId_(tmlLineId) {
   return TTP_TRADER_TML_LINE_PREFIX + String(tmlLineId || '').trim();
+}
+
+function ttpMillTmlHeaderLineId_(tmlLineId) {
+  return TTP_MILL_TML_LINE_PREFIX + String(tmlLineId || '').trim();
 }
 
 /** TTP columns filled by monitoring team — not overwritten on SDD re-sync when already set. */
@@ -1845,7 +1851,7 @@ function parseMillAddedLines_(raw) {
 }
 
 /**
- * Track per-mill completion for TRADER Task List (one submission, many mills).
+ * Track per-mill completion for Task List (one submission, many TML rows).
  * When all meaningful TML rows are marked, sets mill_added=true on MAIN.
  */
 function applyMillAddedLine_(sid, lineId, mainHit, user, now) {
@@ -1854,8 +1860,8 @@ function applyMillAddedLine_(sid, lineId, mainHit, user, now) {
   if (!sid || !lineId) throw new Error('mill_added_line requires submission_id and line_id');
 
   const supplierType = String(mainHit.obj['supplier_type'] || mainHit.obj['Supplier Type'] || '').trim().toUpperCase();
-  if (supplierType !== 'TRADER') {
-    throw new Error('mill_added_line is only valid for TRADER submissions');
+  if (supplierType !== 'TRADER' && supplierType !== 'MILL' && supplierType !== 'KCP') {
+    throw new Error('mill_added_line is only valid for TRADER, MILL, or KCP submissions');
   }
 
   const tmlRows = findChildRows_('sddMill', sid)
@@ -2334,6 +2340,157 @@ function syncTtpFromMillOnboarding_(sid, millIdentity, mainObj, user, now) {
     inserted: inserted,
     updated: updated,
     total_ffb: ffbRows.length,
+    errors: errors.length ? errors : undefined,
+    reason: errors.length ? 'partial_or_total_failure' : undefined,
+  };
+}
+
+function normalizeTtpMatchKey_(raw) {
+  return String(raw || '').trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function tmlMatchKeys_(tml) {
+  const keys = [];
+  ['TML - Mill Name', 'TML - Company Name', 'TML - Company Group Name'].forEach(function(k) {
+    const v = normalizeTtpMatchKey_(tml[k]);
+    if (v && keys.indexOf(v) === -1) keys.push(v);
+  });
+  return keys;
+}
+
+/** Carry-forward FFB - Mill Name (Excel blank = same mill as row above). */
+function resolveFfbEffectiveMillNames_(ffbRows) {
+  let carry = '';
+  return (ffbRows || []).filter(isMeaningfulSddFfbRow_).map(function(ffb) {
+    const raw = String(ffb['FFB - Mill Name'] || '').trim();
+    if (raw) carry = raw;
+    return { ffb: ffb, effectiveMill: carry };
+  });
+}
+
+/** FFB rows from Traceability B that belong to one TML line (Mill List A). */
+function ffbRowsForTmlLine_(tmlRows, ffbRows, lineId) {
+  lineId = String(lineId || '').trim();
+  const orderedTml = (tmlRows || []).filter(isMeaningfulTmlRow_);
+  const targetIdx = orderedTml.findIndex(function(t) {
+    return String(t['line_id'] || '').trim() === lineId;
+  });
+  if (targetIdx < 0) return [];
+
+  const targetKeys = tmlMatchKeys_(orderedTml[targetIdx]);
+  if (!targetKeys.length) return [];
+
+  const resolved = resolveFfbEffectiveMillNames_(ffbRows);
+  return resolved.filter(function(entry) {
+    const eff = normalizeTtpMatchKey_(entry.effectiveMill);
+    if (!eff) return false;
+    return targetKeys.indexOf(eff) !== -1;
+  }).map(function(entry) { return entry.ffb; });
+}
+
+function countMeaningfulTmlRowsForSid_(sid) {
+  return findChildRows_('sddMill', sid)
+    .map(function(r) { return r.obj; })
+    .filter(isMeaningfulTmlRow_).length;
+}
+
+/**
+ * MILL/KCP: sync one Mill List (TML) row → Mill Onboarding identity + matching FFB rows.
+ */
+function syncTtpFromMillOnboardingForTmlLine_(sid, tmlLineId, millIdentity, mainObj, user, now) {
+  sid = String(sid || '').trim();
+  tmlLineId = String(tmlLineId || '').trim();
+  if (!sid) return { synced: false, skipped: true, reason: 'missing_submission_id' };
+  if (!tmlLineId) return { synced: false, skipped: true, reason: 'missing_tml_line_id' };
+
+  const merged = mainObj || {};
+  const decision = readSddMainDecisionLabel_(merged);
+  if (decision !== 'APPROVED') {
+    return { synced: false, skipped: true, reason: 'not_approved', decision: decision };
+  }
+
+  const scrSt = readSddMainScrStatus_(merged);
+  if (scrSt !== 'submitted') {
+    return { synced: false, skipped: true, reason: 'not_submitted', scr_status: scrSt };
+  }
+
+  const supplierType = readSddMainSupplierType_(merged);
+  if (supplierType !== 'MILL' && supplierType !== 'KCP') {
+    return { synced: false, skipped: true, reason: 'not_mill_or_kcp', supplier_type: supplierType };
+  }
+
+  const tmlRows = findChildRows_('sddMill', sid).map(function(r) { return r.obj; });
+  const tmlHit = tmlRows.filter(isMeaningfulTmlRow_).find(function(t) {
+    return String(t['line_id'] || '').trim() === tmlLineId;
+  });
+  if (!tmlHit) {
+    return { synced: false, skipped: true, reason: 'tml_line_not_found', tml_line_id: tmlLineId };
+  }
+
+  const identity = millIdentity || {};
+  const allFfb = findChildRows_('sddFfb', sid).map(function(r) { return r.obj; });
+  const ffbRows = ffbRowsForTmlLine_(tmlRows, allFfb, tmlLineId);
+  const headerLineId = ttpMillTmlHeaderLineId_(tmlLineId);
+
+  const ttpResult = readTtpRows_();
+  let inserted = 0;
+  let updated = 0;
+  const errors = [];
+
+  if (ffbRows.length) {
+    ffbRows.forEach(function(ffb) {
+      try {
+        const lineId = String(ffb['line_id'] || '').trim();
+        const patch = buildTtpPatchFromSddFfb_(merged, ffb, sid, user, now, identity);
+        const hit = findTtpRowBySyncKeys_(ttpResult.rows, sid, lineId, patch);
+        if (hit) {
+          const mergedPatch = mergeTtpPreserveMonitoring_(hit.row, patch);
+          patchTtpRow_(ttpResult.ws, ttpResult.headers, hit._sheetRow, mergedPatch);
+          Object.assign(hit.row, mergedPatch);
+          updated++;
+        } else {
+          const newRow = appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+          ttpResult.rows.push(Object.assign({ _row: newRow }, patch));
+          inserted++;
+        }
+      } catch (err) {
+        errors.push({
+          line_id: String(ffb['line_id'] || ''),
+          error: String(err && err.message ? err.message : err),
+        });
+      }
+    });
+  } else {
+    try {
+      const patch = buildTtpMillHeaderPatch_(merged, identity, sid, user, now);
+      patch['ffb_line_id'] = headerLineId;
+      const hit = findTtpRowBySyncKeys_(ttpResult.rows, sid, headerLineId, patch);
+      if (hit) {
+        const mergedPatch = mergeTtpPreserveMonitoring_(hit.row, patch);
+        patchTtpRow_(ttpResult.ws, ttpResult.headers, hit._sheetRow, mergedPatch);
+        Object.assign(hit.row, mergedPatch);
+        updated++;
+      } else {
+        const newRow = appendTtpRow_(ttpResult.ws, ttpResult.headers, patch);
+        ttpResult.rows.push(Object.assign({ _row: newRow }, patch));
+        inserted++;
+      }
+    } catch (err) {
+      errors.push({
+        line_id: headerLineId,
+        error: String(err && err.message ? err.message : err),
+      });
+    }
+  }
+
+  return {
+    synced: errors.length ? false : true,
+    submission_id: sid,
+    inserted: inserted,
+    updated: updated,
+    total_ffb: ffbRows.length,
+    tml_line_id: tmlLineId,
+    mill_tml: true,
     errors: errors.length ? errors : undefined,
     reason: errors.length ? 'partial_or_total_failure' : undefined,
   };
@@ -3584,11 +3741,14 @@ function updateSubmission(payload) {
     const wantsMillTtpSync = payload.mill_ttp_sync && typeof payload.mill_ttp_sync === 'object';
     const wantsMillAdded = payload.main
       && String(payload.main.mill_added || '').trim().toLowerCase() === 'true';
-    const traderTmlLineId = String(payload.mill_added_line || '').trim();
+    const tmlLineId = String(payload.mill_added_line || '').trim();
     const supplierTypeEarly = String(mainHit.obj['supplier_type'] || mainHit.obj['Supplier Type'] || '').trim().toUpperCase();
-    const isTraderTtpMirror = wantsMillTtpSync && traderTmlLineId && supplierTypeEarly === 'TRADER';
+    const tmlRowCount = countMeaningfulTmlRowsForSid_(sid);
+    const isTraderTtpMirror = wantsMillTtpSync && tmlLineId && supplierTypeEarly === 'TRADER';
+    const isMillKcpTtpPerLine = wantsMillTtpSync && tmlLineId
+      && (supplierTypeEarly === 'MILL' || supplierTypeEarly === 'KCP');
 
-    if (wantsMillTtpSync && !wantsMillAdded && !traderTmlLineId) {
+    if (wantsMillTtpSync && !wantsMillAdded && !tmlLineId) {
       throw new Error('mill_ttp_sync requires mill_added=true or mill_added_line');
     }
 
@@ -3596,25 +3756,49 @@ function updateSubmission(payload) {
       throw new Error('TRADER cannot set mill_added=true directly; complete all mills via Task List save');
     }
 
-    if (supplierTypeEarly === 'TRADER' && traderTmlLineId && !wantsMillTtpSync) {
+    if ((supplierTypeEarly === 'MILL' || supplierTypeEarly === 'KCP')
+        && wantsMillAdded && tmlRowCount > 0) {
+      throw new Error('MILL/KCP cannot set mill_added=true directly when mill list exists; complete each mill via Task List save');
+    }
+
+    if (supplierTypeEarly === 'TRADER' && tmlLineId && !wantsMillTtpSync) {
       throw new Error('mill_added_line for TRADER requires mill_ttp_sync in the same request');
+    }
+
+    if ((supplierTypeEarly === 'MILL' || supplierTypeEarly === 'KCP')
+        && tmlLineId && !wantsMillTtpSync) {
+      throw new Error('mill_added_line for MILL/KCP requires mill_ttp_sync in the same request');
     }
 
     let ttpSync = null;
     let millAddedLineResult = null;
 
     if (isTraderTtpMirror) {
-      assertTraderTmlLineKnown_(sid, traderTmlLineId);
+      assertTraderTmlLineKnown_(sid, tmlLineId);
       const mirrorIdentity = sanitizeMillTtpMirrorFromOnboarding_(payload.mill_ttp_sync);
       ttpSync = syncTtpMirrorTraderMillFromOnboarding_(
-        sid, traderTmlLineId, mirrorIdentity, mainHit.obj, user, now
+        sid, tmlLineId, mirrorIdentity, mainHit.obj, user, now
       );
       assertMillTtpSyncSucceeded_(ttpSync);
       auditLog_('POST', 'mill_ttp_trader_mirror', 'ttp', user, JSON.stringify({
         submission_id: sid,
-        tml_line_id: traderTmlLineId,
+        tml_line_id: tmlLineId,
         inserted: ttpSync.inserted,
         updated: ttpSync.updated,
+      }));
+    } else if (isMillKcpTtpPerLine) {
+      assertTraderTmlLineKnown_(sid, tmlLineId);
+      const identity = sanitizeMillTtpIdentity_(payload.mill_ttp_sync);
+      ttpSync = syncTtpFromMillOnboardingForTmlLine_(
+        sid, tmlLineId, identity, mainHit.obj, user, now
+      );
+      assertMillTtpSyncSucceeded_(ttpSync);
+      auditLog_('POST', 'mill_ttp_mill_tml_sync', 'ttp', user, JSON.stringify({
+        submission_id: sid,
+        tml_line_id: tmlLineId,
+        inserted: ttpSync.inserted,
+        updated: ttpSync.updated,
+        total_ffb: ttpSync.total_ffb,
       }));
     } else if (wantsMillTtpSync) {
       const identity = sanitizeMillTtpIdentity_(payload.mill_ttp_sync);
@@ -3631,7 +3815,9 @@ function updateSubmission(payload) {
     }
 
     if (payload.mill_added_line) {
-      if (supplierTypeEarly === 'TRADER') {
+      if (supplierTypeEarly === 'TRADER'
+          || supplierTypeEarly === 'MILL'
+          || supplierTypeEarly === 'KCP') {
         assertTraderTmlLineKnown_(sid, payload.mill_added_line);
       }
       millAddedLineResult = applyMillAddedLine_(sid, payload.mill_added_line, mainHit, user, now);
