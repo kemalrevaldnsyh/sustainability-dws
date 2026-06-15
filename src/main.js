@@ -9942,11 +9942,13 @@ function initDashboardApp() {
           ttpSelectPanel?.classList.remove('open');
           ttpBtnSelectEl?.classList.remove('active');
           ttpClearDropdownPanelPosition_(ttpSelectPanel);
+          ttpUnmountDropdownPanel_(ttpSelectPanel);
         }
         if (!inFilter && !inFilterPanel) {
           ttpFilterPanel?.classList.remove('open');
           ttpBtnFilterEl?.classList.remove('active');
           ttpClearDropdownPanelPosition_(ttpFilterPanel);
+          ttpUnmountDropdownPanel_(ttpFilterPanel);
         }
       });
     }
@@ -10237,6 +10239,33 @@ function initDashboardApp() {
   }
 
   // ─── TTP DROPDOWN TOGGLE (fixed above trigger — avoids overlap with sticky table headers) ──
+  function ttpDropdownWrapForPanel_(panel) {
+    if (!panel) return null;
+    const wrapId = panel.dataset.ttpDropdownWrapId;
+    if (wrapId) return document.getElementById(wrapId);
+    return panel.closest('.ttp-dropdown-wrap');
+  }
+
+  function ttpMountDropdownPanelOpen_(panel) {
+    if (!panel) return;
+    if (!panel.dataset.ttpDropdownWrapId) {
+      const wrap = panel.closest('.ttp-dropdown-wrap');
+      if (wrap && wrap.id) panel.dataset.ttpDropdownWrapId = wrap.id;
+    }
+    if (panel.parentElement !== document.body) {
+      document.body.appendChild(panel);
+    }
+  }
+
+  function ttpUnmountDropdownPanel_(panel) {
+    if (!panel) return;
+    const wrap = ttpDropdownWrapForPanel_(panel);
+    if (wrap && panel.parentElement === document.body) {
+      wrap.appendChild(panel);
+    }
+    delete panel.dataset.ttpDropdownWrapId;
+  }
+
   function ttpClearDropdownPanelPosition_(panel) {
     if (!panel) return;
     panel.style.position = '';
@@ -10290,6 +10319,7 @@ function initDashboardApp() {
       if (!panel) return;
       panel.classList.remove('open');
       ttpClearDropdownPanelPosition_(panel);
+      ttpUnmountDropdownPanel_(panel);
     });
     ['ttpBtnSelect', 'ttpBtnFilter'].forEach(function(id) {
       const btn = document.getElementById(id);
@@ -10317,6 +10347,7 @@ function initDashboardApp() {
     }
 
     ttpClearDropdownPanelPosition_(panel);
+    ttpMountDropdownPanelOpen_(panel);
     panel.classList.add('open');
     btn.classList.add('active');
     ttpPositionDropdownPanel_(btn, panel);

@@ -1022,9 +1022,22 @@
      margin-bottom: 24px;
    }
 
-   /* TTP toolbar dropdowns extend below toolbar — must not clip (see .ttp-toolbar z-index) */
+   /* TTP registry: keep card clipped; dropdowns use position:fixed via JS */
    #panel-ttm-ttp .table-card {
-     overflow: visible;
+     overflow: hidden;
+   }
+
+   /* Toolbar zone must sit above the scrollable table (sibling paint order) */
+   #panel-ttm-ttp .ttp-toolbar,
+   #panel-ttm-ttp .ttp-group-info-bar,
+   #panel-ttm-ttp .search-bar {
+     position: relative;
+     z-index: 30;
+     background: #fdfafa;
+   }
+   #panel-ttm-ttp .ttp-table-scroll {
+     position: relative;
+     z-index: 1;
    }
 
    /* TTP registry table — scroll body + frozen column headers */
@@ -1977,19 +1990,21 @@
      background: #fdfafa;
      position: relative;
      z-index: 40;
+     isolation: isolate;
    }
    #panel-ttm-ttp .ttp-toolbar .ttp-dropdown-wrap {
      flex-shrink: 0;
+     position: relative;
+     z-index: 2;
    }
-   /* Open filter panels upward so they do not collide with frozen table headers below */
-   #panel-ttm-ttp .ttp-toolbar .ttp-dropdown-panel {
-     top: auto !important;
-     bottom: calc(100% + 6px);
-     z-index: 12050;
+   /* Closed panels must not intercept clicks on toolbar buttons */
+   #panel-ttm-ttp .ttp-toolbar .ttp-dropdown-panel:not(.open) {
+     display: none !important;
+     pointer-events: none !important;
    }
    #panel-ttm-ttp .ttp-toolbar .ttp-dropdown-panel.open {
      background: #fff;
-     isolation: isolate;
+     pointer-events: auto;
    }
    #panel-ttm-ttp .ttp-selection-info {
      flex: 1 1 100%;
@@ -2015,6 +2030,8 @@
      cursor: pointer;
      transition: background 150ms, color 150ms, border-color 150ms;
      white-space: nowrap;
+     position: relative;
+     z-index: 3;
    }
    .ttp-btn-select:hover,
    .ttp-btn-filter:hover,
