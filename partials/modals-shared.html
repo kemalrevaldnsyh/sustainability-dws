@@ -171,7 +171,7 @@
       <button type="button" class="pf-export-modal-close" id="blExportModalClose" aria-label="Close">✕</button>
     </div>
     <div class="pf-export-modal-body">
-      <p class="pf-export-hint" id="blExportHint">Choose which BL records and columns to include. Row order follows the table (most recent Received Date first).</p>
+      <p class="pf-export-hint" id="blExportHint">Choose BL records, BL columns, and TTM/TTP sheet columns. TTM includes Mill Category (Integrated) from Mill Onboarding when available.</p>
       <div id="blExportRowSection">
         <div class="pf-export-facility-toolbar">
           <span class="pf-export-label">BL records</span>
@@ -181,12 +181,26 @@
         <div id="blExportRowList" class="pf-export-facility-list bl-export-row-list"></div>
       </div>
       <div class="pf-export-facility-toolbar bl-export-col-toolbar">
-        <span class="pf-export-label">Columns</span>
+        <span class="pf-export-label">BL columns</span>
         <button type="button" class="pf-export-link-btn" id="blExportColAll">Select all</button>
         <button type="button" class="pf-export-link-btn" id="blExportColDefault">Default</button>
         <button type="button" class="pf-export-link-btn" id="blExportColNone">Clear</button>
       </div>
       <div id="blExportColList" class="pf-export-facility-list bl-export-col-list"></div>
+      <div class="pf-export-facility-toolbar bl-export-col-toolbar">
+        <span class="pf-export-label">TTM sheet columns</span>
+        <button type="button" class="pf-export-link-btn" id="blExportTtmColAll">Select all</button>
+        <button type="button" class="pf-export-link-btn" id="blExportTtmColDefault">Default</button>
+        <button type="button" class="pf-export-link-btn" id="blExportTtmColNone">Clear</button>
+      </div>
+      <div id="blExportTtmColList" class="pf-export-facility-list bl-export-col-list bl-export-link-col-list"></div>
+      <div class="pf-export-facility-toolbar bl-export-col-toolbar">
+        <span class="pf-export-label">TTP sheet columns</span>
+        <button type="button" class="pf-export-link-btn" id="blExportTtpColAll">Select all</button>
+        <button type="button" class="pf-export-link-btn" id="blExportTtpColDefault">Default</button>
+        <button type="button" class="pf-export-link-btn" id="blExportTtpColNone">Clear</button>
+      </div>
+      <div id="blExportTtpColList" class="pf-export-facility-list bl-export-col-list bl-export-link-col-list"></div>
     </div>
     <div class="pf-export-modal-foot">
       <button type="button" class="pf-btn pf-btn--ghost" id="blExportCancel">Cancel</button>

@@ -5904,7 +5904,16 @@ tr.pf-group-detail-row.hidden {
   border-top: 1px solid #ebe3e3;
 }
 .bl-export-modal .pf-export-modal-dialog {
-  max-width: 560px;
+  max-width: 620px;
+  max-height: min(92vh, 900px);
+}
+.bl-export-modal .pf-export-modal-body {
+  max-height: min(68vh, 640px);
+  overflow-y: auto;
+}
+.bl-export-link-col-list {
+  max-height: min(160px, 24vh);
+  margin-bottom: 4px;
 }
 @media (max-width: 560px) {
   .bl-export-col-list { grid-template-columns: 1fr; }

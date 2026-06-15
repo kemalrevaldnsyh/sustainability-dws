@@ -10826,15 +10826,30 @@ function initDashboardApp() {
   const BL_TTM_DETAIL_COLS = [
     { key: 'COMPANY NAME', label: 'Company Name' },
     { key: 'GROUP NAME', label: 'Group Name' },
+    { key: 'MILL NAME', label: 'Mill Name' },
     { key: 'UML ID', label: 'UML ID' },
     { key: 'LAT', label: 'Lat' },
     { key: 'LONG', label: 'Long' },
+    { key: 'MILL CATEGORY', label: 'Mill Category' },
   ];
-  const BL_TTM_EXPORT_COLS = [
-    { key: 'COMPANY NAME', label: 'Company Name' },
-    { key: 'GROUP NAME', label: 'Group Name' },
-    { key: 'UML ID', label: 'UML ID' },
+  const BL_TTM_EXPORT_FALLBACK_KEYS = [
+    'NO', 'COMPANY CODE', 'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID',
+    'LAT', 'LONG', 'MILL CATEGORY',
   ];
+  const BL_TTP_EXPORT_FALLBACK_KEYS = [
+    'FFB SUPPLIER GROUP NAME', 'FFB SUPPLIER NAME', 'CATEGORY', 'LAT', 'LONG',
+    'VILLAGE ID', 'VILLAGE', 'SUBDISTRICT', 'DISTRICT', 'PROVINCE',
+    'CONCESION AREA', 'PLANTED AREA', 'NUMBER OD SMALLHOLDERS', 'TAHUN TANAM',
+    'LEGALITAS', 'ISPO (Y/N)', 'RSPO (Y/N)', 'ISCC (Y/N)',
+  ];
+  const BL_EXPORT_FIELD_LABELS = {
+    'MILL CATEGORY': 'Mill Category (Integrated)',
+    'NUMBER OD SMALLHOLDERS': 'Number of Smallholders',
+    'FFB SUPPLY to MILL (TON)': 'FFB Supply to Mill (Ton)',
+    'ISPO (Y/N)': 'ISPO (Y/N)',
+    'RSPO (Y/N)': 'RSPO (Y/N)',
+    'ISCC (Y/N)': 'ISCC (Y/N)',
+  };
   const BL_TTP_DETAIL_COLS = [
     { key: 'CATEGORY', label: 'Category' },
     { key: 'VILLAGE', label: 'Village' },
@@ -10950,6 +10965,8 @@ function initDashboardApp() {
   let blExportTargetRow = null;
   let blExportSelectedColIds = BL_EXPORT_DEFAULT_COL_IDS.slice();
   let blExportSelectedRowNums = null;
+  let blExportSelectedTtmColKeys = null;
+  let blExportSelectedTtpColKeys = null;
   let blBuyerNblWarn_ = false;
   let blBuyerValidateSeq_ = 0;
   let blWarmPickerPromise_ = null;
@@ -11893,7 +11910,7 @@ function initDashboardApp() {
     if (blExportTargetRow) {
       section.style.display = 'none';
       if (hintEl) {
-        hintEl.textContent = 'Choose columns for this BL record. TTM and TTP sheets are included when links exist.';
+        hintEl.textContent = 'Choose BL columns and TTM/TTP sheet columns for this record.';
       }
       return;
     }
@@ -11903,7 +11920,7 @@ function initDashboardApp() {
       blExportSelectedRowNums = new Set(rows.map(function(d) { return d._row; }));
     }
     if (hintEl) {
-      hintEl.textContent = 'Choose BL records and columns to export (' + rows.length + ' visible). Row order follows Received Date.';
+      hintEl.textContent = 'Choose BL records, BL columns, and TTM/TTP sheet columns (' + rows.length + ' visible).';
     }
     listEl.innerHTML = rows.length
       ? rows.map(function(d) {
@@ -11956,19 +11973,104 @@ function initDashboardApp() {
     ];
   }
 
-  function blExportLinkCell_(item, key) {
-    const v = blField_(item, [key]);
-    return v && v !== '—' ? String(v).trim() : '';
+  function blNormalizeExportKey_(key) {
+    return String(key || '').replace(/\s+/g, ' ').trim().toUpperCase();
   }
 
-  function blBuildTtmExportSheet_(blRows) {
-    const detailHeaders = BL_TTM_EXPORT_COLS.map(function(c) { return c.key; });
-    const headers = BL_EXPORT_LINK_PARENT_HEADERS.concat(detailHeaders);
+  function blExportFieldLabel_(key) {
+    return BL_EXPORT_FIELD_LABELS[key] || key;
+  }
+
+  function blGetTtmExportColKeys_() {
+    let keys = [];
+    if (typeof resolveTtpFieldSections_ === 'function' && ttpFields && ttpFields.length) {
+      keys = resolveTtpFieldSections_().ttm.slice();
+    } else {
+      keys = BL_TTM_EXPORT_FALLBACK_KEYS.slice();
+    }
+    if (keys.indexOf('MILL CATEGORY') === -1) keys.push('MILL CATEGORY');
+    return keys;
+  }
+
+  function blGetTtpExportColKeys_() {
+    if (typeof resolveTtpFieldSections_ === 'function' && ttpFields && ttpFields.length) {
+      return resolveTtpFieldSections_().ttp.slice();
+    }
+    return BL_TTP_EXPORT_FALLBACK_KEYS.slice();
+  }
+
+  function blDefaultTtmExportColKeys_() {
+    return blGetTtmExportColKeys_().slice();
+  }
+
+  function blDefaultTtpExportColKeys_() {
+    return blGetTtpExportColKeys_().slice();
+  }
+
+  function blResolveLinkRowLive_(link) {
+    if (!link || !link._row) return link || null;
+    const live = (ttpData || []).find(function(r) { return r._row === link._row; });
+    return live || link;
+  }
+
+  function blFindMillRowForLink_(link) {
+    const live = blResolveLinkRowLive_(link);
+    if (!live || !Array.isArray(allData) || !allData.length) return null;
+    const uml = blField_(live, ['UML ID']);
+    if (uml && uml !== '—') {
+      const byUml = allData.find(function(m) {
+        return String(m['UML ID'] || '').trim().toLowerCase() === uml.toLowerCase();
+      });
+      if (byUml) return byUml;
+    }
+    const company = blField_(live, ['COMPANY NAME']);
+    if (company && company !== '—') {
+      return allData.find(function(m) {
+        return String(m['COMPANY NAME'] || '').trim().toLowerCase() === company.toLowerCase();
+      }) || null;
+    }
+    return null;
+  }
+
+  function blExportFieldValue_(link, key) {
+    const want = blNormalizeExportKey_(key);
+    if (want === 'MILL CATEGORY') {
+      const mill = blFindMillRowForLink_(link);
+      if (mill) {
+        const v = mill['MILL CATEGORY'] || mill['Mill Category'] || '';
+        if (String(v).trim()) return String(v).trim();
+      }
+    }
+    const row = blResolveLinkRowLive_(link);
+    if (!row) return '';
+    if (row[key] != null && String(row[key]).trim() !== '' && String(row[key]).trim() !== '—') {
+      return String(row[key]).trim();
+    }
+    let matched = '';
+    Object.keys(row).forEach(function(prop) {
+      if (prop === '_row' || matched) return;
+      if (blNormalizeExportKey_(prop) === want) {
+        const v = row[prop];
+        if (v != null && String(v).trim() !== '' && String(v).trim() !== '—') matched = String(v).trim();
+      }
+    });
+    if (matched) return matched;
+    const fallback = blField_(row, [key]);
+    return fallback && fallback !== '—' ? String(fallback).trim() : '';
+  }
+
+  function blExportLinkCell_(item, key) {
+    return blExportFieldValue_(item, key);
+  }
+
+  function blBuildTtmExportSheet_(blRows, colKeys) {
+    const keys = (colKeys && colKeys.length) ? colKeys : blDefaultTtmExportColKeys_();
+    const headers = BL_EXPORT_LINK_PARENT_HEADERS.concat(keys);
     const rows = [];
     (blRows || []).forEach(function(d) {
       const parent = blExportParentRow_(d);
       (d._ttmLinks || []).forEach(function(link) {
-        rows.push(parent.concat(detailHeaders.map(function(key) {
+        rows.push(parent.concat(keys.map(function(key) {
           return blExportLinkCell_(link, key);
         })));
       });
@@ -11976,14 +12078,14 @@ function initDashboardApp() {
     return { headers: headers, rows: rows };
   }
 
-  function blBuildTtpExportSheet_(blRows) {
-    const detailHeaders = BL_TTP_DETAIL_COLS.map(function(c) { return c.key; });
-    const headers = BL_EXPORT_LINK_PARENT_HEADERS.concat(detailHeaders);
+  function blBuildTtpExportSheet_(blRows, colKeys) {
+    const keys = (colKeys && colKeys.length) ? colKeys : blDefaultTtpExportColKeys_();
+    const headers = BL_EXPORT_LINK_PARENT_HEADERS.concat(keys);
     const rows = [];
     (blRows || []).forEach(function(d) {
       const parent = blExportParentRow_(d);
       (d._ttpLinks || []).forEach(function(link) {
-        rows.push(parent.concat(detailHeaders.map(function(key) {
+        rows.push(parent.concat(keys.map(function(key) {
           return blExportLinkCell_(link, key);
         })));
       });
@@ -12365,23 +12467,30 @@ function initDashboardApp() {
     XLSX.writeFile(wb, filename, { cellStyles: true });
   }
 
-  function exportBlExcelRows_(blRows, filename, mainSheetLabel, colDefs) {
+  function exportBlExcelRows_(blRows, filename, mainSheetLabel, colDefs, ttmColKeys, ttpColKeys) {
     const rows = blRows || [];
     if (!rows.length) return;
     const mainDefs = blMainExportColDefs_(colDefs);
     if (!mainDefs.length) return;
     const mainHeaders = mainDefs.map(function(c) { return c.header; });
     const mainData = rows.map(function(d) { return blRowToExport_(d, mainDefs); });
-    const ttmSheet = blBuildTtmExportSheet_(rows);
-    const ttpSheet = blBuildTtpExportSheet_(rows);
-    writeBlExcelWorkbook_([
+    const sheets = [
       { name: mainSheetLabel || 'BL', headers: mainHeaders, rows: mainData },
-      { name: 'TTM', headers: ttmSheet.headers, rows: ttmSheet.rows },
-      { name: 'TTP', headers: ttpSheet.headers, rows: ttpSheet.rows },
-    ], filename);
+    ];
+    const ttmKeys = ttmColKeys && ttmColKeys.length ? ttmColKeys : blDefaultTtmExportColKeys_();
+    const ttpKeys = ttpColKeys && ttpColKeys.length ? ttpColKeys : blDefaultTtpExportColKeys_();
+    if (ttmKeys.length) {
+      const ttmSheet = blBuildTtmExportSheet_(rows, ttmKeys);
+      sheets.push({ name: 'TTM', headers: ttmSheet.headers, rows: ttmSheet.rows });
+    }
+    if (ttpKeys.length) {
+      const ttpSheet = blBuildTtpExportSheet_(rows, ttpKeys);
+      sheets.push({ name: 'TTP', headers: ttpSheet.headers, rows: ttpSheet.rows });
+    }
+    writeBlExcelWorkbook_(sheets, filename);
   }
 
-  function exportBlExcelAll_(colDefs, rows) {
+  function exportBlExcelAll_(colDefs, rows, ttmColKeys, ttpColKeys) {
     const exportRows = rows && rows.length ? rows : blRowsForExportPicker_();
     if (!exportRows.length) return;
     const label = blActiveType === 'declaration' ? 'BL Declaration' : 'BL Shipping';
@@ -12389,11 +12498,13 @@ function initDashboardApp() {
       exportRows,
       'bl_' + blActiveType + '_' + blExcelStamp_() + '.xlsx',
       label,
-      colDefs
+      colDefs,
+      ttmColKeys,
+      ttpColKeys
     );
   }
 
-  function exportBlExcelOne_(row, colDefs) {
+  function exportBlExcelOne_(row, colDefs, ttmColKeys, ttpColKeys) {
     if (!row) return;
     const fileKey = blIsDeclarationRow_(row)
       ? blSafeFilePart_(row['BUYER'])
@@ -12402,8 +12513,65 @@ function initDashboardApp() {
       [row],
       'bl_' + fileKey + '_' + blExcelStamp_() + '.xlsx',
       'BL',
-      colDefs
+      colDefs,
+      ttmColKeys,
+      ttpColKeys
     );
+  }
+
+  function blRefreshExportLinkColList_(listId, allKeys, selectedKeys, inputName) {
+    const listEl = document.getElementById(listId);
+    if (!listEl) return;
+    listEl.innerHTML = allKeys.map(function(key) {
+      const checked = selectedKeys.indexOf(key) !== -1 ? ' checked' : '';
+      return ''
+        + '<label class="pf-export-facility-item">'
+        + '<input type="checkbox" name="' + escHtml(inputName) + '" value="' + escAttr_(key) + '"' + checked + ' />'
+        + '<span>' + escHtml(blExportFieldLabel_(key)) + '</span>'
+        + '</label>';
+    }).join('');
+  }
+
+  function blRefreshExportTtmColList_() {
+    const keys = blGetTtmExportColKeys_();
+    if (!blExportSelectedTtmColKeys) {
+      blExportSelectedTtmColKeys = blDefaultTtmExportColKeys_();
+    }
+    blExportSelectedTtmColKeys = blExportSelectedTtmColKeys.filter(function(k) {
+      return keys.indexOf(k) !== -1;
+    });
+    if (!blExportSelectedTtmColKeys.length) blExportSelectedTtmColKeys = keys.slice();
+    blRefreshExportLinkColList_('blExportTtmColList', keys, blExportSelectedTtmColKeys, 'blExportTtmCol');
+  }
+
+  function blRefreshExportTtpColList_() {
+    const keys = blGetTtpExportColKeys_();
+    if (!blExportSelectedTtpColKeys) {
+      blExportSelectedTtpColKeys = blDefaultTtpExportColKeys_();
+    }
+    blExportSelectedTtpColKeys = blExportSelectedTtpColKeys.filter(function(k) {
+      return keys.indexOf(k) !== -1;
+    });
+    if (!blExportSelectedTtpColKeys.length) blExportSelectedTtpColKeys = keys.slice();
+    blRefreshExportLinkColList_('blExportTtpColList', keys, blExportSelectedTtpColKeys, 'blExportTtpCol');
+  }
+
+  function blReadExportTtmColSelection_() {
+    const allKeys = blGetTtmExportColKeys_();
+    const checked = Array.from(document.querySelectorAll('#blExportTtmColList input[name="blExportTtmCol"]:checked'))
+      .map(function(cb) { return cb.value; });
+    const ordered = allKeys.filter(function(k) { return checked.indexOf(k) !== -1; });
+    blExportSelectedTtmColKeys = ordered;
+    return ordered;
+  }
+
+  function blReadExportTtpColSelection_() {
+    const allKeys = blGetTtpExportColKeys_();
+    const checked = Array.from(document.querySelectorAll('#blExportTtpColList input[name="blExportTtpCol"]:checked'))
+      .map(function(cb) { return cb.value; });
+    const ordered = allKeys.filter(function(k) { return checked.indexOf(k) !== -1; });
+    blExportSelectedTtpColKeys = ordered;
+    return ordered;
   }
 
   function blRefreshExportColList_() {
@@ -12448,6 +12616,8 @@ function initDashboardApp() {
     }
     blRefreshExportRowList_();
     blRefreshExportColList_();
+    blRefreshExportTtmColList_();
+    blRefreshExportTtpColList_();
     const listEl = document.getElementById('blExportColList');
     if (listEl) listEl.scrollTop = 0;
     const rowListEl = document.getElementById('blExportRowList');
@@ -12463,12 +12633,20 @@ function initDashboardApp() {
     modal.setAttribute('aria-hidden', 'true');
     blExportTargetRow = null;
     blExportSelectedRowNums = null;
+    blExportSelectedTtmColKeys = null;
+    blExportSelectedTtpColKeys = null;
   }
 
   function confirmBlExport_() {
     const colDefs = blReadExportColSelection_();
     if (!colDefs.length) {
-      alert('Select at least one column.');
+      alert('Select at least one BL column.');
+      return;
+    }
+    const ttmColKeys = blReadExportTtmColSelection_();
+    const ttpColKeys = blReadExportTtpColSelection_();
+    if (!ttmColKeys.length && !ttpColKeys.length) {
+      alert('Select at least one TTM or TTP sheet column.');
       return;
     }
     const rows = blReadExportRowSelection_();
@@ -12477,9 +12655,9 @@ function initDashboardApp() {
       return;
     }
     if (blExportTargetRow) {
-      exportBlExcelOne_(blExportTargetRow, colDefs);
+      exportBlExcelOne_(blExportTargetRow, colDefs, ttmColKeys, ttpColKeys);
     } else {
-      exportBlExcelAll_(colDefs, rows);
+      exportBlExcelAll_(colDefs, rows, ttmColKeys, ttpColKeys);
     }
     closeBlExportModal_();
   }
@@ -12787,7 +12965,9 @@ function initDashboardApp() {
     const head = cols.map(function(c) { return '<th>' + escHtml(c.label) + '</th>'; }).join('');
     const body = rows.map(function(row) {
       const tds = cols.map(function(c) {
-        return '<td>' + escHtml(blField_(row, [c.key])) + '</td>';
+        const raw = blExportFieldValue_(row, c.key);
+        const display = raw || blField_(row, [c.key]);
+        return '<td>' + escHtml(display) + '</td>';
       }).join('');
       return '<tr>' + tds + '</tr>';
     }).join('');
@@ -12936,6 +13116,30 @@ function initDashboardApp() {
     document.getElementById('blExportColNone')?.addEventListener('click', function() {
       blExportSelectedColIds = [];
       blRefreshExportColList_();
+    });
+    document.getElementById('blExportTtmColAll')?.addEventListener('click', function() {
+      blExportSelectedTtmColKeys = blGetTtmExportColKeys_().slice();
+      blRefreshExportTtmColList_();
+    });
+    document.getElementById('blExportTtmColDefault')?.addEventListener('click', function() {
+      blExportSelectedTtmColKeys = blDefaultTtmExportColKeys_();
+      blRefreshExportTtmColList_();
+    });
+    document.getElementById('blExportTtmColNone')?.addEventListener('click', function() {
+      blExportSelectedTtmColKeys = [];
+      blRefreshExportTtmColList_();
+    });
+    document.getElementById('blExportTtpColAll')?.addEventListener('click', function() {
+      blExportSelectedTtpColKeys = blGetTtpExportColKeys_().slice();
+      blRefreshExportTtpColList_();
+    });
+    document.getElementById('blExportTtpColDefault')?.addEventListener('click', function() {
+      blExportSelectedTtpColKeys = blDefaultTtpExportColKeys_();
+      blRefreshExportTtpColList_();
+    });
+    document.getElementById('blExportTtpColNone')?.addEventListener('click', function() {
+      blExportSelectedTtpColKeys = [];
+      blRefreshExportTtpColList_();
     });
     document.getElementById('blExportRowAll')?.addEventListener('click', function() {
       blExportSelectedRowNums = new Set(blRowsForExportPicker_().map(function(d) { return d._row; }));
