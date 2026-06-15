@@ -92,7 +92,7 @@
     <div class="bl-form-head">
       <div>
         <h2 id="blFormTitle">Add Shipping</h2>
-        <p class="bl-form-sub" id="blFormSubtitle">Enter record data, then choose a monitoring period — all TTM/TTP rows for that period are linked automatically.</p>
+        <p class="bl-form-sub" id="blFormSubtitle">Enter record data, pick a monitoring period, then link TTM/TTP rows manually.</p>
       </div>
       <button type="button" class="bl-form-close" id="blFormClose" aria-label="Close">✕</button>
     </div>
@@ -103,7 +103,7 @@
       </section>
       <section class="bl-form-section">
         <h3 class="bl-form-section-title">Link TTM / TTP</h3>
-        <p class="bl-form-section-desc">Choose the monitoring period — all TTM/TTP rows for that quarter are linked automatically.</p>
+        <p class="bl-form-section-desc">Choose year and quarter, then pick which TTM/TTP rows to link below.</p>
         <div class="bl-period-toolbar" id="blPickerPeriodToolbar">
           <div class="bl-period-field">
             <label for="blPickerYear">Year</label>
@@ -120,12 +120,16 @@
           </div>
         </div>
         <p class="bl-period-summary" id="blPickerPeriodSummary">Loading monitoring data…</p>
-        <div class="bl-picker-wrap bl-picker-wrap--readonly">
+        <div class="bl-picker-wrap">
+          <div class="bl-picker-search">
+            <input type="text" id="blTtmSearch" placeholder="Cari company, UML ID, supplier, desa..." autocomplete="off" />
+          </div>
+          <div class="bl-picker-results" id="blTtmResults"></div>
           <div class="bl-picker-selected" id="blTtmSelected"></div>
         </div>
       </section>
       <section class="bl-form-section bl-ttp-auto-section">
-        <h3 class="bl-form-section-title">Linked TTP <span class="bl-form-hint">All supplier rows for the selected period</span></h3>
+        <h3 class="bl-form-section-title">Selected TTP <span class="bl-form-hint">Only rows selected with the TTM + TTP option</span></h3>
         <div class="bl-picker-wrap bl-picker-wrap--readonly">
           <div class="bl-picker-selected" id="blTtpSelected"></div>
         </div>

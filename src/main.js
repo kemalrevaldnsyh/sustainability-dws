@@ -11073,11 +11073,18 @@ function initDashboardApp() {
   function blSetPickerLoading_(loading) {
     const yearSel = document.getElementById('blPickerYear');
     const quarterSel = document.getElementById('blPickerQuarter');
+    const search = document.getElementById('blTtmSearch');
+    const results = document.getElementById('blTtmResults');
     const summary = document.getElementById('blPickerPeriodSummary');
     if (yearSel) yearSel.disabled = !!loading;
     if (quarterSel) quarterSel.disabled = !!loading;
+    if (search) search.disabled = !!loading;
     if (loading && summary) {
       summary.textContent = 'Loading monitoring data for TTM/TTP…';
+    }
+    if (loading && results) {
+      results.innerHTML = '<div class="bl-picker-empty">Loading monitoring data…</div>';
+      results.classList.remove('open');
     }
   }
 
@@ -11675,7 +11682,7 @@ function initDashboardApp() {
       return;
     }
     el.textContent = millN + ' mill' + (millN === 1 ? '' : 's') + ' · ' + ttpN + ' TTP row'
-      + (ttpN === 1 ? '' : 's') + ' linked for ' + blPeriodQuarter + ' ' + blPeriodYear + '.';
+      + (ttpN === 1 ? '' : 's') + ' available for ' + blPeriodQuarter + ' ' + blPeriodYear + '. Pick rows below.';
   }
 
   function blSyncDeclarationPeriodField_() {
@@ -11687,25 +11694,20 @@ function initDashboardApp() {
     if (el) el.value = period;
   }
 
-  function blAutoLinkPeriodRows_() {
+  function blReadPickerPeriodFromUi_() {
     const yearSel = document.getElementById('blPickerYear');
     const quarterSel = document.getElementById('blPickerQuarter');
     if (yearSel) blPeriodYear = yearSel.value || '';
     if (quarterSel) blPeriodQuarter = quarterSel.value || '';
     blPeriodFilterFallback_ = false;
-    const rows = blFilterMonitoringByPeriod_(ttpData || []);
-    blSelectedTtm = [];
-    blSelectedTtp = [];
-    blTtmRowsWithTtp_ = new Set();
-    rows.forEach(function(src) {
-      if (!src || !src._row) return;
-      blSelectedTtm.push(buildBlTtmCandidate_(src));
-      blTtmRowsWithTtp_.add(src._row);
-    });
-    blRebuildSelectedTtp_();
-    blRenderLinkedPickers_();
+  }
+
+  function blApplyPickerPeriod_() {
+    blReadPickerPeriodFromUi_();
     blUpdatePeriodSummary_();
     blSyncDeclarationPeriodField_();
+    const search = document.getElementById('blTtmSearch');
+    renderBlTtmResults_(search ? search.value : '');
   }
 
   function blInitPickerPeriod_(row) {
@@ -11727,7 +11729,7 @@ function initDashboardApp() {
       if (yearSel) yearSel.value = blPeriodYear || '';
       if (quarterSel && blPeriodQuarter) quarterSel.value = blPeriodQuarter;
     }
-    blAutoLinkPeriodRows_();
+    blApplyPickerPeriod_();
   }
 
   function blFilterMonitoringByPeriod_(rows) {
@@ -11765,6 +11767,51 @@ function initDashboardApp() {
   function blRenderLinkedPickers_() {
     renderBlPickerChips_('blTtmSelected', blSelectedTtm, 'ttm');
     renderBlPickerChips_('blTtpSelected', blSelectedTtp, 'ttp');
+  }
+
+  function blAddMonitoringRowPick_(src, includeTtp) {
+    if (!src || !src._row) return false;
+    if (blSelectedTtm.some(function(x) { return x._row === src._row; })) return false;
+    blSelectedTtm.push(buildBlTtmCandidate_(src));
+    if (includeTtp) {
+      blTtmRowsWithTtp_.add(src._row);
+    } else {
+      blTtmRowsWithTtp_.delete(src._row);
+    }
+    blRebuildSelectedTtp_();
+    return true;
+  }
+
+  function blRemoveMonitoringRowPick_(rowNum) {
+    blSelectedTtm = blSelectedTtm.filter(function(x) { return x._row !== rowNum; });
+    blTtmRowsWithTtp_.delete(rowNum);
+    blRebuildSelectedTtp_();
+  }
+
+  function getBlRowCandidates_() {
+    const rows = blFilterMonitoringByPeriod_(ttpData || []);
+    return rows.map(function(row) {
+      return {
+        _row: row._row,
+        ttm: buildBlTtmCandidate_(row),
+        ttp: buildBlTtpCandidate_(row),
+      };
+    });
+  }
+
+  function filterBlRowResults_(query) {
+    const q = String(query || '').toLowerCase().trim();
+    const selectedRows = new Set(blSelectedTtm.map(function(x) { return x._row; }));
+    return getBlRowCandidates_().filter(function(item) {
+      if (selectedRows.has(item._row)) return false;
+      if (!q) return true;
+      const blob = [
+        item.ttm['COMPANY NAME'], item.ttm['GROUP NAME'], item.ttm['UML ID'], item.ttm['MILL NAME'],
+        item.ttp['FFB SUPPLIER NAME'], item.ttp['CATEGORY'], item.ttp['VILLAGE'],
+        item.ttp['SUBDISTRICT'], item.ttp['DISTRICT'], item.ttp['PROVINCE'],
+      ].join(' ').toLowerCase();
+      return blob.includes(q);
+    }).slice(0, 40);
   }
 
   function blTtmCountLabel_(count) {
@@ -12522,8 +12569,8 @@ function initDashboardApp() {
     if (!el) return;
     if (!items.length) {
       const emptyMsg = type === 'ttp'
-        ? 'No TTP rows for the selected monitoring period'
-        : 'No TTM rows for the selected monitoring period';
+        ? 'None yet — appears automatically when you select TTM/TTP rows above'
+        : 'Nothing selected yet';
       el.innerHTML = '<span class="bl-picker-empty" style="padding:0;border:none;background:transparent;">' + escHtml(emptyMsg) + '</span>';
       return;
     }
@@ -12533,6 +12580,9 @@ function initDashboardApp() {
         label = blField_(item, ['COMPANY NAME']) + ' · ' + blField_(item, ['UML ID']);
         const sup = blField_(item, ['FFB SUPPLIER NAME']);
         if (sup && sup !== '—') label += ' → ' + sup;
+        if (item._row && !blTtmRowsWithTtp_.has(item._row)) {
+          label += ' · TTM only';
+        }
         if (item._row) {
           const src = (ttpData || []).find(function(r) { return r._row === item._row; });
           if (src) {
@@ -12549,8 +12599,44 @@ function initDashboardApp() {
       return ''
         + '<span class="bl-picker-chip"' + rowAttr + ' data-idx="' + idx + '">'
         + '<span>' + escHtml(label) + '</span>'
+        + (type === 'ttm' && item._row
+          ? '<button type="button" class="bl-picker-chip-remove" data-row="' + item._row + '" aria-label="Remove">×</button>'
+          : '')
         + '</span>';
     }).join('');
+  }
+
+  function renderBlTtmResults_(query) {
+    const panel = document.getElementById('blTtmResults');
+    if (!panel) return;
+    blUpdatePeriodSummary_();
+    const items = filterBlRowResults_(query);
+    if (!items.length) {
+      const hint = !(ttpData || []).length
+        ? 'No monitoring data loaded — open Traceability Data first or refresh the page.'
+        : 'No rows found for this search or period.';
+      panel.innerHTML = '<div class="bl-picker-empty">' + escHtml(hint) + '</div>';
+      panel.classList.add('open');
+      return;
+    }
+    panel.innerHTML = items.map(function(item) {
+      const srcRow = (ttpData || []).find(function(r) { return r._row === item._row; });
+      const warnings = srcRow ? blAssessMonitoringRowWarningsSync_(srcRow) : [];
+      const warnHtml = blFormatMonitoringWarningsHtml_(warnings);
+      return ''
+        + '<div class="bl-picker-item' + (warnings.length ? ' bl-picker-item--warn' : '') + '">'
+        + '<div class="bl-picker-item-main">'
+        + '<div class="bl-picker-item-title">' + escHtml(blField_(item.ttm, ['COMPANY NAME'])) + ' · UML ' + escHtml(blField_(item.ttm, ['UML ID'])) + '</div>'
+        + '<div class="bl-picker-item-sub">TTP: ' + escHtml(blField_(item.ttp, ['FFB SUPPLIER NAME'])) + ' · ' + escHtml(blField_(item.ttp, ['VILLAGE'])) + ', ' + escHtml(blField_(item.ttp, ['DISTRICT'])) + '</div>'
+        + warnHtml
+        + '</div>'
+        + '<div class="bl-picker-item-actions">'
+        + '<button type="button" class="bl-pick-btn" data-row="' + item._row + '" data-include-ttp="0">+ TTM</button>'
+        + '<button type="button" class="bl-pick-btn bl-pick-btn--both" data-row="' + item._row + '" data-include-ttp="1">+ TTM + TTP</button>'
+        + '</div>'
+        + '</div>';
+    }).join('');
+    panel.classList.add('open');
   }
 
   function closeBlFormModal_() {
@@ -12599,8 +12685,8 @@ function initDashboardApp() {
     }
     if (subEl) {
       subEl.textContent = isDecl
-        ? 'Enter declaration details and choose a monitoring period — TTM/TTP for that quarter are linked automatically.'
-        : 'Enter shipping details and choose a monitoring period — TTM/TTP for that quarter are linked automatically.';
+        ? 'Enter declaration details, pick year/quarter, then link TTM/TTP rows manually. No Buy List matches are shown as warnings only.'
+        : 'Enter shipping details, pick year/quarter, then link TTM/TTP rows manually. No Buy List matches are shown as warnings only.';
     }
     if (sectionEl) sectionEl.textContent = isDecl ? 'Declaration details' : 'Shipping details';
     if (saveBtn) saveBtn.textContent = isDecl ? 'Save Declaration' : 'Save Shipping';
@@ -12609,6 +12695,10 @@ function initDashboardApp() {
     blBuyerNblWarn_ = false;
     blRenderBuyerNblNotice_(null);
     blRenderLinkedPickers_();
+
+    const ttmSearch = document.getElementById('blTtmSearch');
+    if (ttmSearch) ttmSearch.value = '';
+    document.getElementById('blTtmResults')?.classList.remove('open');
 
     lockBlOverlayScroll_();
     document.body.classList.add('bl-form-open');
@@ -12634,7 +12724,9 @@ function initDashboardApp() {
     });
 
     const yearSel = document.getElementById('blPickerYear');
-    if (yearSel) {
+    if (ttmSearch) {
+      try { ttmSearch.focus({ preventScroll: true }); } catch (e) { ttmSearch.focus(); }
+    } else if (yearSel) {
       try { yearSel.focus({ preventScroll: true }); } catch (e) { yearSel.focus(); }
     }
   }
@@ -12864,10 +12956,38 @@ function initDashboardApp() {
     });
 
     document.getElementById('blPickerYear')?.addEventListener('change', function() {
-      blAutoLinkPeriodRows_();
+      blApplyPickerPeriod_();
     });
     document.getElementById('blPickerQuarter')?.addEventListener('change', function() {
-      blAutoLinkPeriodRows_();
+      blApplyPickerPeriod_();
+    });
+
+    const ttmSearch = document.getElementById('blTtmSearch');
+    ttmSearch?.addEventListener('input', function() { renderBlTtmResults_(this.value); });
+    ttmSearch?.addEventListener('focus', function() { renderBlTtmResults_(this.value); });
+
+    document.getElementById('blTtmResults')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('.bl-pick-btn');
+      if (!btn) return;
+      const rowNum = parseInt(btn.dataset.row, 10);
+      const includeTtp = btn.dataset.includeTtp === '1';
+      const src = (ttpData || []).find(function(r) { return r._row === rowNum; });
+      if (!src) return;
+      if (!blAddMonitoringRowPick_(src, includeTtp)) return;
+      blRenderLinkedPickers_();
+      renderBlTtmResults_(ttmSearch ? ttmSearch.value : '');
+      const pickLabel = includeTtp ? '+ TTM + TTP' : '+ TTM';
+      blNotifyMonitoringRowPickWarnings_(src, pickLabel);
+    });
+
+    document.getElementById('blTtmSelected')?.addEventListener('click', function(e) {
+      const btn = e.target.closest('.bl-picker-chip-remove');
+      if (!btn) return;
+      const rowNum = parseInt(btn.dataset.row, 10);
+      if (!rowNum) return;
+      blRemoveMonitoringRowPick_(rowNum);
+      blRenderLinkedPickers_();
+      renderBlTtmResults_(ttmSearch ? ttmSearch.value : '');
     });
 
     if (!window.__sddBlEscBound) {
