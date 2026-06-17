@@ -6204,48 +6204,125 @@ function initDashboardApp() {
     return sorted;
   }
 
+  function millCloseColFilterMenus_() {
+    document.querySelectorAll('.mill-col-filter-menu').forEach(function(m) {
+      if (m._millScrollEl && m._millOnReposition) {
+        m._millScrollEl.removeEventListener('scroll', m._millOnReposition);
+      }
+      m.remove();
+    });
+    if (window._millColFilterReposition_) {
+      window.removeEventListener('scroll', window._millColFilterReposition_, true);
+      window.removeEventListener('resize', window._millColFilterReposition_);
+      window._millColFilterReposition_ = null;
+    }
+  }
+
+  /** Anchor column filter popover like Traceability dropdown (fixed, flip up, viewport clamp). */
+  function millPositionColFilterMenu_(btn, menu) {
+    if (!btn || !menu) return;
+    const rect = btn.getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
+
+    const minW = 280;
+    const maxW = 320;
+    const width = Math.min(Math.max(rect.width, minW), maxW, window.innerWidth - 24);
+    const left = Math.max(12, Math.min(rect.left, window.innerWidth - width - 12));
+    const gap = 8;
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - gap - 12);
+    const spaceAbove = Math.max(0, rect.top - gap - 12);
+    const openUp = spaceBelow < 260 && spaceAbove >= 140;
+    const maxH = Math.min(440, Math.max(200, openUp ? spaceAbove : spaceBelow));
+
+    menu.style.position = 'fixed';
+    menu.style.left = left + 'px';
+    menu.style.width = width + 'px';
+    menu.style.minWidth = minW + 'px';
+    menu.style.maxWidth = maxW + 'px';
+    menu.style.maxHeight = maxH + 'px';
+    menu.style.zIndex = '12060';
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    menu.style.margin = '0';
+    menu.classList.toggle('mill-col-filter-menu--up', openUp);
+
+    if (openUp) {
+      menu.style.top = Math.max(12, rect.top - gap) + 'px';
+      menu.style.transform = 'translateY(-100%)';
+    } else {
+      menu.style.top = (rect.bottom + gap) + 'px';
+      menu.style.transform = 'none';
+    }
+
+    const listEl = menu.querySelector('.mill-col-filter-list');
+    if (listEl) {
+      listEl.style.maxHeight = Math.max(120, maxH - 152) + 'px';
+    }
+  }
+
+  function millBindColFilterMenuReposition_(btn, menu) {
+    if (window._millColFilterReposition_) {
+      window.removeEventListener('scroll', window._millColFilterReposition_, true);
+      window.removeEventListener('resize', window._millColFilterReposition_);
+      window._millColFilterReposition_ = null;
+    }
+    const onReposition = function() {
+      if (menu.parentElement && btn.isConnected) millPositionColFilterMenu_(btn, menu);
+    };
+    window._millColFilterReposition_ = onReposition;
+    window.addEventListener('scroll', onReposition, true);
+    window.addEventListener('resize', onReposition);
+    const scrollEl = document.querySelector('#panel-mill-onboarding .mill-registry-table-scroll');
+    if (scrollEl) {
+      scrollEl.addEventListener('scroll', onReposition, { passive: true });
+      menu._millScrollEl = scrollEl;
+    }
+    menu._millOnReposition = onReposition;
+    menu._millAnchorBtn = btn;
+  }
+
   function bindMillHeaderFiltersOnce() {
     const table = document.getElementById('millTable');
     if (!table || table.dataset.millFilterBound === '1') return;
     table.dataset.millFilterBound = '1';
-    table.addEventListener('click', function(e) {
-      const btn = e.target.closest('[data-mill-filter-btn]');
-      if (!btn || !table.contains(btn)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      document.querySelectorAll('.mill-col-filter-menu').forEach(function(m) { m.remove(); });
+
+    function openMillColFilterMenu_(btn) {
+      if (!btn || !btn.isConnected) return;
+      millCloseColFilterMenus_();
       const col = btn.getAttribute('data-mill-filter-btn') || '';
       if (!col) return;
       const options = millFilterOptions[col] || [];
       let selectedVals = (millColumnFilters[col] && millColumnFilters[col].length) ? millColumnFilters[col].slice() : options.slice();
       const menu = document.createElement('div');
-      menu.className = 'mill-col-filter-menu';
+      menu.className = 'mill-col-filter-menu open';
+      menu.setAttribute('role', 'dialog');
       menu.innerHTML =
-        '<div class="mill-col-filter-head">' + col + '</div>'
-        + '<input type="text" class="mill-col-filter-search" placeholder="Search value...">'
-        + '<div class="mill-col-filter-actions">'
-        + '<button type="button" data-act="all">Select all</button>'
-        + '<button type="button" data-act="none">Clear all</button>'
-        + '</div>'
-        + '<div class="mill-col-filter-list"></div>'
+        '<div class="ttp-dropdown-head mill-col-filter-head">'
+        + '<span class="ttp-dropdown-title">' + escHtml(col) + '</span>'
+        + '<div class="ttp-dropdown-actions mill-col-filter-actions">'
+        + '<button type="button" data-act="all">All</button>'
+        + '<button type="button" data-act="none">None</button>'
+        + '</div></div>'
+        + '<div class="ttp-dropdown-search"><input type="text" class="mill-col-filter-search" placeholder="Search values…" autocomplete="off"></div>'
+        + '<div class="mill-col-filter-list ttp-dropdown-list"></div>'
         + '<div class="mill-col-filter-foot">'
-        + '<button type="button" data-act="cancel">Cancel</button>'
-        + '<button type="button" data-act="ok" class="is-primary">OK</button>'
+        + '<button type="button" data-act="cancel">Batal</button>'
+        + '<button type="button" data-act="ok" class="is-primary">Terapkan</button>'
         + '</div>';
       document.body.appendChild(menu);
-      const br = btn.getBoundingClientRect();
-      menu.style.top = (br.bottom + 6) + 'px';
-      menu.style.left = Math.max(8, Math.min(br.right - 260, window.innerWidth - 268)) + 'px';
+      millPositionColFilterMenu_(btn, menu);
+      millBindColFilterMenuReposition_(btn, menu);
 
       const listEl = menu.querySelector('.mill-col-filter-list');
       const searchEl = menu.querySelector('.mill-col-filter-search');
+      function closeMenu() { millCloseColFilterMenus_(); }
       function renderItems() {
         if (!listEl) return;
         const q = String((searchEl && searchEl.value) || '').trim().toLowerCase();
         const items = options.filter(function(v) { return !q || String(v).toLowerCase().indexOf(q) !== -1; });
         listEl.innerHTML = items.map(function(v) {
           const checked = selectedVals.indexOf(v) !== -1;
-          return '<label class="mill-col-filter-item"><input type="checkbox" value="' + String(v).replace(/"/g,'&quot;') + '"' + (checked ? ' checked' : '') + '> <span>' + v + '</span></label>';
+          return '<label class="ttp-dropdown-item mill-col-filter-item"><input type="checkbox" value="' + escHtml(v) + '"' + (checked ? ' checked' : '') + '><span>' + escHtml(v) + '</span></label>';
         }).join('') || '<div class="mill-col-filter-empty">No values</div>';
         listEl.querySelectorAll('input[type="checkbox"]').forEach(function(cb) {
           cb.addEventListener('change', function() {
@@ -6259,29 +6336,41 @@ function initDashboardApp() {
         });
       }
       renderItems();
-      if (searchEl) searchEl.addEventListener('input', renderItems);
+      if (searchEl) {
+        searchEl.addEventListener('input', renderItems);
+        setTimeout(function() { searchEl.focus(); }, 0);
+      }
       menu.querySelectorAll('[data-act]').forEach(function(ab) {
-        ab.addEventListener('click', function() {
+        ab.addEventListener('click', function(ev) {
+          ev.stopPropagation();
           const act = ab.getAttribute('data-act');
           if (act === 'all') { selectedVals = options.slice(); renderItems(); return; }
           if (act === 'none') { selectedVals = []; renderItems(); return; }
-          if (act === 'cancel') { menu.remove(); return; }
+          if (act === 'cancel') { closeMenu(); return; }
           if (act === 'ok') {
             millColumnFilters[col] = (selectedVals.length === 0 || selectedVals.length === options.length) ? [] : selectedVals.slice();
-            menu.remove();
+            closeMenu();
             scheduleRenderMillTable();
           }
         });
       });
       setTimeout(function() {
         function closeOut(ev) {
-          if (!menu.contains(ev.target) && ev.target !== btn) {
-            menu.remove();
-            document.removeEventListener('click', closeOut, true);
+          if (!menu.contains(ev.target) && ev.target !== btn && !btn.contains(ev.target)) {
+            closeMenu();
+            document.removeEventListener('mousedown', closeOut, true);
           }
         }
-        document.addEventListener('click', closeOut, true);
+        document.addEventListener('mousedown', closeOut, true);
       }, 0);
+    }
+
+    table.querySelectorAll('[data-mill-filter-btn]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        openMillColFilterMenu_(btn);
+      });
     });
   }
 
@@ -21996,6 +22085,133 @@ function initDashboardApp() {
     return String(s || '').trim().toLowerCase().replace(/\s+/g, ' ');
   }
 
+  function supplyPeriodKey_(quarter, year) {
+    const q = String(quarter || '').trim().toUpperCase().replace(/^Q/i, 'Q');
+    return q + '|' + String(year || '').trim();
+  }
+
+  function supplyCompanyKey_(company) {
+    return supplyNormKey_(company);
+  }
+
+  function supplyCombineSupplyTypes_(a, b) {
+    const types = [];
+    function addToken(raw) {
+      const u = String(raw || '').trim().toUpperCase();
+      if (!u) return;
+      if (u.indexOf('CPO') >= 0 && types.indexOf('CPO') === -1) types.push('CPO');
+      if (u.indexOf('PK') >= 0 && types.indexOf('PK') === -1) types.push('PK');
+    }
+    addToken(a);
+    addToken(b);
+    if (types.length > 1) return 'CPO+PK';
+    return types[0] || 'CPO';
+  }
+
+  function supplyRowHasCpo_(row) {
+    if (!row) return false;
+    const st = String(row.supply_type || row.SUPPLY_TYPE || '').toUpperCase();
+    if (st.indexOf('CPO') >= 0) return true;
+    const pct = row[SUPPLY_PCT_COL_CPO];
+    return pct != null && String(pct).trim() !== '';
+  }
+
+  function supplyRowHasPk_(row) {
+    if (!row) return false;
+    const st = String(row.supply_type || row.SUPPLY_TYPE || '').toUpperCase();
+    if (st.indexOf('PK') >= 0) return true;
+    const pct = row[SUPPLY_PCT_COL_PK];
+    return pct != null && String(pct).trim() !== '';
+  }
+
+  function supplyMergeProductSupplyField_(row) {
+    const types = [];
+    if (supplyRowHasCpo_(row)) types.push('CPO');
+    if (supplyRowHasPk_(row)) types.push('PK');
+    if (types.length === 2) return 'CPO, PK';
+    if (types.length === 1) return types[0];
+    return String(row['PRODUCT SUPPLY'] || '').trim();
+  }
+
+  /** Semua draft row (belum submit) dengan COMPANY NAME sama di batch periode ini. */
+  function supplyFindDraftRowsForMergeByCompany_(batch, companyName) {
+    if (!batch || !batch.rows || !batch.rows.length) return [];
+    const wantCo = supplyCompanyKey_(companyName);
+    if (!wantCo) return [];
+    return batch.rows.filter(function(row) {
+      return !row._submitted && supplyCompanyKey_(row['COMPANY NAME']) === wantCo;
+    });
+  }
+
+  function supplyApplyImportToDraftRow_(existing, r, kind, pctField, facField, batch) {
+    existing[pctField] = r.SUPPLY_PCT;
+    existing[facField] = r.PLANT || existing[facField] || '';
+    if (r.CATEGORY && !existing['TRADER NAME']) existing['TRADER NAME'] = r.CATEGORY;
+    if (r.SUPPLY_QTY != null || r.SUM_QTY_KG != null) {
+      existing.SUPPLY_QTY = r.SUPPLY_QTY != null ? r.SUPPLY_QTY : r.SUM_QTY_KG;
+    }
+    existing.supply_type = supplyCombineSupplyTypes_(existing.supply_type, kind);
+    existing.SUPPLY_TYPE = existing.supply_type;
+    existing['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(existing);
+    supplyRematchDraftRow_(existing, batch);
+  }
+
+  /** Gabungkan dua draft row (mis. batch CPO + batch PK periode sama) per company. */
+  function supplyMergeDraftRows_(target, source) {
+    if (!target || !source) return;
+    if (source[SUPPLY_PCT_COL_CPO] != null && String(source[SUPPLY_PCT_COL_CPO]).trim() !== '') {
+      target[SUPPLY_PCT_COL_CPO] = source[SUPPLY_PCT_COL_CPO];
+    }
+    if (source[SUPPLY_PCT_COL_PK] != null && String(source[SUPPLY_PCT_COL_PK]).trim() !== '') {
+      target[SUPPLY_PCT_COL_PK] = source[SUPPLY_PCT_COL_PK];
+    }
+    if (source['FACILITY NAME CPO']) target['FACILITY NAME CPO'] = source['FACILITY NAME CPO'];
+    if (source['FACILITY NAME PK']) target['FACILITY NAME PK'] = source['FACILITY NAME PK'];
+    if (source['TRADER NAME'] && !target['TRADER NAME']) target['TRADER NAME'] = source['TRADER NAME'];
+    target.supply_type = supplyCombineSupplyTypes_(target.supply_type, source.supply_type || source.SUPPLY_TYPE);
+    target.SUPPLY_TYPE = target.supply_type;
+    target['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(target);
+  }
+
+  function supplyConsolidateBatchesByPeriod_(batchList) {
+    const openByPeriod = {};
+    const result = [];
+    (batchList || []).forEach(function(b) {
+      if (b.status === 'submitted') {
+        result.push(b);
+        return;
+      }
+      const pk = supplyPeriodKey_(b.quarter, b.year);
+      if (!openByPeriod[pk]) {
+        openByPeriod[pk] = b;
+        result.push(b);
+        return;
+      }
+      const target = openByPeriod[pk];
+      (b.rows || []).forEach(function(srcRow) {
+        const matches = supplyFindDraftRowsForMergeByCompany_(target, srcRow['COMPANY NAME']);
+        if (matches.length) {
+          supplyMergeDraftRows_(matches[0], srcRow);
+        } else {
+          target.rows.push(srcRow);
+        }
+      });
+      target.supply_type = supplyCombineSupplyTypes_(target.supply_type, b.supply_type);
+    });
+    return result;
+  }
+
+  function supplyCountMergeableImportRows_(parsedRows, quarter, year) {
+    const batch = supplyFindOpenPeriodBatch_(quarter, year);
+    if (!batch || !parsedRows || !parsedRows.length) return 0;
+    let n = 0;
+    parsedRows.forEach(function(r) {
+      const names = supplyResolveNamesFromExcel_(r);
+      if (supplyFindDraftRowsForMergeByCompany_(batch, names.company).length) n++;
+    });
+    return n;
+  }
+
   function supplyParseQty_(raw) {
     if (raw == null || raw === '') return NaN;
     if (typeof raw === 'number') return isFinite(raw) ? raw : NaN;
@@ -22078,6 +22294,7 @@ function initDashboardApp() {
 
   /** Profile row must support this supply type via PRODUCT SUPPLY (AS). Empty = allow legacy rows. */
   function supplyProductSupplyAllows_(profileRow, supplyKind) {
+    if (supplyKind === 'CPO+PK') return true;
     const tokens = millProductSupplyTokens_(profileRow);
     if (!tokens.length) return true;
     if (supplyKind === 'PK') return millProductSupplyMatchesPk_(profileRow);
@@ -22115,17 +22332,23 @@ function initDashboardApp() {
 
   function supplyRematchDraftRow_(draftRow, batch) {
     if (!draftRow) return;
-    const kind = String(batch && batch.supply_type || draftRow.supply_type || 'CPO').toUpperCase() === 'PK' ? 'PK' : 'CPO';
+    const rawKind = String(batch && batch.supply_type || draftRow.supply_type || 'CPO').toUpperCase();
+    let kind = 'CPO';
+    if (rawKind.indexOf('CPO') >= 0 && rawKind.indexOf('PK') >= 0) kind = 'CPO+PK';
+    else if (rawKind === 'PK' || (supplyRowHasPk_(draftRow) && !supplyRowHasCpo_(draftRow))) kind = 'PK';
+    else if (supplyRowHasCpo_(draftRow) && supplyRowHasPk_(draftRow)) kind = 'CPO+PK';
     const facField = kind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
     const excelLike = {
       COMPANY_NAME: draftRow['COMPANY NAME'],
       MILL_NAME: draftRow['MILL NAME'],
       COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
-      PLANT: draftRow[facField] || draftRow.PLANT || '',
+      PLANT: draftRow[facField] || draftRow['FACILITY NAME CPO'] || draftRow['FACILITY NAME PK'] || draftRow.PLANT || '',
     };
     const found = supplyFindMillProfileMatch_(excelLike, kind);
     draftRow.match_status = found.status;
-    draftRow.supply_type = kind;
+    draftRow.supply_type = supplyCombineSupplyTypes_(draftRow.supply_type, kind);
+    draftRow.SUPPLY_TYPE = draftRow.supply_type;
+    draftRow['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(draftRow);
     if (found.status === 'matched' && found.row) {
       draftRow.target_mill_row = found.row._row;
       draftRow._mill_row = found.row._row;
@@ -22269,6 +22492,94 @@ function initDashboardApp() {
     return { rows: supplyCalcPercentages_(parsed) };
   }
 
+  function supplyTypeBadgeHtml_(supplyKind) {
+    const k = String(supplyKind || 'CPO').toUpperCase();
+    if (k.indexOf('CPO') >= 0 && k.indexOf('PK') >= 0) {
+      return '<span class="supply-badge supply-badge--cpopk">CPO+PK</span>';
+    }
+    if (k === 'PK') return '<span class="supply-badge supply-badge--pk">PK</span>';
+    return '<span class="supply-badge supply-badge--cpo">CPO</span>';
+  }
+
+  function supplyRowTypePillsHtml_(row) {
+    const parts = [];
+    if (supplyRowHasCpo_(row)) parts.push('<span class="supply-pill supply-pill--cpo">CPO</span>');
+    if (supplyRowHasPk_(row)) parts.push('<span class="supply-pill supply-pill--pk">PK</span>');
+    if (!parts.length) return '';
+    return '<span class="supply-row-pills">' + parts.join('') + '</span>';
+  }
+
+  function supplyMatchBadgeHtml_(status, hint) {
+    if (status === 'matched') {
+      return '<span class="supply-match-pill supply-match-pill--matched">✓ Profile</span>';
+    }
+    if (status === 'group_mismatch') {
+      const extra = hint ? (' → ' + escHtml(hint)) : '';
+      return '<span class="supply-match-pill supply-match-pill--warn">⚠ Group' + extra + '</span>';
+    }
+    return '<span class="supply-match-pill supply-match-pill--new">Baru</span>';
+  }
+
+  function supplyFindOpenPeriodBatch_(quarter, year) {
+    return (window._supplyDraftBatches || []).find(function(b) {
+      return b.status !== 'submitted'
+        && supplyPeriodKey_(b.quarter, b.year) === supplyPeriodKey_(quarter, year);
+    }) || null;
+  }
+
+  function supplySetProceedReady_(ready) {
+    const proceedBtn = document.getElementById('btn-supply-import-proceed');
+    const footerHint = document.getElementById('supply-import-footer-hint');
+    if (proceedBtn) proceedBtn.disabled = !ready;
+    if (footerHint) {
+      footerHint.textContent = ready
+        ? 'Siap ditambahkan ke Task List draft.'
+        : 'Lengkapi periode dan upload file untuk melanjutkan.';
+    }
+  }
+
+  function supplyRefreshPeriodHint_() {
+    const quarterSel = document.getElementById('supply-import-quarter');
+    const yearSel = document.getElementById('supply-import-year');
+    const hintEl = document.getElementById('supply-import-period-hint');
+    if (!hintEl) return;
+    const q = quarterSel ? quarterSel.value : '';
+    const y = yearSel ? yearSel.value : '';
+    if (!q || !y) {
+      hintEl.hidden = true;
+      hintEl.textContent = '';
+      return;
+    }
+    const batch = supplyFindOpenPeriodBatch_(q, y);
+    if (!batch) {
+      hintEl.hidden = true;
+      hintEl.textContent = '';
+      return;
+    }
+    const kind = String(batch.supply_type || 'CPO').toUpperCase();
+    const importKind = supplyImportType_();
+    const rowCount = (batch.rows || []).length;
+    if (kind.indexOf('CPO') >= 0 && kind.indexOf('PK') >= 0) {
+      hintEl.textContent = 'Draft ' + q + ' ' + y + ' sudah ada (' + rowCount + ' baris, CPO+PK). Import ini akan memperbarui baris company yang sama.';
+    } else if ((kind === 'CPO' && importKind === 'PK') || (kind === 'PK' && importKind === 'CPO')) {
+      hintEl.textContent = 'Draft ' + q + ' ' + y + ' sudah ada (' + rowCount + ' baris ' + kind + '). Import ' + importKind + ' akan digabung per Company Name → CPO+PK.';
+    } else {
+      hintEl.textContent = 'Draft ' + q + ' ' + y + ' sudah ada (' + rowCount + ' baris). Baris baru akan ditambahkan atau diperbarui.';
+    }
+    hintEl.hidden = false;
+  }
+
+  function supplySyncTypeSegActive_() {
+    const typeWrap = document.getElementById('supply-import-type-wrap');
+    if (!typeWrap) return;
+    const kind = supplyImportType_();
+    typeWrap.querySelectorAll('.supply-type-seg__opt').forEach(function(lbl) {
+      const inp = lbl.querySelector('input[name="supply-import-type"]');
+      const isActive = inp && String(inp.value || '').toUpperCase() === kind;
+      lbl.classList.toggle('supply-type-seg__opt--active', isActive);
+    });
+  }
+
   (function initSupplyImport() {
     // ── Year options ─────────────────────────────────────────────────────────
     const yearSel = document.getElementById('supply-import-year');
@@ -22324,19 +22635,36 @@ function initDashboardApp() {
       if (!el) return;
       lockSupplyImportScroll_();
       el.classList.add('open');
+      supplySyncTypeSegActive_();
+      supplyRefreshPeriodHint_();
+      supplySetProceedReady_(false);
     }
     if (openBtn)   openBtn.addEventListener('click', openModal);
     if (closeBtn)  closeBtn.addEventListener('click', closeModal);
     if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
     if (overlay)   overlay.addEventListener('click', function(e) { if (e.target === overlay) closeModal(); });
 
+    document.addEventListener('click', function(e) {
+      const t = e.target && e.target.closest ? e.target.closest('[data-action="open-supply-import"]') : null;
+      if (t) openModal();
+    });
+
     // ── Drag & drop ───────────────────────────────────────────────────────────
     const dropZone  = document.getElementById('supply-import-drop-zone');
     const fileInput = document.getElementById('supply-import-file-input');
     if (dropZone) {
-      dropZone.addEventListener('dragover', function(e) { e.preventDefault(); dropZone.style.background = 'rgba(139,26,26,0.04)'; });
-      dropZone.addEventListener('dragleave', function() { dropZone.style.background = ''; });
-      dropZone.addEventListener('drop', function(e) { e.preventDefault(); dropZone.style.background = ''; if (e.dataTransfer.files[0]) handleSupplyFile_(e.dataTransfer.files[0]); });
+      dropZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        dropZone.classList.add('supply-import-drop-zone--drag');
+      });
+      dropZone.addEventListener('dragleave', function() {
+        dropZone.classList.remove('supply-import-drop-zone--drag');
+      });
+      dropZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        dropZone.classList.remove('supply-import-drop-zone--drag');
+        if (e.dataTransfer.files[0]) handleSupplyFile_(e.dataTransfer.files[0]);
+      });
     }
     if (fileInput) fileInput.addEventListener('change', function() { if (this.files[0]) handleSupplyFile_(this.files[0]); });
 
@@ -22346,13 +22674,8 @@ function initDashboardApp() {
       const q = quarterSel ? quarterSel.value : '';
       const y = yearSel ? yearSel.value : '';
       const hasData = window._supplyImportParsedRows && window._supplyImportParsedRows.length > 0;
-      const proceedBtn = document.getElementById('btn-supply-import-proceed');
-      if (proceedBtn) {
-        const ready = !!(q && y && hasData);
-        proceedBtn.disabled = !ready;
-        proceedBtn.style.opacity = ready ? '1' : '0.45';
-        proceedBtn.style.cursor  = ready ? 'pointer' : 'not-allowed';
-      }
+      supplySetProceedReady_(!!(q && y && hasData));
+      supplyRefreshPeriodHint_();
     }
     if (quarterSel) quarterSel.addEventListener('change', checkProceedReady_);
     if (yearSel)    yearSel.addEventListener('change', checkProceedReady_);
@@ -22361,10 +22684,7 @@ function initDashboardApp() {
     if (typeWrap) {
       typeWrap.querySelectorAll('.supply-type-seg__opt').forEach(function(lbl) {
         lbl.addEventListener('click', function() {
-          typeWrap.querySelectorAll('.supply-type-seg__opt').forEach(function(el) {
-            el.classList.remove('supply-type-seg__opt--active');
-          });
-          lbl.classList.add('supply-type-seg__opt--active');
+          supplySyncTypeSegActive_();
           const inp = lbl.querySelector('input[name="supply-import-type"]');
           if (inp) inp.checked = true;
           window._supplyImportParsedRows = null;
@@ -22410,12 +22730,13 @@ function initDashboardApp() {
     const fileInfo   = document.getElementById('supply-import-file-info');
     const fileError  = document.getElementById('supply-import-file-error');
     const preview    = document.getElementById('supply-import-preview-wrap');
-    const proceedBtn = document.getElementById('btn-supply-import-proceed');
+    const previewStats = document.getElementById('supply-import-preview-stats');
     if (!keepType && fileInput) { fileInput.value = ''; }
-    if (!keepType && fileInfo)  { fileInfo.style.display = 'none'; }
-    if (fileError)   { fileError.style.display = 'none'; fileError.textContent = ''; }
-    if (!keepType && preview)   { preview.style.display = 'none'; }
-    if (proceedBtn)  { proceedBtn.disabled = true; proceedBtn.style.opacity = '0.45'; }
+    if (!keepType && fileInfo)  { fileInfo.hidden = true; }
+    if (fileError)   { fileError.hidden = true; fileError.textContent = ''; }
+    if (!keepType && preview)   { preview.hidden = true; }
+    if (!keepType && previewStats) previewStats.textContent = '';
+    supplySetProceedReady_(false);
   }
 
   function handleSupplyFile_(file) {
@@ -22425,10 +22746,10 @@ function initDashboardApp() {
     const rowCount  = document.getElementById('supply-import-row-count');
 
     function showErr(msg) {
-      if (fileError) { fileError.textContent = msg; fileError.style.display = 'block'; }
-      if (fileInfo)  fileInfo.style.display = 'none';
+      if (fileError) { fileError.textContent = msg; fileError.hidden = false; }
+      if (fileInfo)  fileInfo.hidden = true;
     }
-    if (fileError) fileError.style.display = 'none';
+    if (fileError) fileError.hidden = true;
 
     if (typeof XLSX === 'undefined') {
       const script = document.createElement('script');
@@ -22459,8 +22780,8 @@ function initDashboardApp() {
           window._supplyImportSheetName = sheetName;
 
           if (fileName) fileName.textContent = f.name + ' · ' + sheetName;
-          if (rowCount) rowCount.textContent = window._supplyImportParsedRows.length + ' rows';
-          if (fileInfo) fileInfo.style.display = 'flex';
+          if (rowCount) rowCount.textContent = window._supplyImportParsedRows.length + ' baris';
+          if (fileInfo) fileInfo.hidden = false;
 
           buildImportPreview_(window._supplyImportParsedRows, supplyType);
 
@@ -22468,13 +22789,8 @@ function initDashboardApp() {
           const yearSel    = document.getElementById('supply-import-year');
           const q = quarterSel ? quarterSel.value : '';
           const y = yearSel ? yearSel.value : '';
-          const proceedBtn = document.getElementById('btn-supply-import-proceed');
-          if (proceedBtn) {
-            const ready = !!(q && y && window._supplyImportParsedRows.length);
-            proceedBtn.disabled = !ready;
-            proceedBtn.style.opacity = ready ? '1' : '0.45';
-            proceedBtn.style.cursor  = ready ? 'pointer' : 'not-allowed';
-          }
+          supplySetProceedReady_(!!(q && y && window._supplyImportParsedRows.length));
+          supplyRefreshPeriodHint_();
         } catch (ex) {
           errCb('Failed to read file: ' + ex.message);
         }
@@ -22487,33 +22803,51 @@ function initDashboardApp() {
     const wrap   = document.getElementById('supply-import-preview-wrap');
     const tHead  = document.getElementById('supply-import-preview-head');
     const tBody  = document.getElementById('supply-import-preview-body');
+    const stats  = document.getElementById('supply-import-preview-stats');
     if (!wrap || !tHead || !tBody) return;
-    const pctLabel = supplyType === 'PK' ? '% Supply PK' : '% Supply CPO';
+    const pctLabel = supplyType === 'PK' ? '% PK' : '% CPO';
+    const kind = supplyType === 'PK' ? 'PK' : 'CPO';
+    let matchedN = 0;
+    let newN = 0;
+    parsedRows.forEach(function(r) {
+      const match = supplyFindMillProfileMatch_(r, kind);
+      if (match.status === 'matched') matchedN++;
+      else if (match.status === 'new') newN++;
+    });
 
     tHead.innerHTML = '<tr>'
-      + ['Group','Company','Mill','Plant','Qty','Match', pctLabel].map(function(h) {
-          return '<th style="padding:6px 10px;text-align:left;font-size:10.5px;font-weight:700;color:#5A3030;background:#f9f3f3;border-bottom:1px solid rgba(139,26,26,0.1);white-space:nowrap;">' + escHtml(h) + '</th>';
+      + ['Group', 'Company', 'Mill', 'Plant', 'Qty', 'Match', pctLabel].map(function(h) {
+          return '<th>' + escHtml(h) + '</th>';
         }).join('') + '</tr>';
 
-    const kind = supplyType === 'PK' ? 'PK' : 'CPO';
+    const quarterSel = document.getElementById('supply-import-quarter');
+    const yearSel = document.getElementById('supply-import-year');
+    const q = quarterSel ? quarterSel.value : '';
+    const y = yearSel ? yearSel.value : '';
+    const mergeableN = (q && y) ? supplyCountMergeableImportRows_(parsedRows, q, y) : 0;
+
     const preview = parsedRows.slice(0, 8);
-    tBody.innerHTML = preview.map(function(r, i) {
+    tBody.innerHTML = preview.map(function(r) {
       const names = supplyResolveNamesFromExcel_(r);
       const match = supplyFindMillProfileMatch_(r, kind);
-      const matchLabel = match.status === 'matched' ? '✓ Profile'
-        : (match.status === 'group_mismatch' ? '⚠ Group' : 'Baru');
       const millDisp = names.mill || '—';
-      const bg = i % 2 === 0 ? '#fff' : '#fdf9f9';
-      return '<tr style="background:' + bg + ';">'
-        + [names.group, names.company, millDisp, r.PLANT, r.SUPPLY_QTY, matchLabel, r.SUPPLY_PCT].map(function(v) {
-            return '<td style="padding:6px 10px;font-size:11.5px;color:#2A1010;border-bottom:1px solid rgba(139,26,26,0.05);max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'
-              + escHtml(String(v != null && v !== '' ? v : '—')) + '</td>';
+      return '<tr>'
+        + [names.group, names.company, millDisp, r.PLANT, r.SUPPLY_QTY,
+            supplyMatchBadgeHtml_(match.status), r.SUPPLY_PCT].map(function(v) {
+            return '<td>' + (typeof v === 'string' && v.indexOf('<span') === 0 ? v : escHtml(String(v != null && v !== '' ? v : '—'))) + '</td>';
           }).join('') + '</tr>';
     }).join('');
     if (parsedRows.length > 8) {
-      tBody.innerHTML += '<tr><td colspan="7" style="padding:8px 10px;font-size:11px;color:#9C8080;text-align:center;">… and ' + (parsedRows.length - 8) + ' more rows</td></tr>';
+      tBody.innerHTML += '<tr><td colspan="7" class="supply-import-preview-more">… +' + (parsedRows.length - 8) + ' baris lainnya</td></tr>';
     }
-    wrap.style.display = 'block';
+    if (stats) {
+      let statTxt = parsedRows.length + ' baris · ' + matchedN + ' matched · ' + newN + ' baru';
+      if (mergeableN > 0) {
+        statTxt += ' · ' + mergeableN + ' akan digabung (company sama)';
+      }
+      stats.textContent = statTxt;
+    }
+    wrap.hidden = false;
   }
 
   // ── Build task list in panel ──────────────────────────────────────────────
@@ -22525,19 +22859,38 @@ function initDashboardApp() {
       await loadMillData();
     }
 
-    const batchId = 'batch-' + Date.now();
     const now     = new Date().toISOString();
     const kind    = supplyType === 'PK' ? 'PK' : 'CPO';
     const pctField = kind === 'PK' ? SUPPLY_PCT_COL_PK : SUPPLY_PCT_COL_CPO;
     const facField = kind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
 
-    const rows = parsedRows.map(function(r, idx) {
+    let batch = (window._supplyDraftBatches || []).find(function(b) {
+      return b.status !== 'submitted'
+        && supplyPeriodKey_(b.quarter, b.year) === supplyPeriodKey_(quarter, year);
+    });
+    const batchId = batch ? batch.batch_id : ('batch-' + Date.now());
+    let mergedCount = 0;
+
+    if (!batch) {
+      batch = {
+        batch_id: batchId,
+        quarter: quarter,
+        year: year,
+        supply_type: kind,
+        rows: [],
+        status: 'draft',
+        created_at: now,
+      };
+      window._supplyDraftBatches.push(batch);
+    }
+
+    function buildDraftFromExcel_(r, idx) {
       const names = supplyResolveNamesFromExcel_(r);
       const found = supplyFindMillProfileMatch_(r, kind);
       const profile = found.row;
 
       const draft = {
-        draft_id:       batchId + '_' + idx,
+        draft_id:       batchId + '_' + Date.now() + '_' + idx,
         batch_id:       batchId,
         status:         'draft',
         quarter:        quarter,
@@ -22596,23 +22949,35 @@ function initDashboardApp() {
         draft[facField] = r.PLANT || profile[facField] || '';
       }
 
+      draft['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(draft);
       return draft;
+    }
+
+    parsedRows.forEach(function(r, idx) {
+      const names = supplyResolveNamesFromExcel_(r);
+      const existingRows = supplyFindDraftRowsForMergeByCompany_(batch, names.company);
+      if (existingRows.length) {
+        existingRows.forEach(function(existing) {
+          supplyApplyImportToDraftRow_(existing, r, kind, pctField, facField, batch);
+        });
+        mergedCount += existingRows.length;
+        return;
+      }
+      batch.rows.push(buildDraftFromExcel_(r, idx));
     });
 
-    const batch = {
-      batch_id: batchId,
-      quarter: quarter,
-      year: year,
-      supply_type: kind,
-      rows: rows,
-      status: 'draft',
-      created_at: now,
-    };
-    window._supplyDraftBatches.push(batch);
+    batch.supply_type = supplyCombineSupplyTypes_(batch.supply_type, kind);
     renderSupplyDraftList_();
 
-    apiPost({ action: 'saveSupplyDraft', batch_id: batchId, rows: rows, meta: { quarter, year, supply_type: kind } })
+    apiPost({ action: 'saveSupplyDraft', batch_id: batchId, rows: batch.rows, meta: { quarter, year, supply_type: batch.supply_type } })
       .catch(function(err) { console.warn('[supplyDraft] Auto-save failed:', err.message); });
+
+    if (mergedCount > 0 && typeof window.showSddToast === 'function') {
+      window.showSddToast(
+        mergedCount + ' baris company sama di ' + quarter + ' ' + year + ' digabung → supply CPO+PK.',
+        'success'
+      );
+    }
   }
 
   function renderSupplyDraftList_() {
@@ -22636,11 +23001,12 @@ function initDashboardApp() {
       const doneCount   = b.rows ? b.rows.filter(function(r) { return r._submitted; }).length : 0;
       const isSubmitted = b.status === 'submitted';
       const supplyKind  = String(b.supply_type || (b.rows && b.rows[0] && b.rows[0].supply_type) || 'CPO').toUpperCase();
-      const typeBadge   = '<span class="supply-badge supply-badge--' + (supplyKind === 'PK' ? 'pk' : 'cpo') + '">' + escHtml(supplyKind) + '</span>';
+      const typeBadge   = supplyTypeBadgeHtml_(supplyKind);
       const statusBadge = isSubmitted
         ? '<span class="supply-badge supply-badge--submitted">Submitted</span>'
-        : '<span class="supply-badge supply-badge--draft">Draft · Task List</span>';
+        : '<span class="supply-badge supply-badge--draft">Draft</span>';
       const createdAt = b.created_at ? new Date(b.created_at).toLocaleString('id-ID', { day:'2-digit', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '';
+      const dualCount = b.rows ? b.rows.filter(function(r) { return supplyRowHasCpo_(r) && supplyRowHasPk_(r); }).length : 0;
 
       return '<div class="supply-batch-card" data-batch-id="' + escHtml(b.batch_id) + '">'
         + '<div class="supply-batch-card-head">'
@@ -22648,19 +23014,23 @@ function initDashboardApp() {
         + '<span class="supply-batch-period">' + escHtml(b.quarter) + ' · ' + escHtml(b.year) + '</span>'
         + typeBadge
         + statusBadge
-        + '<span class="supply-batch-info">' + rowCount + ' rows · ' + matched + ' matched'
-        + (warnCount ? ' · ' + warnCount + ' group mismatch' : '')
-        + (newCount ? ' · ' + newCount + ' new' : '')
-        + (doneCount > 0 ? ' · ' + doneCount + ' done' : '') + '</span>'
+        + '<div class="supply-batch-stats">'
+        + '<span class="supply-stat-chip">' + rowCount + ' baris</span>'
+        + (matched ? '<span class="supply-stat-chip supply-stat-chip--ok">' + matched + ' matched</span>' : '')
+        + (warnCount ? '<span class="supply-stat-chip supply-stat-chip--warn">' + warnCount + ' group</span>' : '')
+        + (newCount ? '<span class="supply-stat-chip supply-stat-chip--new">' + newCount + ' baru</span>' : '')
+        + (dualCount ? '<span class="supply-stat-chip"><span class="supply-pill supply-pill--cpopk">CPO+PK</span> ' + dualCount + '</span>' : '')
+        + (doneCount > 0 ? '<span class="supply-stat-chip">' + doneCount + ' submitted</span>' : '')
+        + '</div>'
         + (createdAt ? '<span class="supply-batch-date">' + createdAt + '</span>' : '')
         + '</div>'
         + '<div class="supply-batch-actions">'
         + (!isSubmitted ? '<button type="button" class="supply-btn supply-btn--ghost supply-btn--expand" data-batch="' + escHtml(b.batch_id) + '">Lihat / Edit</button>' : '')
         + (!isSubmitted ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="rematch-batch" data-batch="' + escHtml(b.batch_id) + '">↻ Re-match</button>' : '')
-        + '<button type="button" class="supply-btn supply-btn--danger" data-action="delete-batch" data-batch="' + escHtml(b.batch_id) + '">Delete</button>'
+        + '<button type="button" class="supply-btn supply-btn--danger" data-action="delete-batch" data-batch="' + escHtml(b.batch_id) + '">Hapus</button>'
         + '</div>'
         + '</div>'
-        + '<div class="supply-batch-table-wrap" id="supply-batch-table-' + escHtml(b.batch_id) + '" style="display:none;">'
+        + '<div class="supply-batch-table-wrap" id="supply-batch-table-' + escHtml(b.batch_id) + '" hidden>'
         + renderSupplyBatchTable_(b)
         + '</div>'
         + '</div>';
@@ -22675,9 +23045,10 @@ function initDashboardApp() {
         const batchId = btn.dataset.batch;
         const wrap    = document.getElementById('supply-batch-table-' + batchId);
         if (!wrap) return;
-        const isOpen = wrap.style.display !== 'none';
-        wrap.style.display = isOpen ? 'none' : 'block';
-        btn.textContent    = isOpen ? 'Lihat / Edit' : 'Tutup';
+        const isOpen = !wrap.hidden;
+        wrap.hidden = isOpen;
+        btn.textContent = isOpen ? 'Lihat / Edit' : 'Tutup';
+        btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
       });
     });
   }
@@ -22685,19 +23056,24 @@ function initDashboardApp() {
   function renderSupplyBatchTable_(batch) {
     if (!batch.rows || !batch.rows.length) return '<p style="padding:12px;font-size:12px;color:#9C8080;">No rows.</p>';
     const isSubmitted = batch.status === 'submitted';
-    const supplyKind  = String(batch.supply_type || (batch.rows[0] && batch.rows[0].supply_type) || 'CPO').toUpperCase();
-    const pctKey      = supplyKind === 'PK' ? SUPPLY_PCT_COL_PK : SUPPLY_PCT_COL_CPO;
-    const facKey      = supplyKind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+    const showCpo = batch.rows.some(supplyRowHasCpo_);
+    const showPk  = batch.rows.some(supplyRowHasPk_);
     const SHOW_COLS = [
       ['COMPANY NAME',    'Company Name'],
       ['MILL NAME',       'Mill Name'],
       ['GROUP NAME',      'Group Name'],
       ['TRADER NAME',     'Category'],
-      [facKey,            'Plant / Facility'],
-      [pctKey,            supplyKind === 'PK' ? '% Supply PK' : '% Supply CPO'],
-      ['SUPPLY_QTY',      'Qty (import)'],
-      ['PROVINCE',        'Province'],
     ];
+    if (showCpo) SHOW_COLS.push(['FACILITY NAME CPO', 'Plant / Facility CPO']);
+    if (showPk) SHOW_COLS.push(['FACILITY NAME PK', 'Plant / Facility PK']);
+    if (showCpo) SHOW_COLS.push([SUPPLY_PCT_COL_CPO, '% Supply CPO']);
+    if (showPk) SHOW_COLS.push([SUPPLY_PCT_COL_PK, '% Supply PK']);
+    SHOW_COLS.push(['SUPPLY_QTY', 'Qty (import)']);
+    SHOW_COLS.push(['PROVINCE', 'Province']);
+    if (showCpo && showPk) SHOW_COLS.push(['PRODUCT SUPPLY', 'Product Supply']);
+
+    const pctKeys = new Set([SUPPLY_PCT_COL_CPO, SUPPLY_PCT_COL_PK]);
+    const facKeys = new Set(['FACILITY NAME CPO', 'FACILITY NAME PK']);
 
     const head = '<tr>'
       + (isSubmitted ? '' : '<th class="supply-batch-th--check"></th>')
@@ -22711,45 +23087,38 @@ function initDashboardApp() {
       const isMatched  = row.match_status === 'matched';
       const isGroupWarn = row.match_status === 'group_mismatch';
       const isRowDone  = row._submitted === true;
-      let matchBadge = '<span style="font-size:9.5px;font-weight:700;background:rgba(139,26,26,0.1);color:#8B1A1A;border-radius:4px;padding:1px 5px;margin-left:4px;">New</span>';
-      if (isMatched) {
-        matchBadge = '<span style="font-size:9.5px;font-weight:700;background:rgba(46,125,50,0.12);color:#2e7d32;border-radius:4px;padding:1px 5px;margin-left:4px;">✓ Profile</span>';
-      } else if (isGroupWarn) {
-        const hint = row._profile_group_hint ? (' → ' + escHtml(row._profile_group_hint)) : '';
-        matchBadge = '<span class="supply-badge supply-badge--warn" style="font-size:9.5px;margin-left:4px;">⚠ Group' + hint + '</span>';
-      }
+      const isDual     = supplyRowHasCpo_(row) && supplyRowHasPk_(row);
+      const matchBadge = supplyMatchBadgeHtml_(row.match_status, row._profile_group_hint);
+      const typePills  = supplyRowTypePillsHtml_(row);
       const cells = SHOW_COLS.map(function(c) {
         const key = c[0];
         const val = row[key] != null ? row[key] : '';
         if (key === 'COMPANY NAME') {
-          return '<td style="color:#1A0A0A;">'
-            + escHtml(String(val || '—')) + matchBadge + '</td>';
+          return '<td class="supply-batch-td--company">'
+            + escHtml(String(val || '—')) + typePills + matchBadge + '</td>';
         }
-        if (!isSubmitted && !isRowDone && (key === pctKey || key === facKey || key === 'TRADER NAME' || key === 'GROUP NAME')) {
+        if (!isSubmitted && !isRowDone && (pctKeys.has(key) || facKeys.has(key) || key === 'TRADER NAME' || key === 'GROUP NAME' || key === 'PRODUCT SUPPLY')) {
           return '<td class="supply-batch-td--input">'
             + '<input class="supply-inline-input" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '" data-field="' + escHtml(key) + '"'
-            + ' value="' + escHtml(String(val || '')) + '"'
-            + ' style="width:100%;height:28px;border:1px solid rgba(139,26,26,0.18);border-radius:5px;padding:0 7px;font-size:11.5px;color:#1A0A0A;background:#fff;">'
+            + ' value="' + escHtml(String(val || '')) + '">'
             + '</td>';
         }
         return '<td>' + escHtml(String(val || '—')) + '</td>';
       }).join('');
 
-      // Per-row action button — all rows open modal for review/edit before save
       let rowAction = '';
       if (!isSubmitted) {
         if (isRowDone) {
-          rowAction = '<span style="font-size:10px;font-weight:700;color:#2e7d32;">✓ Submitted</span>';
+          rowAction = '<span class="supply-match-pill supply-match-pill--matched">✓ Submitted</span>';
         } else {
-          const btnLabel = isMatched ? 'Edit / Submit →' : 'Lengkapi →';
+          const btnLabel = isMatched ? 'Submit' : 'Lengkapi';
           const btnStyle = isMatched ? 'supply-btn--primary' : 'supply-btn--ghost';
-          rowAction = '<button type="button" class="supply-btn ' + btnStyle + '" style="padding:4px 10px;font-size:11px;white-space:nowrap;"'
-            + ' data-action="open-modal-row" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '">' + btnLabel + '</button>';
+          rowAction = '<button type="button" class="supply-btn ' + btnStyle + ' supply-btn--row" data-action="open-modal-row" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '">' + btnLabel + '</button>';
         }
       }
 
-      return '<tr' + (isRowDone ? ' style="opacity:0.5;"' : '') + '>'
-        + (isSubmitted ? '' : '<td><input type="checkbox" class="supply-row-check" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '"' + (isRowDone ? ' disabled' : ' checked') + '></td>')
+      return '<tr class="' + (isRowDone ? 'supply-batch-row--done' : '') + (isDual ? ' supply-batch-row--dual' : '') + '">'
+        + (isSubmitted ? '' : '<td><input type="checkbox" class="supply-row-check" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '"' + (isRowDone ? ' disabled' : ' checked') + ' aria-label="Select row"></td>')
         + cells
         + '<td class="supply-batch-td--action">' + rowAction + '</td>'
         + '</tr>';
@@ -22764,11 +23133,17 @@ function initDashboardApp() {
     const batch   = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
     const matched = batch ? (batch.rows || []).filter(function(r) { return r.match_status === 'matched' && !r._submitted; }).length : 0;
     const supplyKind = String(batch && (batch.supply_type || (batch.rows && batch.rows[0] && batch.rows[0].supply_type)) || 'CPO').toUpperCase();
-    return '<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 10px 4px;border-top:1px solid rgba(139,26,26,0.07);flex-wrap:wrap;">'
-      + '<span style="font-size:11px;color:#9C8080;">Review in Task List draft. Submit Matched fills <strong>PERCENTAGE SUPPLY ' + escHtml(supplyKind) + '</strong> on Mill Profile rows whose <strong>COMPANY NAME</strong> matches Excel.</span>'
-      + '<div style="display:flex;gap:8px;">'
-      + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">💾 Save as Draft</button>'
-      + (matched > 0 ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-matched" data-batch="' + escHtml(batchId) + '">✓ Submit Matched (' + matched + ')</button>' : '')
+    const isDual = supplyKind.indexOf('CPO') >= 0 && supplyKind.indexOf('PK') >= 0;
+    const pctLabel = isDual
+      ? 'PERCENTAGE SUPPLY CPO &amp; PK'
+      : ('PERCENTAGE SUPPLY ' + escHtml(supplyKind === 'PK' ? 'PK' : 'CPO'));
+    return '<div class="supply-batch-footer">'
+      + '<p class="supply-batch-footer__hint">Submit <strong>Matched</strong> mengisi <strong>' + pctLabel + '</strong>'
+      + (isDual ? ' dan <strong>PRODUCT SUPPLY = CPO, PK</strong>' : '')
+      + ' di Mill Profile untuk company yang cocok.</p>'
+      + '<div class="supply-batch-footer__actions">'
+      + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">Simpan Draft</button>'
+      + (matched > 0 ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-matched" data-batch="' + escHtml(batchId) + '">Submit Matched (' + matched + ')</button>' : '')
       + '</div>'
       + '</div>';
   }
@@ -22779,9 +23154,15 @@ function initDashboardApp() {
       await loadMillData();
     }
 
-    const kind = String(batch.supply_type || draftRow.supply_type || 'CPO').toUpperCase() === 'PK' ? 'PK' : 'CPO';
-    const pctField = kind === 'PK' ? SUPPLY_PCT_COL_PK : SUPPLY_PCT_COL_CPO;
-    const facField = kind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+    const rawKind = String(batch.supply_type || draftRow.supply_type || 'CPO').toUpperCase();
+    let kind = 'CPO';
+    if (rawKind.indexOf('CPO') >= 0 && rawKind.indexOf('PK') >= 0) kind = 'CPO+PK';
+    else if (rawKind === 'PK' || (supplyRowHasPk_(draftRow) && !supplyRowHasCpo_(draftRow))) kind = 'PK';
+    else if (supplyRowHasCpo_(draftRow) && supplyRowHasPk_(draftRow)) kind = 'CPO+PK';
+    const pctFieldCpo = SUPPLY_PCT_COL_CPO;
+    const pctFieldPk = SUPPLY_PCT_COL_PK;
+    const facFieldCpo = 'FACILITY NAME CPO';
+    const facFieldPk = 'FACILITY NAME PK';
 
     supplyRematchDraftRow_(draftRow, batch);
 
@@ -22790,7 +23171,7 @@ function initDashboardApp() {
       COMPANY_NAME: draftRow['COMPANY NAME'],
       MILL_NAME: draftRow['MILL NAME'],
       COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
-      PLANT: draftRow[facField] || draftRow.PLANT || '',
+      PLANT: draftRow[facFieldCpo] || draftRow[facFieldPk] || draftRow.PLANT || '',
     };
     const found = supplyFindMillProfileMatch_(excelLike, kind);
     const profile = found.row;
@@ -22824,8 +23205,11 @@ function initDashboardApp() {
     if (draftRow['COMPANY NAME']) prefill['COMPANY NAME'] = draftRow['COMPANY NAME'];
     if (draftRow['MILL NAME']) prefill['MILL NAME'] = draftRow['MILL NAME'];
     if (draftRow['TRADER NAME']) prefill['TRADER NAME'] = draftRow['TRADER NAME'];
-    if (draftRow[pctField] != null && String(draftRow[pctField]).trim() !== '') prefill[pctField] = draftRow[pctField];
-    if (draftRow[facField]) prefill[facField] = draftRow[facField];
+    if (draftRow[pctFieldCpo] != null && String(draftRow[pctFieldCpo]).trim() !== '') prefill[pctFieldCpo] = draftRow[pctFieldCpo];
+    if (draftRow[pctFieldPk] != null && String(draftRow[pctFieldPk]).trim() !== '') prefill[pctFieldPk] = draftRow[pctFieldPk];
+    if (draftRow[facFieldCpo]) prefill[facFieldCpo] = draftRow[facFieldCpo];
+    if (draftRow[facFieldPk]) prefill[facFieldPk] = draftRow[facFieldPk];
+    if (draftRow['PRODUCT SUPPLY']) prefill['PRODUCT SUPPLY'] = draftRow['PRODUCT SUPPLY'];
 
     window._supplyModalContext = { batchId: bId, rowIdx: rowIdx };
     openModal('mill', MILL_FIELDS, 'add', prefill);
@@ -22872,10 +23256,10 @@ function initDashboardApp() {
       apiPost({ action: 'saveSupplyDraft', batch_id: bId, rows: batch.rows, meta: {} })
         .then(function() {
           btn.textContent = '✓ Saved';
-          setTimeout(function() { btn.textContent = '💾 Save as Draft'; btn.disabled = false; }, 2000);
+          setTimeout(function() { btn.textContent = 'Simpan Draft'; btn.disabled = false; }, 2000);
         })
         .catch(function(err) {
-          btn.textContent = '💾 Save as Draft'; btn.disabled = false;
+          btn.textContent = 'Simpan Draft'; btn.disabled = false;
           alert('Failed to save: ' + err.message);
         });
       return;
@@ -22887,7 +23271,10 @@ function initDashboardApp() {
       const matchedRows = (batch.rows || []).filter(function(r) { return r.match_status === 'matched' && !r._submitted; });
       if (!matchedRows.length) { alert('No matched rows pending submission.'); return; }
       const kind = String(batch.supply_type || (matchedRows[0] && matchedRows[0].supply_type) || 'CPO').toUpperCase();
-      if (!confirm('Update ' + matchedRows.length + ' Matched rows → PERCENTAGE SUPPLY ' + kind + ' in Mill Onboarding Profile?')) return;
+      const confirmMsg = kind.indexOf('CPO') >= 0 && kind.indexOf('PK') >= 0
+        ? ('Update ' + matchedRows.length + ' Matched rows → PERCENTAGE SUPPLY CPO & PK + PRODUCT SUPPLY di Mill Profile?')
+        : ('Update ' + matchedRows.length + ' Matched rows → PERCENTAGE SUPPLY ' + kind + ' in Mill Onboarding Profile?');
+      if (!confirm(confirmMsg)) return;
       btn.textContent = 'Submitting…'; btn.disabled = true;
       apiPost({ action: 'submitSupplyDraft', batch_id: bId, rows: matchedRows })
         .then(function(res) {
@@ -23005,7 +23392,15 @@ function initDashboardApp() {
           }
           batches[bid].rows.push(row);
         });
-        window._supplyDraftBatches = Object.values(batches);
+        window._supplyDraftBatches = supplyConsolidateBatchesByPeriod_(Object.values(batches).map(function(b) {
+          let batchType = 'CPO';
+          (b.rows || []).forEach(function(row) {
+            batchType = supplyCombineSupplyTypes_(batchType, row.supply_type || row.SUPPLY_TYPE || 'CPO');
+            row['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(row);
+          });
+          b.supply_type = batchType;
+          return b;
+        }));
         if ((!allDataRaw || !allDataRaw.length) && typeof loadMillData === 'function') {
           return loadMillData().then(function() {
             window._supplyDraftBatches.forEach(function(b) {

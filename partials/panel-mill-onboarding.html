@@ -64,118 +64,135 @@
       <span style="font-size:12px;">Submit a screening in Supplier Due Diligence first.</span>
     </div>
 
-    <!-- ── Supply Import (new) ── -->
-    <div style="margin-top:28px;border-top:1px solid rgba(139,26,26,0.1);padding-top:20px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px;">
-        <div>
-          <div style="font-size:14px;font-weight:700;color:#1A0A0A;">Import Supply Data</div>
-          <div style="font-size:12px;color:#9C8080;margin-top:2px;">Import CPO/PK → Task List draft → validasi Company/Group/Mill → submit ke % Supply di Profile</div>
+    <!-- ── Supply Import ── -->
+    <section class="supply-section" aria-label="Import Supply Data">
+      <div class="supply-section__head">
+        <div class="supply-section__intro">
+          <h4 class="supply-section__title">Import Supply Data</h4>
+          <p class="supply-section__desc">Upload Excel CPO atau PK per periode. Company dengan quarter &amp; year sama otomatis digabung menjadi <strong>CPO+PK</strong>.</p>
         </div>
-        <button type="button" class="btn-sm btn-filled" id="btn-supply-import-open">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" style="vertical-align:-1px;margin-right:5px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <button type="button" class="btn-sm btn-filled supply-section__cta" id="btn-supply-import-open">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
           Import Supply Excel
         </button>
       </div>
-      <div id="supply-draft-list" style="display:flex;flex-direction:column;gap:10px;"></div>
-      <div id="supply-draft-empty" style="display:none;padding:32px;text-align:center;color:#9C8080;font-size:13px;">
-        No import draft yet. Click <strong>Import Supply Excel</strong> to start.
+      <div id="supply-draft-list" class="supply-draft-list"></div>
+      <div id="supply-draft-empty" class="supply-empty" style="display:none;">
+        <div class="supply-empty__icon" aria-hidden="true">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        </div>
+        <p class="supply-empty__title">Belum ada draft import</p>
+        <p class="supply-empty__steps">1. Pilih jenis supply (CPO / PK)<br>2. Tentukan quarter &amp; year<br>3. Upload Excel → review di Task List</p>
+        <button type="button" class="supply-btn supply-btn--primary supply-empty__btn" data-action="open-supply-import">Mulai Import</button>
       </div>
-    </div>
+    </section>
   </div>
 
   <!-- ── SUPPLY IMPORT MODAL (portaled to document.body on open) ── -->
-  <div id="supply-import-modal-overlay" class="supply-import-modal-overlay">
+  <div id="supply-import-modal-overlay" class="supply-import-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="supply-import-modal-title">
     <div class="supply-import-modal-box">
-        <!-- Header -->
-        <div style="padding:22px 26px 16px;border-bottom:1px solid rgba(139,26,26,0.08);display:flex;align-items:center;justify-content:space-between;">
+      <header class="supply-import-modal__header">
+        <div>
+          <h2 id="supply-import-modal-title" class="supply-import-modal__title">Import Supply Data</h2>
+          <p class="supply-import-modal__subtitle">Upload per jenis supply. Quarter &amp; year yang sama akan digabung per <strong>Company Name</strong>.</p>
+        </div>
+        <button type="button" id="btn-supply-import-close" class="supply-import-modal__close" aria-label="Tutup">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+      </header>
+
+      <div class="supply-import-modal__body">
+        <div class="supply-import-callout" role="note">
+          <svg class="supply-import-callout__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           <div>
-            <div style="font-size:16px;font-weight:800;color:#1A0A0A;">Import Supply Data</div>
-            <div style="font-size:12px;color:#9C8080;margin-top:3px;">Select product (CPO/PK), period, then upload supply Excel</div>
+            <strong>Tip:</strong> Import CPO dulu, lalu PK dengan quarter &amp; year yang sama. Baris company yang cocok otomatis jadi <span class="supply-pill supply-pill--cpopk">CPO+PK</span>.
           </div>
-          <button type="button" id="btn-supply-import-close" style="width:30px;height:30px;border-radius:8px;border:none;background:rgba(139,26,26,0.06);cursor:pointer;display:flex;align-items:center;justify-content:center;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B1A1A" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
         </div>
 
-        <!-- Body -->
-        <div style="padding:24px 26px;">
-          <!-- Step 1: Product type -->
-          <div style="margin-bottom:20px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8B1A1A;margin-bottom:10px;">1. Jenis Supply</div>
-            <div id="supply-import-type-wrap" class="supply-type-seg" role="radiogroup" aria-label="Jenis supply">
-              <label class="supply-type-seg__opt supply-type-seg__opt--active">
-                <input type="radio" name="supply-import-type" value="CPO" checked>
-                <span>CPO</span>
-                <small>→ PERCENTAGE SUPPLY CPO</small>
-              </label>
-              <label class="supply-type-seg__opt">
-                <input type="radio" name="supply-import-type" value="PK">
-                <span>PK</span>
-                <small>→ PERCENTAGE SUPPLY PK</small>
-              </label>
-            </div>
-          </div>
-
-          <!-- Step 2: Period -->
-          <div style="margin-bottom:20px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8B1A1A;margin-bottom:10px;">2. Select Period</div>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              <div style="flex:1;min-width:130px;">
-                <label style="display:block;font-size:11px;font-weight:600;color:#5A4040;margin-bottom:5px;">Quarter</label>
-                <select id="supply-import-quarter" style="width:100%;height:36px;border:1.5px solid rgba(139,26,26,0.2);border-radius:8px;padding:0 10px;font-size:13px;font-weight:600;color:#1A0A0A;background:#fff;">
-                  <option value="">— Select Quarter —</option>
-                  <option value="Q1">Q1 (Jan–Mar)</option>
-                  <option value="Q2">Q2 (Apr–Jun)</option>
-                  <option value="Q3">Q3 (Jul–Sep)</option>
-                  <option value="Q4">Q4 (Okt–Des)</option>
-                </select>
-              </div>
-              <div style="flex:1;min-width:130px;">
-                <label style="display:block;font-size:11px;font-weight:600;color:#5A4040;margin-bottom:5px;">Year</label>
-                <select id="supply-import-year" style="width:100%;height:36px;border:1.5px solid rgba(139,26,26,0.2);border-radius:8px;padding:0 10px;font-size:13px;font-weight:600;color:#1A0A0A;background:#fff;" id="supply-import-year">
-                  <option value="">— Select Year —</option>
-                </select>
-              </div>
-            </div>
-          </div>
-
-          <!-- Step 3: Upload -->
-          <div style="margin-bottom:20px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8B1A1A;margin-bottom:10px;">3. Upload File Excel</div>
-            <label id="supply-import-drop-zone" style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;border:2px dashed rgba(139,26,26,0.25);border-radius:12px;padding:30px 20px;cursor:pointer;transition:background 150ms;background:#fdfafa;" for="supply-import-file-input">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#C05050" stroke-width="1.8" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="12" y2="12"/><line x1="15" y1="15" x2="12" y2="12"/></svg>
-              <span style="font-size:13px;font-weight:600;color:#5A3030;">Drag &amp; drop or click to choose a file</span>
-              <span style="font-size:11px;color:#9C8080;">.xlsx · sheet &quot;Contoh Pengisian&quot; atau &quot;Supplied CPO/PK …&quot;</span>
-              <input type="file" id="supply-import-file-input" accept=".xlsx,.xls" style="display:none;">
+        <div class="supply-import-step">
+          <div class="supply-import-step__label"><span class="supply-import-step__num">1</span> Jenis Supply</div>
+          <div id="supply-import-type-wrap" class="supply-type-seg" role="radiogroup" aria-label="Jenis supply">
+            <label class="supply-type-seg__opt supply-type-seg__opt--cpo supply-type-seg__opt--active">
+              <input type="radio" name="supply-import-type" value="CPO" checked>
+              <span class="supply-type-seg__tag supply-type-seg__tag--cpo">CPO</span>
+              <span class="supply-type-seg__name">Crude Palm Oil</span>
+              <small>% Supply CPO</small>
             </label>
-            <div id="supply-import-file-info" style="display:none;margin-top:10px;padding:10px 14px;border-radius:8px;background:rgba(46,125,50,0.07);border:1px solid rgba(46,125,50,0.2);font-size:12px;color:#2e5d32;display:flex;align-items:center;gap:8px;">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-              <span id="supply-import-file-name">file.xlsx</span>
-              <span id="supply-import-row-count" style="margin-left:auto;font-weight:700;"></span>
-            </div>
-            <div id="supply-import-file-error" style="display:none;margin-top:8px;padding:8px 14px;border-radius:8px;background:rgba(200,50,50,0.07);border:1px solid rgba(200,50,50,0.2);font-size:12px;color:#8B1A1A;"></div>
-          </div>
-
-          <!-- Preview (rows parsed from Excel) -->
-          <div id="supply-import-preview-wrap" style="display:none;margin-bottom:20px;">
-            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:#8B1A1A;margin-bottom:8px;">Preview</div>
-            <div style="overflow-x:auto;border-radius:10px;border:1px solid rgba(139,26,26,0.1);">
-              <table id="supply-import-preview-table" style="width:100%;border-collapse:collapse;font-size:11.5px;">
-                <thead id="supply-import-preview-head" style="background:#f9f3f3;"></thead>
-                <tbody id="supply-import-preview-body"></tbody>
-              </table>
-            </div>
+            <label class="supply-type-seg__opt supply-type-seg__opt--pk">
+              <input type="radio" name="supply-import-type" value="PK">
+              <span class="supply-type-seg__tag supply-type-seg__tag--pk">PK</span>
+              <span class="supply-type-seg__name">Palm Kernel</span>
+              <small>% Supply PK</small>
+            </label>
           </div>
         </div>
 
-        <!-- Footer -->
-        <div style="padding:14px 26px 22px;display:flex;align-items:center;justify-content:flex-end;gap:10px;border-top:1px solid rgba(139,26,26,0.07);">
-          <button type="button" id="btn-supply-import-cancel" style="padding:9px 18px;border-radius:9px;border:1.5px solid rgba(139,26,26,0.2);background:#fff;font-size:13px;font-weight:600;color:#5A4040;cursor:pointer;">Batal</button>
-          <button type="button" id="btn-supply-import-proceed" disabled style="padding:9px 20px;border-radius:9px;border:none;background:#8B1A1A;color:#fff;font-size:13px;font-weight:700;cursor:pointer;opacity:0.45;">
-            Lanjut ke Task List →
-          </button>
+        <div class="supply-import-step">
+          <div class="supply-import-step__label"><span class="supply-import-step__num">2</span> Periode</div>
+          <div class="supply-import-period">
+            <div class="supply-import-field">
+              <label class="supply-import-field__label" for="supply-import-quarter">Quarter</label>
+              <select id="supply-import-quarter" class="supply-import-select">
+                <option value="">— Pilih Quarter —</option>
+                <option value="Q1">Q1 · Jan–Mar</option>
+                <option value="Q2">Q2 · Apr–Jun</option>
+                <option value="Q3">Q3 · Jul–Sep</option>
+                <option value="Q4">Q4 · Okt–Des</option>
+              </select>
+            </div>
+            <div class="supply-import-field">
+              <label class="supply-import-field__label" for="supply-import-year">Year</label>
+              <select id="supply-import-year" class="supply-import-select">
+                <option value="">— Pilih Year —</option>
+              </select>
+            </div>
+          </div>
+          <div id="supply-import-period-hint" class="supply-import-period-hint" hidden></div>
+        </div>
+
+        <div class="supply-import-step">
+          <div class="supply-import-step__label"><span class="supply-import-step__num">3</span> Upload Excel</div>
+          <label id="supply-import-drop-zone" class="supply-import-drop-zone" for="supply-import-file-input">
+            <span class="supply-import-drop-zone__icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </span>
+            <span class="supply-import-drop-zone__title">Drag &amp; drop atau klik untuk pilih file</span>
+            <span class="supply-import-drop-zone__hint">.xlsx · sheet &quot;Contoh Pengisian&quot; atau &quot;Supplied CPO/PK …&quot;</span>
+            <input type="file" id="supply-import-file-input" accept=".xlsx,.xls" class="supply-import-file-input">
+          </label>
+          <div id="supply-import-file-info" class="supply-import-file-info" hidden>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span id="supply-import-file-name" class="supply-import-file-info__name">file.xlsx</span>
+            <span id="supply-import-row-count" class="supply-import-file-info__count"></span>
+          </div>
+          <div id="supply-import-file-error" class="supply-import-file-error" hidden role="alert"></div>
+        </div>
+
+        <div id="supply-import-preview-wrap" class="supply-import-preview" hidden>
+          <div class="supply-import-preview__head">
+            <span class="supply-import-step__label" style="margin:0;"><span class="supply-import-step__num">4</span> Preview</span>
+            <span id="supply-import-preview-stats" class="supply-import-preview__stats"></span>
+          </div>
+          <div class="supply-import-preview__scroll">
+            <table id="supply-import-preview-table" class="supply-import-preview-table">
+              <thead id="supply-import-preview-head"></thead>
+              <tbody id="supply-import-preview-body"></tbody>
+            </table>
+          </div>
         </div>
       </div>
+
+      <footer class="supply-import-modal__footer">
+        <p id="supply-import-footer-hint" class="supply-import-modal__footer-hint">Lengkapi periode dan upload file untuk melanjutkan.</p>
+        <div class="supply-import-modal__footer-actions">
+          <button type="button" id="btn-supply-import-cancel" class="supply-btn supply-btn--ghost">Batal</button>
+          <button type="button" id="btn-supply-import-proceed" class="supply-btn supply-btn--primary supply-btn--proceed" disabled>
+            Lanjut ke Task List
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+          </button>
+        </div>
+      </footer>
+    </div>
   </div>
 
   <div class="table-card">

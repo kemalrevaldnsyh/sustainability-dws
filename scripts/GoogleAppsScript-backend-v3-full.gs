@@ -4412,19 +4412,50 @@ function submitSupplyDraft_(batchId, rows) {
     }
 
     var supplyType = String(row.supply_type || row.SUPPLY_TYPE || 'CPO').trim().toUpperCase();
-    var pctField   = supplyType === 'PK' ? 'PERCENTAGE SUPPLY PK' : 'PERCENTAGE SUPPLY CPO';
-    var pctVal     = row[pctField];
-    if (pctVal === undefined || pctVal === null || String(pctVal).trim() === '') {
-      pctVal = row.SUPPLY_PERCENTAGE || '';
+    var pctCpo = row['PERCENTAGE SUPPLY CPO'];
+    var pctPk  = row['PERCENTAGE SUPPLY PK'];
+    var hasCpo = pctCpo !== undefined && pctCpo !== null && String(pctCpo).trim() !== '';
+    var hasPk  = pctPk !== undefined && pctPk !== null && String(pctPk).trim() !== '';
+    if (!hasCpo && supplyType.indexOf('CPO') >= 0) {
+      pctCpo = row.SUPPLY_PERCENTAGE || '';
+      hasCpo = String(pctCpo).trim() !== '';
+    }
+    if (!hasPk && supplyType.indexOf('PK') >= 0) {
+      pctPk = row.SUPPLY_PERCENTAGE || '';
+      hasPk = String(pctPk).trim() !== '';
     }
 
     var patch = {};
-    patch[pctField] = pctVal;
-    if (supplyType === 'PK' && row['FACILITY NAME PK']) {
-      patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
+    if (hasCpo || supplyType === 'CPO') {
+      patch['PERCENTAGE SUPPLY CPO'] = hasCpo ? pctCpo : '';
+      if (row['FACILITY NAME CPO']) patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
     }
-    if (supplyType === 'CPO' && row['FACILITY NAME CPO']) {
-      patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
+    if (hasPk || supplyType === 'PK') {
+      patch['PERCENTAGE SUPPLY PK'] = hasPk ? pctPk : '';
+      if (row['FACILITY NAME PK']) patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
+    }
+    if (!hasCpo && !hasPk) {
+      var pctField = supplyType === 'PK' ? 'PERCENTAGE SUPPLY PK' : 'PERCENTAGE SUPPLY CPO';
+      var pctVal = row[pctField];
+      if (pctVal === undefined || pctVal === null || String(pctVal).trim() === '') {
+        pctVal = row.SUPPLY_PERCENTAGE || '';
+      }
+      patch[pctField] = pctVal;
+      if (supplyType === 'PK' && row['FACILITY NAME PK']) {
+        patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
+      }
+      if (supplyType === 'CPO' && row['FACILITY NAME CPO']) {
+        patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
+      }
+    }
+
+    var psTokens = [];
+    if (hasCpo || supplyType.indexOf('CPO') >= 0) psTokens.push('CPO');
+    if (hasPk || supplyType.indexOf('PK') >= 0) psTokens.push('PK');
+    if (psTokens.length) {
+      patch['PRODUCT SUPPLY'] = psTokens.length > 1 ? 'CPO, PK' : psTokens[0];
+    } else if (row['PRODUCT SUPPLY']) {
+      patch['PRODUCT SUPPLY'] = row['PRODUCT SUPPLY'];
     }
 
     try {
