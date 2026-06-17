@@ -3927,8 +3927,8 @@ import {
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwDmp147eieMpF1Wdn7JDLokUCMk-pmCGgKz03XGoVwevrWi8u3nwXkSk_0orUfN-ENUw/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbwDmp147eieMpF1Wdn7JDLokUCMk-pmCGgKz03XGoVwevrWi8u3nwXkSk_0orUfN-ENUw';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwcb8GQYQPdCEnmlOF-XgAZ80pUf3mMoeH5o2BOh6vnOS5Ev9ivUEqgYq2MfD-389v8Og/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbwcb8GQYQPdCEnmlOF-XgAZ80pUf3mMoeH5o2BOh6vnOS5Ev9ivUEqgYq2MfD-389v8Og';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
@@ -5297,7 +5297,7 @@ function initDashboardApp() {
     window.refreshSavedScreeningListGlobal();
   }
 
-  const MILL_FIELDS = ['QUARTER','YEAR','COMPANY CODE','TRADER NAME','GROUP NAME','COMPANY NAME','MILL NAME','UML ID','ADDRESS','PROVINCE','COORDINATES','MILL CATEGORY','MILL CAPACITY (TON/HOUR)','HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','SCORE','MILL LOC','COMPLIMENT/NOT COMPLIMENT','DEFORESTATION SPATIAL','BURN AREA SPATIAL','PEAT','LEGALITY','DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT','TOTAL GRIEVANCES','NDPE','HRDD','TOTAL POLICY','CERTIFICATION','TOTAL CERTIFICATION','TOTAL SCORE','SUPPLIER LEVEL','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','SIGN','SUPPLIER STATUS','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'];
+  const MILL_FIELDS = ['QUARTER','YEAR','COMPANY CODE','TRADER NAME','GROUP NAME','COMPANY NAME','MILL NAME','UML ID','ADDRESS','PROVINCE','COORDINATES','MILL CATEGORY','MILL CAPACITY (TON/HOUR)','HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','SCORE','MILL LOC','COMPLIMENT/NOT COMPLIMENT','DEFORESTATION SPATIAL','BURN AREA SPATIAL','PEAT','LEGALITY','DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT','TOTAL GRIEVANCES','NDPE','HRDD','TOTAL POLICY','CERTIFICATION','TOTAL CERTIFICATION','TOTAL SCORE','SUPPLIER LEVEL','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','PRIORITY ENGAGEMENT','SUPPLIER STATUS','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'];
   let modalSheet = '', modalMode = '', modalRow = null, modalFields = [];
   let modalTaskKey = ''; // submission_id dari SDD yang di-add via Task List
   let modalTaskLineId = ''; // line_id TML untuk TRADER mill list (satu submission, banyak mill)
@@ -5399,7 +5399,7 @@ function initDashboardApp() {
     { title: 'Grievances', fields: ['DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT'], totalField: 'TOTAL GRIEVANCES', totalLabel: 'Total Grievances (auto)' },
     { title: 'Policy', fields: ['NDPE','HRDD'], totalField: 'TOTAL POLICY', totalLabel: 'Total Policy (auto)' },
     { title: 'Sertifikasi', fields: ['CERTIFICATION','TOTAL CERTIFICATION'] },
-    { title: 'Supply & Status', fields: ['SUPPLIER LEVEL','SUPPLIER STATUS','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','SIGN','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'] },
+    { title: 'Supply & Status', fields: ['SUPPLIER LEVEL','SUPPLIER STATUS','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','PRIORITY ENGAGEMENT','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'] },
   ];
 
   function calcTotals() {
@@ -6021,6 +6021,14 @@ function initDashboardApp() {
     if (q) o['QUARTER'] = q;
     const y = pickMillColumnValue_(o, 'year');
     if (y) o['YEAR'] = y;
+
+    // AO header renamed from SIGN -> PRIORITY ENGAGEMENT; keep backward compatibility.
+    const pe = pickMillColumnValue_(o, 'priority engagement');
+    const sign = pickMillColumnValue_(o, 'sign');
+    if (pe && !o['PRIORITY ENGAGEMENT']) o['PRIORITY ENGAGEMENT'] = pe;
+    if (sign && !o['PRIORITY ENGAGEMENT']) o['PRIORITY ENGAGEMENT'] = sign;
+    if (o['PRIORITY ENGAGEMENT'] && !o['SIGN']) o['SIGN'] = o['PRIORITY ENGAGEMENT'];
+
     return o;
   }
 
@@ -6935,6 +6943,15 @@ function initDashboardApp() {
       + '<span class="mill-rrl-pill__lbl">' + lbl + '</span></span></span>';
   }
 
+  function millTableCellText_(val, opts) {
+    const raw = String(val != null && val !== '' ? val : '').trim();
+    const display = raw || '—';
+    const esc = escHtml(display);
+    if (!opts || !opts.wrap) return esc;
+    const title = raw ? ' title="' + escHtml(raw) + '"' : '';
+    return '<span class="mill-cell-wrap"' + title + '>' + esc + '</span>';
+  }
+
   function renderMillTable() {
     const body = document.getElementById('millTableBody');
     if (!body) return;
@@ -6966,24 +6983,27 @@ function initDashboardApp() {
     }
 
     body.innerHTML = sorted.length === 0
-      ? `<tr><td colspan="11" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>`
+      ? `<tr><td colspan="12" style="text-align:center;padding:32px;color:#9C8A8A;">No data found</td></tr>`
       : sorted.map((d, i) => {
         const millKey = [d['GROUP NAME'], d['COMPANY NAME'], d['MILL NAME']].map(function(x) {
           return String(x || '').trim();
         }).join('|');
+        const millName = String(d['MILL NAME'] || '').trim();
+        const umlId = String(d['UML ID'] || '').trim();
         return `
         <tr class="mill-row-clickable" data-idx="${i}" data-mill-key="${escHtml(millKey)}" title="Click to view full details">
-          <td>${resultRiskLevelPill(d['RESULT RISK LEVEL'])}</td>
-          <td>${d['GROUP NAME'] || '—'}</td>
-          <td>${d['COMPANY NAME'] || '—'}</td>
-          <td><span class="mill-name">${d['MILL NAME'] || '—'}</span><div class="mill-id">${d['UML ID'] || ''}</div></td>
-          <td>${d['PROVINCE'] || '—'}</td>
-          <td>${supplierBadge(d['SUPPLIER STATUS'])}</td>
-          <td>${nblBadge(d['BUYER NO BUY LIST'])}</td>
-          <td>${d['CERTIFICATION'] || '—'}</td>
-          <td class="mill-cell-long">${d['FACILITY NAME CPO'] || '—'}</td>
-          <td class="mill-cell-long">${d['FACILITY NAME PK'] || '—'}</td>
-          <td class="mill-cell-long">${d['PRODUCT SUPPLY'] || '—'}</td>
+          <td class="mill-td mill-td--risk">${resultRiskLevelPill(d['RESULT RISK LEVEL'])}</td>
+          <td class="mill-td mill-td--group">${millTableCellText_(d['GROUP NAME'], { wrap: true })}</td>
+          <td class="mill-td mill-td--company">${millTableCellText_(d['COMPANY NAME'], { wrap: true })}</td>
+          <td class="mill-td mill-td--mill"><span class="mill-name">${escHtml(millName || '—')}</span>${umlId ? '<div class="mill-id">' + escHtml(umlId) + '</div>' : ''}</td>
+          <td class="mill-td mill-td--province">${millTableCellText_(d['PROVINCE'])}</td>
+          <td class="mill-td mill-td--product">${millTableCellText_(d['PRODUCT SUPPLY'], { wrap: true })}</td>
+          <td class="mill-td mill-td--priority">${millTableCellText_(d['PRIORITY ENGAGEMENT'] || d['SIGN'], { wrap: true })}</td>
+          <td class="mill-td mill-td--nbl">${nblBadge(d['BUYER NO BUY LIST'])}</td>
+          <td class="mill-td mill-td--cert">${millTableCellText_(d['CERTIFICATION'], { wrap: true })}</td>
+          <td class="mill-td mill-td--fac-cpo">${millTableCellText_(d['FACILITY NAME CPO'], { wrap: true })}</td>
+          <td class="mill-td mill-td--fac-pk">${millTableCellText_(d['FACILITY NAME PK'], { wrap: true })}</td>
+          <td class="mill-td mill-td--supplier">${supplierBadge(d['SUPPLIER STATUS'])}</td>
         </tr>`;
       }).join('');
   }
@@ -7404,6 +7424,17 @@ function initDashboardApp() {
         ]
       },
       {
+        title: 'Supply & Status',
+        fields: [
+          ['SUPPLIER STATUS','Supplier Status'],
+          ['BUYER NO BUY LIST','No Buy List'],
+          ['RECOMMENDATION LEVEL','Recommendation Level'],
+          ['PRIORITY ENGAGEMENT','Priority Engagement'],
+          ['RISK LEVEL','Risk Level'],
+          ['RESULT RISK LEVEL','Result Risk Level'],
+        ]
+      },
+      {
         title: 'Supplied Data',
         fields: [
           ['PRODUCT SUPPLY','Product Supply'],
@@ -7515,6 +7546,7 @@ function initDashboardApp() {
         { title: 'Spatial', fields: [['DEFORESTATION SPATIAL','Deforestation Spatial'], ['BURN AREA SPATIAL','Burn Area Spatial'], ['PEAT','Peat']] },
         { title: 'Grievances', fields: [['TOTAL GRIEVANCES','Grievance']] },
         { title: 'Policy', fields: [['NDPE','NDPE'], ['HRDD','HRDD']] },
+        { title: 'Supply & Status', fields: [['SUPPLIER STATUS','Supplier Status'], ['BUYER NO BUY LIST','No Buy List'], ['RECOMMENDATION LEVEL','Recommendation Level'], ['PRIORITY ENGAGEMENT','Priority Engagement'], ['RISK LEVEL','Risk Level'], ['RESULT RISK LEVEL','Result Risk Level']] },
         { title: 'Supplied Data', fields: [['PRODUCT SUPPLY','Product Supply'], ['SUPPLY CPO','Supply CPO'], ['SUPPLY PK','Supply PK'], ['FACILITY NAME','Facility Name']] },
       ];
       const valOrDash = function(v) {

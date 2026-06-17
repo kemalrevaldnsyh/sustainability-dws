@@ -48,6 +48,47 @@
     </button>
   </div>
 
+  <section class="mill-period-card" aria-label="Period filter Mill Registry">
+    <div class="mill-period-card__head">
+      <span class="mill-period-card__title">Period</span>
+      <span class="mill-period-card__hint">Filter registry by quarter &amp; year</span>
+    </div>
+    <div class="ttp-toolbar mill-period-toolbar">
+      <div class="ttp-dropdown-wrap mill-period-filter-wrap" id="millQuarterFilterWrap">
+        <button type="button" class="ttp-btn-filter" id="millBtnFilterQuarter" aria-expanded="false" aria-controls="millQuarterFilterPanel">
+          <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+          Quarter
+          <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </button>
+        <div class="ttp-dropdown-panel mill-period-filter-panel mill-dim-filter-surface" id="millQuarterFilterPanel" role="region" aria-label="Filter Quarter">
+          <div class="ttp-dropdown-head">
+            <span class="ttp-dropdown-title">Quarter</span>
+            <div class="ttp-dropdown-actions">
+              <button type="button" data-mill-pdf-dim-reset="quarter">Reset</button>
+            </div>
+          </div>
+          <div class="ttp-dropdown-list mill-pdf-dim-list" id="millPdfDimListQuarter"></div>
+        </div>
+      </div>
+      <div class="ttp-dropdown-wrap mill-period-filter-wrap" id="millYearFilterWrap">
+        <button type="button" class="ttp-btn-filter" id="millBtnFilterYear" aria-expanded="false" aria-controls="millYearFilterPanel">
+          <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+          Year
+          <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
+        </button>
+        <div class="ttp-dropdown-panel mill-period-filter-panel mill-dim-filter-surface" id="millYearFilterPanel" role="region" aria-label="Filter Year">
+          <div class="ttp-dropdown-head">
+            <span class="ttp-dropdown-title">Year</span>
+            <div class="ttp-dropdown-actions">
+              <button type="button" data-mill-pdf-dim-reset="year">Reset</button>
+            </div>
+          </div>
+          <div class="ttp-dropdown-list mill-pdf-dim-list" id="millPdfDimListYear"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
   <!-- Task List Panel (shown when filter=Task List) -->
   <div id="mill-task-list-panel" style="display:none;">
     <!-- ── SDD Screenings (existing) ── -->
@@ -211,38 +252,6 @@
     </div>
     <!-- Export / column filters (same component language as Monitoring TTM/TTP) -->
     <div class="ttp-toolbar mill-export-toolbar" id="millExportToolbar" aria-label="Saring dan export Mill Registry">
-      <div class="ttp-dropdown-wrap mill-period-filter-wrap" id="millQuarterFilterWrap">
-        <button type="button" class="ttp-btn-filter" id="millBtnFilterQuarter" aria-expanded="false" aria-controls="millQuarterFilterPanel">
-          <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-          Quarter
-          <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
-        </button>
-        <div class="ttp-dropdown-panel mill-period-filter-panel mill-dim-filter-surface" id="millQuarterFilterPanel" role="region" aria-label="Filter Quarter">
-          <div class="ttp-dropdown-head">
-            <span class="ttp-dropdown-title">Quarter</span>
-            <div class="ttp-dropdown-actions">
-              <button type="button" data-mill-pdf-dim-reset="quarter">Reset</button>
-            </div>
-          </div>
-          <div class="ttp-dropdown-list mill-pdf-dim-list" id="millPdfDimListQuarter"></div>
-        </div>
-      </div>
-      <div class="ttp-dropdown-wrap mill-period-filter-wrap" id="millYearFilterWrap">
-        <button type="button" class="ttp-btn-filter" id="millBtnFilterYear" aria-expanded="false" aria-controls="millYearFilterPanel">
-          <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-          Year
-          <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
-        </button>
-        <div class="ttp-dropdown-panel mill-period-filter-panel mill-dim-filter-surface" id="millYearFilterPanel" role="region" aria-label="Filter Year">
-          <div class="ttp-dropdown-head">
-            <span class="ttp-dropdown-title">Year</span>
-            <div class="ttp-dropdown-actions">
-              <button type="button" data-mill-pdf-dim-reset="year">Reset</button>
-            </div>
-          </div>
-          <div class="ttp-dropdown-list mill-pdf-dim-list" id="millPdfDimListYear"></div>
-        </div>
-      </div>
       <div class="ttp-dropdown-wrap" id="millPdfFilterWrap">
         <button type="button" class="ttp-btn-select" id="millPdfBtnFilterDims" aria-expanded="false" aria-controls="millPdfFilterDimsPanel">
           <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg></span>
@@ -305,20 +314,21 @@
     </div>
     <div id="mill-loading" style="padding:40px;text-align:center;color:#9C8A8A;font-size:14px;">Loading data...</div>
     <div class="table-scroll mill-registry-table-scroll">
-      <table id="millTable" style="display:none;">
+      <table id="millTable" class="mill-registry-table" style="display:none;">
         <thead>
           <tr>
-            <th><span class="mill-th-head-wrap"><span>Result Risk Level</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="RESULT RISK LEVEL" title="Filter Result Risk Level">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Group Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="GROUP NAME" title="Filter Group Name">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Company Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="COMPANY NAME" title="Filter Company Name">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Mill Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="MILL NAME" title="Filter Mill Name">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Province</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="PROVINCE" title="Filter Province">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Supplier Status</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="SUPPLIER STATUS" title="Filter Supplier Status">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>No Buy List</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="BUYER NO BUY LIST" title="Filter No Buy List">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Certification</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="CERTIFICATION" title="Filter Certification">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Facility CPO</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="FACILITY NAME CPO" title="Filter Facility CPO">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Facility PK</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="FACILITY NAME PK" title="Filter Facility PK">▾</button></span></th>
-            <th><span class="mill-th-head-wrap"><span>Product Supply</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="PRODUCT SUPPLY" title="Filter Product Supply">▾</button></span></th>
+            <th class="mill-th mill-th--risk" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Result Risk Level</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="RESULT RISK LEVEL" aria-label="Filter Result Risk Level" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--group" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Group Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="GROUP NAME" aria-label="Filter Group Name" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--company" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Company Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="COMPANY NAME" aria-label="Filter Company Name" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--mill" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Mill Name</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="MILL NAME" aria-label="Filter Mill Name" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--province" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Province</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="PROVINCE" aria-label="Filter Province" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--product" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Product Supply</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="PRODUCT SUPPLY" aria-label="Filter Product Supply" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--priority" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Priority Engagement</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="PRIORITY ENGAGEMENT" aria-label="Filter Priority Engagement" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--nbl" scope="col"><div class="mill-th-inner"><span class="mill-th-label">No Buy List</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="BUYER NO BUY LIST" aria-label="Filter No Buy List" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--cert" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Certification</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="CERTIFICATION" aria-label="Filter Certification" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--fac-cpo" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Facility Name CPO</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="FACILITY NAME CPO" aria-label="Filter Facility Name CPO" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--fac-pk" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Facility Name PK</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="FACILITY NAME PK" aria-label="Filter Facility Name PK" title="Filter">▾</button></div></th>
+            <th class="mill-th mill-th--supplier" scope="col"><div class="mill-th-inner"><span class="mill-th-label">Supplier Status</span><button type="button" class="mill-th-filter-btn" data-mill-filter-btn="SUPPLIER STATUS" aria-label="Filter Supplier Status" title="Filter">▾</button></div></th>
           </tr>
         </thead>
         <tbody id="millTableBody"></tbody>
