@@ -9942,20 +9942,19 @@ function initDashboardApp() {
           ttpSelectPanel?.classList.remove('open');
           ttpBtnSelectEl?.classList.remove('active');
           ttpClearDropdownPanelPosition_(ttpSelectPanel);
-          ttpUnmountDropdownPanel_(ttpSelectPanel);
         }
         if (!inFilter && !inFilterPanel) {
           ttpFilterPanel?.classList.remove('open');
           ttpBtnFilterEl?.classList.remove('active');
           ttpClearDropdownPanelPosition_(ttpFilterPanel);
-          ttpUnmountDropdownPanel_(ttpFilterPanel);
         }
       });
     }
     if (!window.__sddTtpDropdownScrollBound) {
       window.__sddTtpDropdownScrollBound = true;
+      window.addEventListener('scroll', ttpRepositionOpenDropdowns_, true);
+      window.addEventListener('resize', ttpRepositionOpenDropdowns_, { passive: true });
       document.querySelector('.ttp-table-scroll')?.addEventListener('scroll', closeTtpDropdowns_, { passive: true });
-      window.addEventListener('resize', closeTtpDropdowns_, { passive: true });
     }
 
     ttpExportBtn.addEventListener('click', function() {
@@ -10238,36 +10237,10 @@ function initDashboardApp() {
     }
   }
 
-  // ─── TTP DROPDOWN TOGGLE (fixed above trigger — avoids overlap with sticky table headers) ──
-  function ttpDropdownWrapForPanel_(panel) {
-    if (!panel) return null;
-    const wrapId = panel.dataset.ttpDropdownWrapId;
-    if (wrapId) return document.getElementById(wrapId);
-    return panel.closest('.ttp-dropdown-wrap');
-  }
-
-  function ttpMountDropdownPanelOpen_(panel) {
-    if (!panel) return;
-    if (!panel.dataset.ttpDropdownWrapId) {
-      const wrap = panel.closest('.ttp-dropdown-wrap');
-      if (wrap && wrap.id) panel.dataset.ttpDropdownWrapId = wrap.id;
-    }
-    if (panel.parentElement !== document.body) {
-      document.body.appendChild(panel);
-    }
-  }
-
-  function ttpUnmountDropdownPanel_(panel) {
-    if (!panel) return;
-    const wrap = ttpDropdownWrapForPanel_(panel);
-    if (wrap && panel.parentElement === document.body) {
-      wrap.appendChild(panel);
-    }
-    delete panel.dataset.ttpDropdownWrapId;
-  }
-
+  // ─── TTP DROPDOWN TOGGLE (fixed to trigger — no body portal) ──
   function ttpClearDropdownPanelPosition_(panel) {
     if (!panel) return;
+    panel.classList.remove('ttp-dropdown-panel--fixed');
     panel.style.position = '';
     panel.style.top = '';
     panel.style.bottom = '';
@@ -10281,21 +10254,23 @@ function initDashboardApp() {
   }
 
   function ttpPositionDropdownPanel_(btn, panel) {
-    if (!btn || !panel) return;
+    if (!btn || !panel || !panel.classList.contains('open')) return;
     const rect = btn.getBoundingClientRect();
+    if (!rect.width && !rect.height) return;
     const isSelect = panel.id === 'ttpSelectPanel';
-    const minW = isSelect ? 300 : 220;
-    const maxW = isSelect ? 420 : 360;
+    const minW = isSelect ? 320 : 240;
+    const maxW = isSelect ? 400 : 340;
     const width = Math.min(Math.max(rect.width, minW), maxW, window.innerWidth - 24);
     let left = rect.left;
     if (left + width > window.innerWidth - 12) {
       left = Math.max(12, window.innerWidth - 12 - width);
     }
-    const spaceAbove = rect.top - 12;
-    const spaceBelow = window.innerHeight - rect.bottom - 12;
-    const preferAbove = spaceAbove >= 140 || spaceAbove >= spaceBelow;
-    const maxH = Math.min(360, Math.max(160, (preferAbove ? spaceAbove : spaceBelow) - 8));
+    const spaceAbove = Math.max(0, rect.top - 12);
+    const spaceBelow = Math.max(0, window.innerHeight - rect.bottom - 12);
+    const preferAbove = spaceAbove >= 200 || (spaceAbove >= spaceBelow && spaceAbove >= 120);
+    const maxH = Math.min(isSelect ? 420 : 360, Math.max(180, (preferAbove ? spaceAbove : spaceBelow) - 10));
 
+    panel.classList.add('ttp-dropdown-panel--fixed');
     panel.style.position = 'fixed';
     panel.style.left = left + 'px';
     panel.style.width = width + 'px';
@@ -10303,13 +10278,25 @@ function initDashboardApp() {
     panel.style.maxWidth = maxW + 'px';
     panel.style.maxHeight = maxH + 'px';
     panel.style.zIndex = '12050';
+    panel.style.right = 'auto';
 
     if (preferAbove) {
       panel.style.top = 'auto';
-      panel.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+      panel.style.bottom = (window.innerHeight - rect.top + 8) + 'px';
     } else {
       panel.style.bottom = 'auto';
-      panel.style.top = (rect.bottom + 6) + 'px';
+      panel.style.top = (rect.bottom + 8) + 'px';
+    }
+  }
+
+  function ttpRepositionOpenDropdowns_() {
+    const selectPanel = document.getElementById('ttpSelectPanel');
+    const filterPanel = document.getElementById('ttpFilterPanel');
+    if (selectPanel && selectPanel.classList.contains('open')) {
+      ttpPositionDropdownPanel_(document.getElementById('ttpBtnSelect'), selectPanel);
+    }
+    if (filterPanel && filterPanel.classList.contains('open')) {
+      ttpPositionDropdownPanel_(document.getElementById('ttpBtnFilter'), filterPanel);
     }
   }
 
@@ -10319,7 +10306,6 @@ function initDashboardApp() {
       if (!panel) return;
       panel.classList.remove('open');
       ttpClearDropdownPanelPosition_(panel);
-      ttpUnmountDropdownPanel_(panel);
     });
     ['ttpBtnSelect', 'ttpBtnFilter'].forEach(function(id) {
       const btn = document.getElementById(id);
@@ -10347,10 +10333,12 @@ function initDashboardApp() {
     }
 
     ttpClearDropdownPanelPosition_(panel);
-    ttpMountDropdownPanelOpen_(panel);
     panel.classList.add('open');
     btn.classList.add('active');
     ttpPositionDropdownPanel_(btn, panel);
+    requestAnimationFrame(function() {
+      ttpPositionDropdownPanel_(btn, panel);
+    });
   }
 
   function doExportXLSX(rows, cols, colMode) {

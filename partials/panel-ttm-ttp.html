@@ -83,20 +83,20 @@
                 <span id="ttpBtnSelectLabel">Select</span>
                 <span class="ttp-btn-icon" style="opacity:0.5;"><svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg></span>
               </button>
-              <div class="ttp-dropdown-panel" id="ttpSelectPanel">
+              <div class="ttp-dropdown-panel ttp-dropdown-panel--select" id="ttpSelectPanel">
                 <div class="ttp-dropdown-head">
                   <span class="ttp-dropdown-title">Filter by column</span>
                   <div class="ttp-dropdown-actions">
-                    <button id="ttpSelectAll">All</button>
-                    <button id="ttpSelectNone">None</button>
+                    <button type="button" id="ttpSelectAll">All</button>
+                    <button type="button" id="ttpSelectNone">None</button>
                   </div>
                 </div>
-                <div style="padding:8px 12px 4px;border-bottom:1px solid rgba(74,28,28,0.08);">
-                  <div style="font-size:10px;font-weight:700;letter-spacing:0.6px;text-transform:uppercase;color:#9C8A8A;margin-bottom:6px;">Select Columns</div>
+                <div class="ttp-dropdown-col-section">
+                  <div class="ttp-dropdown-section-label">Select column</div>
                   <div id="ttpColPickerList" class="ttp-col-picker-list"></div>
                 </div>
                 <div class="ttp-dropdown-search">
-                  <input type="text" id="ttpCompanySearch" placeholder="Cari nilai..." />
+                  <input type="text" id="ttpCompanySearch" placeholder="Search values…" autocomplete="off" />
                 </div>
                 <div class="ttp-dropdown-list" id="ttpCompanyList"></div>
               </div>
