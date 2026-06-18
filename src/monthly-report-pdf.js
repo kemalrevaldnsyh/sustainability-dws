@@ -40,15 +40,16 @@ const WHITE = [255, 255, 255];
 const BG_SOFT = [252, 250, 250];
 const BORDER = [230, 220, 220];
 
-/** Vertical rhythm — minimal gaps; sectionGap only between major points. */
+/** Vertical rhythm — tight within sections; sectionGap only between major points. */
 const PDF_LAYOUT = {
   bodyGap: 6,
-  sectionGap: 6,
-  afterSectionBar: 1,
-  subsectionGap: 1,
-  sectionDescGap: 0,
-  descToCards: 2,
-  cardsToContent: 1,
+  sectionGap: 8,
+  afterSectionBar: 2,
+  subsectionGap: 4,
+  sectionDescGap: 1,
+  descToCards: 3,
+  descLineH: 3.4,
+  cardsToContent: 4,
   cardGap: 3,
   headerMainH: 32,
   headerDetailH: 26,
@@ -112,13 +113,6 @@ function monthlyReportFileName_(variant, year, month) {
   return 'Monthly-Report-' + tag + '-' + fileLabel + '.pdf';
 }
 
-function addSummaryDetailLink_(doc, bar, fileName, pageNum) {
-  if (!bar || !fileName || !pageNum) return;
-  try {
-    doc.link(bar.x, bar.y, bar.w, bar.h, { url: fileName + '#page=' + pageNum });
-  } catch (e) { /* some viewers ignore cross-file links */ }
-}
-
 function createPdfContext_(jsPDFLib, opts) {
   opts = opts || {};
   const doc = new jsPDFLib({ orientation: opts.orientation || 'portrait', unit: 'mm', format: 'a4' });
@@ -147,10 +141,7 @@ function createPdfContext_(jsPDFLib, opts) {
     reportSubtitle: 'Compliance snapshot — SDD, Mill, Traceability, Grievance, NBL, Facility, EUDR',
     detailLevel: 'summary',
     pdfMode: opts.pdfMode || 'detail',
-    detailAnchors: opts.detailAnchors || null,
-    detailFileName: opts.detailFileName || '',
-    sectionAnchors: {},
-    lastSectionBar: null,
+    isLandscape: opts.orientation === 'landscape',
   };
 
   function markContent_(yPos) {
@@ -166,17 +157,33 @@ function createPdfContext_(jsPDFLib, opts) {
     pageBottomY[pageNum] = Math.max(pageBottomY[pageNum] || 0, bottomY);
   }
 
+  function compactHeaderBandH_() {
+    return ctx.isLandscape ? PDF_LAYOUT.headerDetailH : PDF_LAYOUT.headerCompactH;
+  }
+
+  function autoTableTopMargin_() {
+    return compactHeaderBandH_() + PDF_LAYOUT.compactBodyGap + 2;
+  }
+
   function drawCompactHeader_() {
-    const bandH = PDF_LAYOUT.headerCompactH;
+    const bandH = compactHeaderBandH_();
     doc.setFillColor.apply(doc, BRAND);
     doc.rect(0, 0, pageW, bandH, 'F');
     doc.setTextColor.apply(doc, WHITE);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9.5);
-    doc.text('Monthly Report', mL, 6.5);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(7);
-    doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, mL, 11.5);
+    if (ctx.isLandscape) {
+      doc.setFontSize(11);
+      doc.text('Monthly Report — Detail', mL, 10);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, mL, 17);
+    } else {
+      doc.setFontSize(9.5);
+      doc.text('Monthly Report', mL, 6.5);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(7);
+      doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, mL, 11.5);
+    }
     return bandH + PDF_LAYOUT.compactBodyGap;
   }
 
@@ -199,21 +206,25 @@ function createPdfContext_(jsPDFLib, opts) {
   }
 
   function drawSectionBar_(title, accent, fontSize) {
-    ensureSpace(14);
+    const fs = fontSize || 9;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(fs);
+    const lines = doc.splitTextToSize(String(title || ''), cW - 6);
+    const barH = Math.max(8, lines.length * 3.6 + 3);
+    ensureSpace(barH + 4);
     const barY = y;
     doc.setFillColor.apply(doc, accent || BRAND);
-    doc.roundedRect(mL, barY, cW, 8, 1.2, 1.2, 'F');
+    doc.roundedRect(mL, barY, cW, barH, 1.2, 1.2, 'F');
     doc.setTextColor.apply(doc, WHITE);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(fontSize || 9);
-    doc.text(title, mL + 3, barY + 5.5);
-    y = barY + 8 + PDF_LAYOUT.afterSectionBar;
-    ctx.lastSectionBar = { x: mL, y: barY, w: cW, h: 8 };
+    doc.setFontSize(fs);
+    doc.text(lines, mL + 3, barY + 4.5 + (lines.length > 1 ? 0 : 0.5));
+    y = barY + barH + PDF_LAYOUT.afterSectionBar;
     markContent_(y);
   }
 
-  function beginSection_(title, accent, anchorId) {
-    if (sectionStarted && remainingSpace_() < 30) {
+  function beginSection_(title, accent) {
+    if (sectionStarted && remainingSpace_() < 36) {
       doc.addPage();
       y = drawCompactHeader_();
     } else if (sectionStarted) {
@@ -221,15 +232,10 @@ function createPdfContext_(jsPDFLib, opts) {
     }
     sectionStarted = true;
     drawSectionBar_(title, accent);
-    if (anchorId && ctx.pdfMode === 'detail') {
-      ctx.sectionAnchors[anchorId] = doc.internal.getNumberOfPages();
-    } else if (anchorId && ctx.pdfMode === 'summary' && ctx.detailAnchors && ctx.detailFileName) {
-      addSummaryDetailLink_(doc, ctx.lastSectionBar, ctx.detailFileName, ctx.detailAnchors[anchorId]);
-    }
   }
 
   function beginSubsection_(title, accent) {
-    if (remainingSpace_() < 22) {
+    if (remainingSpace_() < 28) {
       doc.addPage();
       y = drawCompactHeader_();
     } else {
@@ -266,9 +272,10 @@ function createPdfContext_(jsPDFLib, opts) {
 
     const startPage = doc.internal.getNumberOfPages();
     const tableTop = y;
+    const tableTopMargin = autoTableTopMargin_();
     const base = {
       theme: 'grid',
-      margin: { left: mL, right: mR, bottom: mFoot + 12, top: PDF_LAYOUT.autoTableTopMargin },
+      margin: { left: mL, right: mR, bottom: mFoot + 12, top: tableTopMargin },
       tableWidth: cW,
       styles: {
         fontSize: opts.fontSize || 7.5,
@@ -310,7 +317,7 @@ function createPdfContext_(jsPDFLib, opts) {
         const p = data.pageNumber;
         const cursor = data.cursor || {};
         if (cursor.y != null) {
-          const top = p === startPage ? tableTop : PDF_LAYOUT.autoTableTopMargin;
+          const top = p === startPage ? tableTop : tableTopMargin;
           markPageSpan_(p, top, cursor.y + 6);
         }
       },
@@ -319,7 +326,7 @@ function createPdfContext_(jsPDFLib, opts) {
     const table = doc.lastAutoTable;
     if (table && table.finalY) {
       const endPage = doc.internal.getNumberOfPages();
-      markPageSpan_(endPage, endPage === startPage ? tableTop : PDF_LAYOUT.autoTableTopMargin, table.finalY);
+      markPageSpan_(endPage, endPage === startPage ? tableTop : tableTopMargin, table.finalY);
       y = table.finalY + (opts.gapAfter == null ? 2 : opts.gapAfter);
       markContent_(y);
     }
@@ -513,7 +520,7 @@ function drawCoverPage_(ctx, stats, sections, full) {
 }
 
 function drawSddSection_(ctx, rows, noHeader) {
-  if (!noHeader) ctx.beginSection_('01 · Supplier Due Diligence', BRAND, 'sdd');
+  if (!noHeader) ctx.beginSection_('01 · Supplier Due Diligence', BRAND);
   ctx.beginSubsection_(MRD_SDD_TABLE_TITLE, BRAND);
   const w = colWidths_([14, 28, 12, 22, 14], ctx.cW);
   const body = (rows || []).length
@@ -554,7 +561,7 @@ function millDetailCells_(item) {
 function drawMillSection_(ctx, data, full) {
   const mills = data.mills || [];
   if (!mills.length && !(data.highRiskMills || []).length) return;
-  ctx.beginSection_('02 · Mill Onboarding', BRAND, 'mill');
+  ctx.beginSection_('02 · Mill Onboarding', BRAND);
 
   if (mills.length) {
     if (full) {
@@ -646,13 +653,13 @@ function traceMetricCards_(t) {
 
 function drawTraceTotalsSection_(ctx, totals, year, noHeader) {
   const t = totals || {};
-  if (!noHeader) ctx.beginSection_('03 · Traceability Data ' + pdfSanitize(year), TRACE_ORANGE, 'trace');
+  if (!noHeader) ctx.beginSection_('03 · Traceability Data ' + pdfSanitize(year), TRACE_ORANGE);
   drawMetricCardGrid_(ctx, traceMetricCards_(t), { cols: 4, cardH: 24, gapAfter: 0 });
 }
 
 function drawGrvSection_(ctx, rows, full, noHeader) {
   if (!rows.length) return;
-  if (!noHeader) ctx.beginSection_('04 · Grievance Monitoring', GRV_PURPLE, 'grv');
+  if (!noHeader) ctx.beginSection_('04 · Grievance Monitoring', GRV_PURPLE);
   if (!full) {
     const w = colWidths_([12, 12, 14, 12, 16, 12, 12], ctx.cW);
     ctx.drawAutoTable_(
@@ -713,7 +720,7 @@ function drawGrvSection_(ctx, rows, full, noHeader) {
 
 function drawNblSection_(ctx, rows) {
   if (!rows.length) return;
-  ctx.beginSection_('05 · Active NBL Mills', NBL_RED, 'nbl');
+  ctx.beginSection_('05 · Active NBL Mills', NBL_RED);
   const w = colWidths_([18, 22, 24, 14, 12, 8], ctx.cW);
   ctx.drawAutoTable_(
     pdfTableHead(['Group Name', 'Company Name', 'Mill Name', 'Province', 'Result Risk Level', 'No Buy List']),
@@ -755,16 +762,19 @@ function drawNblSummaryList_(ctx, rows) {
 function drawFacilityHero_(ctx, bundle, accent, pctLabel, facilityPct, companiesCount) {
   const doc = ctx.doc;
   const mL = ctx.mL;
-  const mR = ctx.mR;
   const cW = ctx.cW;
-  const pageW = ctx.pageW;
   const badge = bundle.type === 'pk' ? 'PK' : 'CPO';
   const y0 = ctx.getY();
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  const nameLines = doc.splitTextToSize(pdfSanitize(bundle.facility), cW - 36);
+  const boxH = Math.max(22, 14 + nameLines.length * 3.6 + 6);
 
   doc.setDrawColor.apply(doc, BORDER);
   doc.setFillColor.apply(doc, BG_SOFT);
   doc.setLineWidth(0.25);
-  doc.roundedRect(mL, y0, cW, 18, 2, 2, 'FD');
+  doc.roundedRect(mL, y0, cW, boxH, 2, 2, 'FD');
 
   doc.setFillColor.apply(doc, accent);
   doc.roundedRect(mL + 4, y0 + 5, 20, 8, 1.5, 1.5, 'F');
@@ -774,19 +784,20 @@ function drawFacilityHero_(ctx, bundle, accent, pctLabel, facilityPct, companies
   doc.text(badge, mL + 14, y0 + 10.5, { align: 'center' });
 
   doc.setTextColor.apply(doc, INK);
-  doc.setFontSize(14);
-  doc.text(pdfSanitize(bundle.facility), mL + 28, y0 + 11);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text(nameLines, mL + 28, y0 + 9);
 
   doc.setFont('helvetica', 'normal');
-  doc.setFontSize(8.5);
+  doc.setFontSize(8);
   doc.setTextColor.apply(doc, INK_MUTED);
+  const metaY = y0 + 9 + nameLines.length * 3.6 + 1;
   doc.text(
     pctLabel + ': ' + pdfSanitize(facilityPct) + '   ·   ' + companiesCount + ' companies',
-    pageW - mR - 4,
-    y0 + 11,
-    { align: 'right' }
+    mL + 28,
+    metaY
   );
-  ctx.setY(y0 + 22);
+  ctx.setY(y0 + boxH + 2);
 }
 
 function drawFacilityKpiCards_(ctx, sum, facilityPct, pctLabel, accent) {
@@ -920,7 +931,7 @@ function drawFacilityBlock_(ctx, bundle, full, idx) {
 function drawFacilitySection_(ctx, bundles, full) {
   const active = (bundles || []).filter(function(b) { return (b.companies || []).length > 0; });
   if (!active.length) return;
-  ctx.beginSection_('06 · Facility Performance', PK_GREEN, 'facility');
+  ctx.beginSection_('06 · Facility Performance', PK_GREEN);
   active.forEach(function(bundle, idx) {
     drawFacilityBlock_(ctx, bundle, full, idx);
   });
@@ -928,7 +939,7 @@ function drawFacilitySection_(ctx, bundles, full) {
 
 function drawEudrSection_(ctx, rows, noHeader) {
   if (!rows.length) return;
-  if (!noHeader) ctx.beginSection_('07 · EUDR Potential', EUDR_TEAL, 'eudr');
+  if (!noHeader) ctx.beginSection_('07 · EUDR Potential', EUDR_TEAL);
   const w = colWidths_([12, 18, 20, 20, 14, 16], ctx.cW);
   ctx.drawAutoTable_(
     pdfTableHead(MRD_EUDR_COLS),
@@ -1162,16 +1173,19 @@ function drawSectionSummaryBlock_(ctx, sectionId, cfg) {
   const cardRows = Math.ceil(cfg.metrics.length / cols);
   const cardH = 17;
   const gridH = cardRows * cardH + Math.max(0, cardRows - 1) * PDF_LAYOUT.cardGap;
-  const blockNeed = 8 + PDF_LAYOUT.afterSectionBar + 3 + PDF_LAYOUT.descToCards + gridH + PDF_LAYOUT.cardsToContent;
-  ctx.ensureBlockFits_(blockNeed);
-  ctx.beginSection_(cfg.num + ' · ' + cfg.title, cfg.accent, sectionId);
   const doc = ctx.doc;
+  const descLines = doc.splitTextToSize(String(cfg.desc || ''), ctx.cW);
+  const descH = descLines.length * PDF_LAYOUT.descLineH;
+  const blockNeed = 10 + PDF_LAYOUT.afterSectionBar + PDF_LAYOUT.sectionDescGap
+    + descH + PDF_LAYOUT.descToCards + gridH + PDF_LAYOUT.cardsToContent;
+  ctx.ensureBlockFits_(blockNeed);
+  ctx.beginSection_(cfg.num + ' · ' + cfg.title, cfg.accent);
   const descY = ctx.getY() + PDF_LAYOUT.sectionDescGap;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor.apply(doc, INK_MUTED);
-  doc.text(cfg.desc, ctx.mL, descY);
-  ctx.setY(descY + PDF_LAYOUT.descToCards);
+  doc.text(descLines, ctx.mL, descY);
+  ctx.setY(descY + descH + PDF_LAYOUT.descToCards);
   drawMetricCardGrid_(ctx, cfg.metrics, {
     cols: cols,
     accent: cfg.accent,
@@ -1224,11 +1238,7 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
   const data = opts.data || {};
   const stats = data.stats || {};
   const sections = (opts.sections && opts.sections.length) ? opts.sections : DEFAULT_SECTIONS.slice();
-  const ctx = createPdfContext_(jsPDFLib, {
-    pdfMode: 'summary',
-    detailAnchors: opts.detailAnchors || null,
-    detailFileName: opts.detailFileName || '',
-  });
+  const ctx = createPdfContext_(jsPDFLib, { pdfMode: 'summary' });
   ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
   ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
   ctx.reportTitle = 'Monthly Report — Summary';
@@ -1283,7 +1293,7 @@ function buildDetailPdfDoc_(jsPDFLib, opts) {
   } else {
     drawDetailReportBody_(ctx, data, detailSections, opts.year);
   }
-  return { doc: finalizePdf_(ctx), anchors: ctx.sectionAnchors };
+  return finalizePdf_(ctx);
 }
 
 function drawCompactHeaderForExport_(ctx) {
@@ -1311,18 +1321,11 @@ export async function buildMonthlyReportPdfPair_(opts) {
   const jsPDFLib = opts.getJsPDF();
   if (!jsPDFLib) throw new Error('PDF library is not ready.');
 
-  const detailFileName = monthlyReportFileName_('detail', opts.year, opts.month);
-  const detailResult = buildDetailPdfDoc_(jsPDFLib, opts);
-  const summaryDoc = buildSummaryPdfDoc_(jsPDFLib, Object.assign({}, opts, {
-    detailAnchors: detailResult.anchors,
-    detailFileName: detailFileName,
-  }));
+  const summaryDoc = buildSummaryPdfDoc_(jsPDFLib, opts);
+  const detailDoc = buildDetailPdfDoc_(jsPDFLib, opts);
 
   saveMonthlyReportPdf_(summaryDoc, 'summary', opts.year, opts.month);
-
-  await new Promise(function(resolve) { setTimeout(resolve, 350); });
-
-  saveMonthlyReportPdf_(detailResult.doc, 'detail', opts.year, opts.month);
+  saveMonthlyReportPdf_(detailDoc, 'detail', opts.year, opts.month);
 }
 
 export const MRD_PDF_SECTIONS = [

@@ -31,6 +31,15 @@ let _facilityPending = false;
 let _nblByCache = new Map();
 let _sddCache = [];
 let _facilityBundles = [];
+let _renderRaf = 0;
+
+function scheduleRenderAll() {
+  if (_renderRaf) cancelAnimationFrame(_renderRaf);
+  _renderRaf = requestAnimationFrame(function() {
+    _renderRaf = 0;
+    renderAll();
+  });
+}
 
 function withTimeout(promise, ms, label) {
   return Promise.race([
@@ -283,10 +292,10 @@ async function exportMonthlyReport_(exportOpts) {
 
   const btn = document.getElementById('mrdExportConfirm') || document.getElementById('mrdBtnExport');
   const prevTxt = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = 'Generating…'; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
   try {
-    if (_sddCache.length === 0 && _deps.fetchSddList) {
+    if (sections.includes('sdd') && _sddCache.length === 0 && _deps.fetchSddList) {
       try {
         const rows = await withTimeout(_deps.fetchSddList(), 25000, 'SDD');
         _sddCache = Array.isArray(rows) ? rows : [];
@@ -294,7 +303,8 @@ async function exportMonthlyReport_(exportOpts) {
       } catch (_) { /* continue without SDD */ }
     }
 
-    const extra = await _deps.preparePdfExport();
+    if (btn) btn.textContent = 'Building PDF…';
+    const extra = await _deps.preparePdfExport({ sections: sections });
     _snapshot = rebuildSnapshot_({});
     const s = _snapshot;
 
@@ -351,7 +361,7 @@ async function exportMonthlyReport_(exportOpts) {
     });
 
     if (typeof window.showSddToast === 'function') {
-      window.showSddToast('2 PDF files downloaded. In Summary, click a section bar to jump to Detail (same folder).', 'success');
+      window.showSddToast('2 PDF files downloaded successfully.', 'success');
     }
   } catch (err) {
     console.error('[MRD PDF]', err);
@@ -899,12 +909,21 @@ function setUiLoading(show) {
   if (content) content.hidden = show;
 }
 
-async function loadFacilityInBackground(gen) {
+async function loadFacilityInBackground(gen, opts) {
+  opts = opts || {};
   if (_facilityPending || !_deps.getFacilityBundles) return;
+  if (!opts.force && _facilityBundles.length) {
+    if (_snapshot) {
+      _snapshot.facilityBundles = _facilityBundles;
+      _snapshot.facilityLoading = false;
+      scheduleRenderAll();
+    }
+    return;
+  }
   _facilityPending = true;
   if (_snapshot) {
     _snapshot.facilityLoading = true;
-    renderAll();
+    scheduleRenderAll();
   }
   try {
     if (_deps.preparePfDataForReport) await _deps.preparePfDataForReport();
@@ -913,25 +932,29 @@ async function loadFacilityInBackground(gen) {
     if (_snapshot) {
       _snapshot.facilityBundles = _facilityBundles;
       _snapshot.facilityLoading = false;
-      renderAll();
+      scheduleRenderAll();
     }
   } catch (_) {
     if (gen === _loadGen && _snapshot) {
       _snapshot.facilityLoading = false;
       _snapshot.facilityBundles = [];
-      renderAll();
+      scheduleRenderAll();
     }
   } finally {
     _facilityPending = false;
   }
 }
 
-async function loadEudrInBackground(gen) {
+async function loadEudrInBackground(gen, opts) {
+  opts = opts || {};
   if (_eudrPending || !_deps.fetchEudrPotential) return;
+  if (!opts.force && _snapshot && _snapshot.eudrPotential && _snapshot.eudrPotential.length && !_snapshot.eudrLoading) {
+    return;
+  }
   _eudrPending = true;
   if (_snapshot) {
     _snapshot.eudrLoading = true;
-    renderAll();
+    scheduleRenderAll();
   }
   try {
     const eudr = await _deps.fetchEudrPotential();
@@ -939,13 +962,13 @@ async function loadEudrInBackground(gen) {
     _snapshot.eudrPotential = eudr;
     _snapshot.eudrLoading = false;
     _snapshot.stats.eudrPotential = eudr.length;
-    renderAll();
+    scheduleRenderAll();
     updateScopeText();
   } catch (_) {
     if (gen === _loadGen && _snapshot) {
       _snapshot.eudrLoading = false;
       _snapshot.eudrPotential = [];
-      renderAll();
+      scheduleRenderAll();
     }
   } finally {
     _eudrPending = false;
@@ -971,7 +994,7 @@ async function loadMillInBackground(gen) {
     await withTimeout(loadMill(), 30000, 'Mill data');
     if (gen !== _loadGen) return;
     _snapshot = rebuildSnapshot_({});
-    renderAll();
+    scheduleRenderAll();
     updateScopeText();
     populateYearSelect();
   } catch (err) {
@@ -986,7 +1009,7 @@ async function loadSupplementalInBackground(gen) {
     await withTimeout(_deps.ensureSupplementalData(), 45000, 'Traceability & grievance');
     if (gen !== _loadGen) return;
     _snapshot = rebuildSnapshot_({});
-    renderAll();
+    scheduleRenderAll();
     updateScopeText();
   } catch (err) {
     if (gen !== _loadGen) return;
@@ -994,26 +1017,49 @@ async function loadSupplementalInBackground(gen) {
   }
 }
 
-async function loadSddInBackground(gen) {
+async function loadSddInBackground(gen, opts) {
+  opts = opts || {};
   if (!_deps.fetchSddList) return;
+  if (!opts.force && _sddCache.length) {
+    if (_snapshot) {
+      _snapshot = rebuildSnapshot_({ sddRows: _sddCache, sddLoading: false });
+      scheduleRenderAll();
+    }
+    return;
+  }
   _snapshot = rebuildSnapshot_({ sddLoading: true });
-  renderAll();
+  scheduleRenderAll();
   try {
     const rows = await withTimeout(_deps.fetchSddList(), 20000, 'SDD');
     if (gen !== _loadGen) return;
     _sddCache = Array.isArray(rows) ? rows : [];
     _snapshot = rebuildSnapshot_({ sddRows: _sddCache, sddLoading: false });
-    renderAll();
+    scheduleRenderAll();
     updateScopeText();
   } catch (err) {
     if (gen !== _loadGen) return;
     _snapshot = rebuildSnapshot_({ sddLoading: false });
-    renderAll();
+    scheduleRenderAll();
     updateScopeText('SDD: ' + (err && err.message ? err.message : 'failed to load'));
   }
 }
 
-async function loadAndRender() {
+function startBackgroundLoads_(gen, force) {
+  const opts = { force: force };
+  Promise.all([
+    loadMillInBackground(gen),
+    loadSupplementalInBackground(gen),
+    loadSddInBackground(gen, opts),
+  ]).then(function() {
+    if (gen !== _loadGen) return;
+    loadEudrInBackground(gen, opts);
+    loadFacilityInBackground(gen, opts);
+  }).catch(function() {});
+}
+
+async function loadAndRender(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
   const gen = ++_loadGen;
   const errEl = document.getElementById('mrdError');
   if (errEl) { errEl.hidden = true; errEl.textContent = ''; }
@@ -1032,11 +1078,7 @@ async function loadAndRender() {
     setUiLoading(false);
   }
 
-  loadMillInBackground(gen);
-  loadSupplementalInBackground(gen);
-  loadSddInBackground(gen);
-  loadEudrInBackground(gen);
-  loadFacilityInBackground(gen);
+  startBackgroundLoads_(gen, force);
 }
 
 async function resolveMillNblOnExpand(cacheKey, row) {
@@ -1107,7 +1149,7 @@ function bindOnce() {
     _nblByCache.clear();
     _facilityBundles = [];
     if (_deps.clearEudrCache) _deps.clearEudrCache();
-    loadAndRender();
+    loadAndRender({ force: true });
   });
 
   document.getElementById('mrdBtnExport')?.addEventListener('click', mrdOpenExportModal_);
@@ -1148,12 +1190,20 @@ function bindOnce() {
 
 export function initMonthlyReport_(deps) {
   _deps = deps;
-  window.refreshMonthlyReport_ = function() { loadAndRender(); };
+  window.refreshMonthlyReport_ = function(opts) {
+    opts = opts || {};
+    if (!opts.force && _snapshot) {
+      renderAll();
+      updateScopeText();
+      return;
+    }
+    loadAndRender(opts);
+  };
   window.exportMonthlyReport_ = exportMonthlyReport_;
   bindOnce();
   loadAndRender();
 }
 
-export function refreshMonthlyReport_() {
-  if (_deps) loadAndRender();
+export function refreshMonthlyReport_(opts) {
+  if (_deps) window.refreshMonthlyReport_(opts);
 }

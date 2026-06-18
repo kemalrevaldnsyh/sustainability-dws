@@ -20696,16 +20696,15 @@ function initDashboardApp() {
     applyDefaultPanel_();
     var sbNav = document.getElementById('mainSidebar');
     if (sbNav) sbNav.classList.remove('expanded');
-    try {
-      await loadMillData();
-      console.log('✅ Dashboard loaded successfully');
-    } catch (error) {
-      console.error('❌ Error loading dashboard:', error);
-    }
+    loadMillData().then(function() {
+      console.log('✅ Mill data loaded');
+    }).catch(function(error) {
+      console.error('❌ Error loading mill data:', error);
+    });
     runWhenIdle(function() {
       if (!ttpLoaded) loadTTPData();
       if (!grvLoaded) loadGrvData();
-    }, 1400);
+    }, 400);
   }
 
   async function doLogin() {
@@ -23674,16 +23673,21 @@ function initDashboardApp() {
         buildTraceTotals: mrdBuildTraceTotalsForReport_,
         formatPct: ttpFormatCellPct_,
         getJsPDF: getJsPDF,
-        preparePdfExport: async function() {
+        preparePdfExport: async function(exportOpts) {
+          exportOpts = exportOpts || {};
+          const sections = exportOpts.sections;
+          const allSections = !sections || !sections.length;
+          const needFacility = allSections || sections.indexOf('facility') !== -1;
+          const needEudr = allSections || sections.indexOf('eudr') !== -1;
           await this.ensureCoreData();
-          if (typeof window.mrdPreparePfDataForReport_ === 'function') {
+          if (needFacility && typeof window.mrdPreparePfDataForReport_ === 'function') {
             await window.mrdPreparePfDataForReport_();
           }
           let eudr = _mrdEudrCache;
-          if (!eudr) {
+          if (needEudr && !eudr) {
             try { eudr = await this.fetchEudrPotential(); } catch (_) { eudr = []; }
           }
-          return { eudr: eudr || [] };
+          return { eudr: needEudr ? (eudr || []) : [] };
         },
         preparePfDataForReport: async function() {
           if (typeof window.mrdPreparePfDataForReport_ === 'function') {
