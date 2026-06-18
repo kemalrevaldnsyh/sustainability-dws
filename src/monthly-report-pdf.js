@@ -40,6 +40,20 @@ const WHITE = [255, 255, 255];
 const BG_SOFT = [252, 250, 250];
 const BORDER = [230, 220, 220];
 
+/** Vertical rhythm — keep content clear of page headers and section bars. */
+const PDF_LAYOUT = {
+  bodyGap: 10,
+  sectionGap: 10,
+  afterSectionBar: 6,
+  subsectionGap: 8,
+  sectionDescGap: 5,
+  headerMainH: 32,
+  headerDetailH: 26,
+  headerCompactH: 16,
+  compactBodyGap: 8,
+  autoTableTopMargin: 26,
+};
+
 const DEFAULT_SECTIONS = ['kpi', 'sdd', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'];
 const MIN_CONTENT_Y = 24;
 
@@ -132,8 +146,9 @@ function createPdfContext_(jsPDFLib, opts) {
   }
 
   function drawCompactHeader_() {
+    const bandH = PDF_LAYOUT.headerCompactH;
     doc.setFillColor.apply(doc, BRAND);
-    doc.rect(0, 0, pageW, 15, 'F');
+    doc.rect(0, 0, pageW, bandH, 'F');
     doc.setTextColor.apply(doc, WHITE);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(9.5);
@@ -141,7 +156,7 @@ function createPdfContext_(jsPDFLib, opts) {
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, mL, 11.5);
-    return 18;
+    return bandH + PDF_LAYOUT.compactBodyGap;
   }
 
   function ensureSpace(needed) {
@@ -162,7 +177,7 @@ function createPdfContext_(jsPDFLib, opts) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(fontSize || 9);
     doc.text(title, mL + 3, y + 5.5);
-    y += 12;
+    y += 8 + PDF_LAYOUT.afterSectionBar;
     markContent_(y);
   }
 
@@ -171,7 +186,7 @@ function createPdfContext_(jsPDFLib, opts) {
       doc.addPage();
       y = drawCompactHeader_();
     } else if (sectionStarted) {
-      y += 3;
+      y += PDF_LAYOUT.sectionGap;
     }
     sectionStarted = true;
     drawSectionBar_(title, accent);
@@ -182,7 +197,7 @@ function createPdfContext_(jsPDFLib, opts) {
       doc.addPage();
       y = drawCompactHeader_();
     } else {
-      y += 4;
+      y += PDF_LAYOUT.subsectionGap;
     }
     drawSectionBar_(title, accent, 8.5);
   }
@@ -217,7 +232,7 @@ function createPdfContext_(jsPDFLib, opts) {
     const tableTop = y;
     const base = {
       theme: 'grid',
-      margin: { left: mL, right: mR, bottom: mFoot + 12, top: 18 },
+      margin: { left: mL, right: mR, bottom: mFoot + 12, top: PDF_LAYOUT.autoTableTopMargin },
       tableWidth: cW,
       styles: {
         fontSize: opts.fontSize || 7.5,
@@ -259,7 +274,7 @@ function createPdfContext_(jsPDFLib, opts) {
         const p = data.pageNumber;
         const cursor = data.cursor || {};
         if (cursor.y != null) {
-          const top = p === startPage ? tableTop : 18;
+          const top = p === startPage ? tableTop : PDF_LAYOUT.autoTableTopMargin;
           markPageSpan_(p, top, cursor.y + 6);
         }
       },
@@ -268,7 +283,7 @@ function createPdfContext_(jsPDFLib, opts) {
     const table = doc.lastAutoTable;
     if (table && table.finalY) {
       const endPage = doc.internal.getNumberOfPages();
-      markPageSpan_(endPage, endPage === startPage ? tableTop : 18, table.finalY);
+      markPageSpan_(endPage, endPage === startPage ? tableTop : PDF_LAYOUT.autoTableTopMargin, table.finalY);
       y = table.finalY + (opts.gapAfter == null ? 4 : opts.gapAfter);
       markContent_(y);
     }
@@ -299,10 +314,11 @@ function createPdfContext_(jsPDFLib, opts) {
   }
 
   function drawMainHeader_() {
+    const bandH = PDF_LAYOUT.headerMainH;
     doc.setFillColor.apply(doc, BRAND);
-    doc.rect(0, 0, pageW, 30, 'F');
+    doc.rect(0, 0, pageW, bandH, 'F');
     doc.setFillColor(180, 40, 40);
-    doc.rect(0, 28.5, pageW, 1.5, 'F');
+    doc.rect(0, bandH - 1.5, pageW, 1.5, 'F');
     doc.setTextColor.apply(doc, WHITE);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(17);
@@ -314,13 +330,13 @@ function createPdfContext_(jsPDFLib, opts) {
       doc.text(sub, mL, 20);
       doc.setFontSize(8);
       doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 26);
-      markContent_(36);
-      return 36;
+      markContent_(bandH);
+      return bandH;
     }
     doc.setFontSize(8);
-    doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 20);
-    markContent_(28);
-    return 28;
+    doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 22);
+    markContent_(bandH);
+    return bandH;
   }
 
   function startBodyAfterCover_(coverEndY) {
@@ -1106,12 +1122,13 @@ function drawSectionSummaryBlock_(ctx, cfg) {
   if (!cfg) return;
   ctx.beginSection_(cfg.num + ' · ' + cfg.title, cfg.accent);
   const doc = ctx.doc;
+  const descY = ctx.getY() + PDF_LAYOUT.sectionDescGap;
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7.5);
   doc.setTextColor.apply(doc, INK_MUTED);
-  doc.text(cfg.desc, ctx.mL, ctx.getY());
-  ctx.setY(ctx.getY() + 5);
-  drawMetricCardGrid_(ctx, cfg.metrics, { cols: Math.min(4, cfg.metrics.length), accent: cfg.accent, cardH: 19, gapAfter: 3 });
+  doc.text(cfg.desc, ctx.mL, descY);
+  ctx.setY(descY + 7);
+  drawMetricCardGrid_(ctx, cfg.metrics, { cols: Math.min(4, cfg.metrics.length), accent: cfg.accent, cardH: 19, gapAfter: 5 });
 }
 
 function drawSummaryReportBody_(ctx, data, sections, stats, year) {
@@ -1166,11 +1183,12 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
   ctx.reportSubtitle = '';
 
   const headerEnd = ctx.drawMainHeader_();
-  ctx.setY(headerEnd + 2);
+  ctx.setY(headerEnd + PDF_LAYOUT.bodyGap);
 
   if (sections.indexOf('kpi') !== -1) {
     docSetSubhead_(ctx, 'Overview');
-    drawMetricCardGrid_(ctx, websiteKpiItems_(stats), { cols: 4, cardH: 22, gapAfter: 6 });
+    drawMetricCardGrid_(ctx, websiteKpiItems_(stats), { cols: 4, cardH: 22, gapAfter: 4 });
+    ctx.setY(ctx.getY() + PDF_LAYOUT.sectionGap);
   }
 
   drawSummaryReportBody_(ctx, data, sections, stats, opts.year);
@@ -1179,12 +1197,13 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
 
 function docSetSubhead_(ctx, text) {
   const doc = ctx.doc;
-  ctx.ensureSpace_(10);
+  ctx.ensureSpace_(14);
+  const textY = ctx.getY() + 5;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor.apply(doc, INK);
-  doc.text(text, ctx.mL, ctx.getY() + 2);
-  ctx.setY(ctx.getY() + 8);
+  doc.text(text, ctx.mL, textY);
+  ctx.setY(textY + 10);
 }
 
 function buildDetailPdfDoc_(jsPDFLib, opts) {
@@ -1212,17 +1231,18 @@ function buildDetailPdfDoc_(jsPDFLib, opts) {
 
 function drawCompactHeaderForExport_(ctx) {
   const doc = ctx.doc;
+  const bandH = PDF_LAYOUT.headerDetailH;
   doc.setFillColor.apply(doc, BRAND);
-  doc.rect(0, 0, ctx.pageW, 22, 'F');
+  doc.rect(0, 0, ctx.pageW, bandH, 'F');
   doc.setTextColor.apply(doc, WHITE);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('Monthly Report — Detail', ctx.mL, 9);
+  doc.text('Monthly Report — Detail', ctx.mL, 10);
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(7);
-  doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, ctx.mL, 15.5);
-  ctx.markContent_(20);
-  return 22;
+  doc.text(ctx.periodText + '   ·   ' + ctx.generatedAt, ctx.mL, 17);
+  ctx.markContent_(bandH);
+  return bandH + PDF_LAYOUT.bodyGap;
 }
 
 /** @deprecated Use buildMonthlyReportPdfPair_ */
