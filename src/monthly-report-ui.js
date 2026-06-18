@@ -557,6 +557,8 @@ function buildSnapshotSync(opts) {
       facilities: facility.cpo.length + facility.pk.length,
       ttmCpoPct: traceTotals.ttmCpoFmt || '—',
       ttmPkPct: traceTotals.ttmPkFmt || '—',
+      ttpCpoPct: traceTotals.ttpCpoFmt || '—',
+      ttpPkPct: traceTotals.ttpPkFmt || '—',
     },
   };
 }
@@ -676,18 +678,27 @@ function formatPctNum_(n) {
 function renderTraceSection(traceTotals, stats) {
   const t = traceTotals || {};
   const s = stats || {};
+  function card(cls, val, lbl, hint) {
+    return '<div class="mrd-trace-total-card ' + cls + '">'
+      + '<span class="mrd-trace-total-val">' + esc(val || '—') + '</span>'
+      + '<span class="mrd-trace-total-lbl">' + esc(lbl) + '</span>'
+      + '<span class="mrd-trace-total-hint">' + esc(hint) + '</span>'
+      + '</div>';
+  }
   return ''
     + '<div class="mrd-trace-totals">'
-    + '<div class="mrd-trace-total-card mrd-trace-total-card--cpo">'
-    + '<span class="mrd-trace-total-val">' + esc(t.ttmCpoFmt || '—') + '</span>'
-    + '<span class="mrd-trace-total-lbl">TTM CPO %</span>'
-    + '<span class="mrd-trace-total-hint">Supply-weighted · valid coordinate</span>'
-    + '</div>'
-    + '<div class="mrd-trace-total-card mrd-trace-total-card--pk">'
-    + '<span class="mrd-trace-total-val">' + esc(t.ttmPkFmt || '—') + '</span>'
-    + '<span class="mrd-trace-total-lbl">TTM PK %</span>'
-    + '<span class="mrd-trace-total-hint">Supply-weighted · valid coordinate</span>'
-    + '</div>'
+    + '<div class="mrd-trace-totals-group mrd-trace-totals-group--ttm">'
+    + '<span class="mrd-trace-totals-group__title">TTM · Traceability to Mill</span>'
+    + '<div class="mrd-trace-totals-group__cards">'
+    + card('mrd-trace-total-card--cpo', t.ttmCpoFmt, 'TTM CPO %', 'Supply-weighted · valid coordinate')
+    + card('mrd-trace-total-card--pk', t.ttmPkFmt, 'TTM PK %', 'Supply-weighted · valid coordinate')
+    + '</div></div>'
+    + '<div class="mrd-trace-totals-group mrd-trace-totals-group--ttp">'
+    + '<span class="mrd-trace-totals-group__title">TTP · Traceability to Plantation</span>'
+    + '<div class="mrd-trace-totals-group__cards">'
+    + card('mrd-trace-total-card--ttp-cpo', t.ttpCpoFmt, 'TTP CPO %', 'Supplier traceability · volume-weighted')
+    + card('mrd-trace-total-card--ttp-pk', t.ttpPkFmt, 'TTP PK %', 'Supplier traceability · volume-weighted')
+    + '</div></div>'
     + '</div>'
     + '<p class="mrd-trace-total-note">'
     + esc((s.emptyTraceMills || 0) + ' mills without supplier · ' + (s.totalMills || 0) + ' total mills')
@@ -705,10 +716,8 @@ function renderNblSection(millRows) {
     return items.map(function(item) {
       const r = item.row;
       return '<div class="mrd-nbl-item">'
-        + '<span class="mrd-nbl-item-mill">' + esc(r['MILL NAME']) + '</span>'
-        + '<span class="mrd-nbl-item-co">' + esc(r['COMPANY NAME']) + '</span>'
-        + '<span class="mrd-nbl-item-grp">' + esc(r['GROUP NAME']) + '</span>'
-        + (hasCellValue(item.risk) ? '<span class="mrd-nbl-item-risk">' + riskPill(item.risk) + '</span>' : '')
+        + '<span class="mrd-nbl-item-grp">' + esc(r['GROUP NAME'] || '—') + '</span>'
+        + '<span class="mrd-nbl-item-co">' + esc(r['COMPANY NAME'] || '—') + '</span>'
         + '</div>';
     }).join('');
   }
@@ -853,7 +862,7 @@ function renderAll() {
   let html = '';
   html += flatSectionHtml('sdd', 'Supplier Due Diligence', stats.sddRequested + ' requested · ' + stats.sddDone + ' done', renderSddSection(s.sdd, s.sddLoading), '01');
   html += sectionHtml('mill', 'Mill Onboarding', stats.totalMills + ' mills · ' + stats.highRisk + ' high risk', renderMillSection(s.mills), '02');
-  html += sectionHtml('trace', 'Traceability ' + _year, 'TTM CPO ' + (stats.ttmCpoPct || '—') + ' · TTM PK ' + (stats.ttmPkPct || '—'), renderTraceSection(s.traceTotals, stats), '03');
+  html += sectionHtml('trace', 'Traceability ' + _year, 'TTM CPO ' + (stats.ttmCpoPct || '—') + ' · TTM PK ' + (stats.ttmPkPct || '—') + ' · TTP CPO ' + (stats.ttpCpoPct || '—') + ' · TTP PK ' + (stats.ttpPkPct || '—'), renderTraceSection(s.traceTotals, stats), '03');
   html += flatSectionHtml('grv', 'Grievance', stats.grievances + ' in period', renderGrvSection(s.grv), '04');
   html += sectionHtml('nbl', 'Active NBL Mills', stats.nblMills + ' mills', renderNblSection(s.mills), '05');
   html += sectionHtml('facility', 'Facility Performance', 'CPO & PK · traceability & ISPO', renderFacilitySection(s.facilityBundles, s.facilityLoading), '06');

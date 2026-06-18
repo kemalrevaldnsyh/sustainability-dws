@@ -5,6 +5,10 @@
 const BRAND = [139, 26, 26];
 const PK_GREEN = [13, 110, 70];
 const TRACE_ORANGE = [230, 81, 0];
+const TTM_CPO = [139, 26, 26];
+const TTM_PK = [46, 125, 50];
+const TTP_CPO = [230, 81, 0];
+const TTP_PK = [21, 101, 192];
 const GRV_PURPLE = [106, 27, 154];
 const NBL_RED = [192, 57, 43];
 const EUDR_TEAL = [0, 131, 143];
@@ -278,13 +282,20 @@ function createPdfContext_(jsPDFLib, opts) {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(17);
     doc.text(ctx.reportTitle || 'Monthly Report', mL, 13);
+    const sub = String(ctx.reportSubtitle || '').trim();
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.text(ctx.reportSubtitle || 'Compliance snapshot — SDD, Mill, Traceability, Grievance, NBL, Facility, EUDR', mL, 20);
+    if (sub) {
+      doc.setFontSize(8.5);
+      doc.text(sub, mL, 20);
+      doc.setFontSize(8);
+      doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 26);
+      markContent_(36);
+      return 36;
+    }
     doc.setFontSize(8);
-    doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 26);
-    markContent_(36);
-    return 36;
+    doc.text(ctx.periodText + '   ·   Generated: ' + ctx.generatedAt, mL, 20);
+    markContent_(28);
+    return 28;
   }
 
   function startBodyAfterCover_(coverEndY) {
@@ -542,13 +553,20 @@ function drawMillSection_(ctx, data, full) {
   }
 }
 
+function traceMetricCards_(t) {
+  t = t || {};
+  return [
+    { label: 'TTM CPO %', value: pdfSanitize(t.ttmCpoFmt || '—'), accent: TTM_CPO, valueColor: TTM_CPO },
+    { label: 'TTM PK %', value: pdfSanitize(t.ttmPkFmt || '—'), accent: TTM_PK, valueColor: TTM_PK },
+    { label: 'TTP CPO %', value: pdfSanitize(t.ttpCpoFmt || '—'), accent: TTP_CPO, valueColor: TTP_CPO },
+    { label: 'TTP PK %', value: pdfSanitize(t.ttpPkFmt || '—'), accent: TTP_PK, valueColor: TTP_PK },
+  ];
+}
+
 function drawTraceTotalsSection_(ctx, totals, year, noHeader) {
   const t = totals || {};
   if (!noHeader) ctx.beginSection_('03 · Traceability ' + pdfSanitize(year), TRACE_ORANGE);
-  drawMetricCardGrid_(ctx, [
-    { label: 'TTM CPO %', value: pdfSanitize(t.ttmCpoFmt || '—') },
-    { label: 'TTM PK %', value: pdfSanitize(t.ttmPkFmt || '—') },
-  ], { cols: 2, cardH: 24, accent: TRACE_ORANGE, gapAfter: 3 });
+  drawMetricCardGrid_(ctx, traceMetricCards_(t), { cols: 4, cardH: 24, gapAfter: 3 });
 }
 
 function drawGrvSection_(ctx, rows, full, noHeader) {
@@ -628,35 +646,22 @@ function drawNblSection_(ctx, rows) {
   );
 }
 
-/** Summary PDF — NBL list in 2 columns (Mill · Company). */
+/** Summary PDF — Active NBL list (Company Group Name · Company Name). */
 function drawNblSummaryList_(ctx, rows) {
   if (!rows.length) return;
-  const half = Math.ceil(rows.length / 2);
-  const left = rows.slice(0, half);
-  const right = rows.slice(half);
-  const body = [];
-  for (let i = 0; i < half; i++) {
-    const l = left[i];
-    const r = right[i];
-    const lr = l ? (l.row || l) : null;
-    const rr = r ? (r.row || r) : null;
-    body.push([
-      lr ? pdfSanitize(lr['MILL NAME']) : '',
-      lr ? pdfSanitize(lr['COMPANY NAME']) : '',
-      rr ? pdfSanitize(rr['MILL NAME']) : '',
-      rr ? pdfSanitize(rr['COMPANY NAME']) : '',
-    ]);
-  }
-  const w = colWidths_([22, 24, 22, 24], ctx.cW);
+  const w = colWidths_([38, 62], ctx.cW);
   ctx.drawAutoTable_(
-    [['Mill', 'Company', 'Mill', 'Company']],
-    body,
+    [['Company Group Name', 'Company Name']],
+    rows.map(function(item) {
+      const r = item.row || item;
+      return [
+        pdfSanitize(r['GROUP NAME'] || r.group || ''),
+        pdfSanitize(r['COMPANY NAME'] || r.company || ''),
+      ];
+    }),
     NBL_RED,
-    {
-      0: { cellWidth: w[0], fontSize: 6.8 }, 1: { cellWidth: w[1], fontSize: 6.8 },
-      2: { cellWidth: w[2], fontSize: 6.8 }, 3: { cellWidth: w[3], fontSize: 6.8 },
-    },
-    { fontSize: 7, cellPadding: 2, gapAfter: 3 }
+    { 0: { cellWidth: w[0] }, 1: { cellWidth: w[1] } },
+    { fontSize: 7.5, cellPadding: 2.5, gapAfter: 3 }
   );
 }
 
@@ -934,7 +939,8 @@ function drawMetricCardGrid_(ctx, items, opts) {
     const row = Math.floor(i / cols);
     const x = mL + col * (cardW + gap);
     const cy = y0 + row * (cardH + gap);
-    const accent = item.hot ? NBL_RED : (opts.accent || BRAND);
+    const accent = item.hot ? NBL_RED : (item.accent || opts.accent || BRAND);
+    const valueColor = item.hot ? NBL_RED : (item.valueColor || accent || INK);
 
     doc.setDrawColor.apply(doc, BORDER);
     doc.setFillColor.apply(doc, WHITE);
@@ -950,7 +956,7 @@ function drawMetricCardGrid_(ctx, items, opts) {
 
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(item.value.length > 6 ? 10 : 12);
-    doc.setTextColor.apply(doc, item.hot ? NBL_RED : INK);
+    doc.setTextColor.apply(doc, valueColor);
     doc.text(item.value, x + cardW / 2, cy + 12.5, { align: 'center' });
 
     if (item.sub) {
@@ -991,11 +997,25 @@ function sectionSummaryConfig_(id, stats, data, year) {
     },
     trace: {
       num: '03', title: 'Traceability ' + pdfSanitize(year), accent: TRACE_ORANGE,
-      desc: 'TTM supply-weighted · ' + (s.emptyTraceMills || 0) + ' mills without supplier',
-      metrics: [
-        { label: 'TTM CPO %', value: pdfSanitize((data.traceTotals && data.traceTotals.ttmCpoFmt) || s.ttmCpoPct || '—') },
-        { label: 'TTM PK %', value: pdfSanitize((data.traceTotals && data.traceTotals.ttmPkFmt) || s.ttmPkPct || '—') },
-      ],
+      desc: 'TTM (mill coordinates) · TTP (supplier traceability) · ' + (s.emptyTraceMills || 0) + ' mills without supplier',
+      metrics: (function() {
+        const t = data.traceTotals || {};
+        const cards = traceMetricCards_(t);
+        const fallbacks = [
+          t.ttmCpoFmt || s.ttmCpoPct,
+          t.ttmPkFmt || s.ttmPkPct,
+          t.ttpCpoFmt || s.ttpCpoPct,
+          t.ttpPkFmt || s.ttpPkPct,
+        ];
+        return cards.map(function(card, i) {
+          return {
+            label: card.label,
+            value: pdfSanitize(fallbacks[i] || '—'),
+            accent: card.accent,
+            valueColor: card.valueColor,
+          };
+        });
+      })(),
     },
     grv: {
       num: '04', title: 'Grievance Monitoring', accent: GRV_PURPLE,
@@ -1096,10 +1116,10 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
   ctx.periodText = 'Period: ' + periodLabel(opts.year, opts.month);
   ctx.generatedAt = new Date().toLocaleString('en-GB', { hour12: false });
   ctx.reportTitle = 'Monthly Report — Summary';
-  ctx.reportSubtitle = 'KPI overview with section tables — SDD, Traceability, Grievance, NBL, Facility, EUDR';
+  ctx.reportSubtitle = '';
 
-  ctx.drawMainHeader_();
-  ctx.setY(38);
+  const headerEnd = ctx.drawMainHeader_();
+  ctx.setY(headerEnd + 2);
 
   if (sections.indexOf('kpi') !== -1) {
     docSetSubhead_(ctx, 'Overview');
