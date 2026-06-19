@@ -7328,13 +7328,17 @@ function initDashboardApp() {
       out.push(item);
     }
 
-    // Source: NBL registry — match mill's GROUP/COMPANY against all "/" aliases
+    // Source: NBL registry — match mill's GROUP against NBL Group Name ONLY,
+    // and mill's COMPANY against NBL Company Name ONLY (no cross-matching).
+    // Cross-matching caused false positives: e.g. a row for "BEST AGO /
+    // KETAPANG AGRO LESTARI" was incorrectly matched for mill
+    // "FIRST RESOURCES / KETAPANG AGRO LESTARI" because the company alias
+    // "KETAPANG AGRO LESTARI" was in the combined allAliases pool.
     (lists.registry || []).forEach(function(r, i) {
       var gAliases = r._nblGroupAliases   || (r._nblGroup   ? [r._nblGroup]   : []);
       var cAliases = r._nblCompanyAliases || (r._nblCompany ? [r._nblCompany] : []);
-      var allAliases = gAliases.concat(cAliases);
-      var groupHit   = !!(group   && nblMatchesAnyAlias_(group,   allAliases));
-      var companyHit = !!(company && nblMatchesAnyAlias_(company, allAliases));
+      var groupHit   = !!(group   && gAliases.length && nblMatchesAnyAlias_(group,   gAliases));
+      var companyHit = !!(company && cAliases.length && nblMatchesAnyAlias_(company, cAliases));
       if (!groupHit && !companyHit) return;
       var hitBy = [];
       if (groupHit)   hitBy.push('GROUP NAME');
