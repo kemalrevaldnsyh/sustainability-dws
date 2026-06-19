@@ -363,7 +363,9 @@ async function exportMonthlyReport_(exportOpts) {
     // always matches stats.highRisk shown in the summary KPI card.
     // Read item.risk directly from s.mills — it was already set at snapshot
     // build time via millResolvedRiskLevel and does not need NBL resolution.
-    const highRiskMills = mrdSortMillItems_((s.mills || []).filter(function(item) { return isHighRisk(item.risk); }));
+    // highRiskMills is pre-computed in buildSnapshotSync alongside stats.highRisk —
+    // guaranteed to match the summary KPI count exactly.
+    const highRiskMills = mrdSortMillItems_(s.highRiskMills || []);
     const nblMills = mrdSortMillItems_(mills.filter(function(item) {
       return isNblYes(item.nbl) && matchesSearch(item.search);
     }));
@@ -377,9 +379,10 @@ async function exportMonthlyReport_(exportOpts) {
       });
     }
 
-    // Use extra.eudr only when non-empty; [] is truthy in JS and would shadow
-    // a valid s.eudrPotential that was already loaded into the snapshot.
-    const eudrSource = (extra && extra.eudr && extra.eudr.length) ? extra.eudr : (s.eudrPotential || []);
+    // s.eudrPotential is authoritative: freshEudr was already merged into the
+    // snapshot at the rebuildSnapshot_ call above. Using extra.eudr directly
+    // could give a stale/partial list that disagrees with stats.eudrPotential.
+    const eudrSource = s.eudrPotential || [];
     const eudrList = filterForExport_(eudrSource, function(item) { return matchesSearch(item.search); });
 
     const report = getReportPeriod_();
@@ -614,9 +617,14 @@ function buildSnapshotSync(opts) {
   const facility = _deps.buildFacilitySummary(mills, ttpFiltered);
   const traceTotals = _deps.buildTraceTotals ? _deps.buildTraceTotals(dataYear) : {};
 
+  // Build highRiskMills from the same millRows array used for stats.highRisk —
+  // this guarantees s.highRiskMills.length === s.stats.highRisk by construction.
+  const highRiskMillRows = millRows.filter(function(item) { return isHighRisk(item.risk); });
+
   return {
     sdd: mrdSortSddRows_(sddFiltered),
     mills: mrdSortMillItems_(millRows),
+    highRiskMills: mrdSortMillItems_(highRiskMillRows),
     millsTotal: millRows.length,
     millEffectiveYear: millEffectiveYear,
     millEffectiveMonth: millEffectiveMonth,
