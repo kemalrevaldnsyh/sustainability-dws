@@ -700,6 +700,12 @@ function renderSddSection(data, loading) {
 
 function renderMillSection(rows) {
   const filtered = rows.filter(function(item) { return matchesSearch(item.search); });
+  // Sort: HIGH risk first so they're always visible even when list is capped.
+  filtered.sort(function(a, b) {
+    const aH = isHighRisk(a.risk) ? 0 : 1;
+    const bH = isHighRisk(b.risk) ? 0 : 1;
+    return aH - bH;
+  });
   const visible = filtered.slice(0, MRD_ROW_LIMIT);
   const tableRows = visible.map(function(item, idx) {
     const r = item.row;
