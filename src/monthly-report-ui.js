@@ -359,7 +359,10 @@ async function exportMonthlyReport_(exportOpts) {
     const mills = await resolveAllNblForExport_(
       mrdSortMillItems_(filterForExport_(s.mills, function(item) { return matchesSearch(item.search); }))
     );
-    const highRiskMills = mrdSortMillItems_(mills.filter(function(item) { return isHighRisk(item.risk); }));
+    // highRiskMills must come from ALL mills (not search-filtered) so the count
+    // always matches stats.highRisk shown in the summary KPI card.
+    const allMillsForHighRisk = await resolveAllNblForExport_(mrdSortMillItems_(s.mills || []));
+    const highRiskMills = mrdSortMillItems_(allMillsForHighRisk.filter(function(item) { return isHighRisk(item.risk); }));
     const nblMills = mrdSortMillItems_(mills.filter(function(item) {
       return isNblYes(item.nbl) && matchesSearch(item.search);
     }));
