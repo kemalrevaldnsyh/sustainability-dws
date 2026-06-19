@@ -324,10 +324,16 @@ export function mrdSortBundlesByFacility_(bundles) {
 export function mrdFormatNblRisers_(item) {
   if (!item) return '—';
 
-  function dedupeRiserList_(list) {
+  // Split a riser cell value that may pack multiple names separated by commas
+  // or slashes (e.g. "CARGILL, APICAL" or "ADM/Wilmar") and return individual parts.
+  function splitRiserCell_(v) {
+    return String(v || '').split(/[,\/]/).map(function(s) { return s.trim(); }).filter(Boolean);
+  }
+
+  function dedupeRiserList_(parts) {
     const out = [];
     const seen = {};
-    (list || []).forEach(function(r) {
+    (parts || []).forEach(function(r) {
       const s = String(r || '').trim();
       if (!s) return;
       const k = s.toLowerCase();
@@ -342,9 +348,12 @@ export function mrdFormatNblRisers_(item) {
 
   const matches = item.nblMatches || [];
   if (matches.length) {
-    const risers = dedupeRiserList_(matches.map(function(m) {
-      return (m && m.riser) ? String(m.riser).trim() : '';
-    }));
+    // Flatten: each m.riser may itself contain "A, B" — split before dedup.
+    const allParts = [];
+    matches.forEach(function(m) {
+      if (m && m.riser) splitRiserCell_(m.riser).forEach(function(p) { allParts.push(p); });
+    });
+    const risers = dedupeRiserList_(allParts);
     if (risers.length) return risers.join(', ');
   }
 
@@ -353,9 +362,8 @@ export function mrdFormatNblRisers_(item) {
   if (/source unresolved/i.test(by)) return '—';
   const stripped = by.replace(/^NBL by\s+/i, '').trim();
   if (!stripped) return '—';
-  // Deduplicate the comma-separated string from nblBy as well
-  const parts = dedupeRiserList_(stripped.split(','));
-  return parts.join(', ') || '—';
+  // nblBy is already a comma string — split then dedup.
+  return dedupeRiserList_(stripped.split(',').map(function(s) { return s.trim(); })).join(', ') || '—';
 }
 
 export function mrdSortEmptyMillItems_(items) {
