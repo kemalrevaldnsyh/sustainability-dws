@@ -368,7 +368,7 @@ async function exportMonthlyReport_(exportOpts) {
     if (sections.includes('eudr') && _deps.fetchEudrPotential) {
       try {
         const fetched = await _deps.fetchEudrPotential();
-        if (Array.isArray(fetched) && fetched.length > bestEudr.length) bestEudr = fetched;
+        if (Array.isArray(fetched) && fetched.length) bestEudr = fetched;
       } catch (_) { /* keep bestEudr */ }
     }
     _snapshot = rebuildSnapshot_({ eudrPotential: bestEudr.length ? bestEudr : undefined });

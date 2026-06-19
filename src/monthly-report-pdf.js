@@ -179,12 +179,27 @@ function createPdfContext_(jsPDFLib, opts) {
     pageBottomY[pageNum] = Math.max(pageBottomY[pageNum] || 0, bottomY);
   }
 
-  function compactHeaderBandH_() {
-    return ctx.isLandscape ? PDF_LAYOUT.headerDetailH : PDF_LAYOUT.headerCompactH;
+  function summaryTopMargin_() {
+    return 28;
+  }
+
+  function afterPageBreak_() {
+    if (ctx.pdfMode === 'summary') {
+      y = summaryTopMargin_();
+    } else {
+      y = drawCompactHeader_();
+    }
+    markContent_(y);
+    return y;
   }
 
   function autoTableTopMargin_() {
+    if (ctx.pdfMode === 'summary') return summaryTopMargin_();
     return compactHeaderBandH_() + PDF_LAYOUT.compactBodyGap + 2;
+  }
+
+  function compactHeaderBandH_() {
+    return ctx.isLandscape ? PDF_LAYOUT.headerDetailH : PDF_LAYOUT.headerCompactH;
   }
 
   function drawCompactHeader_() {
@@ -218,7 +233,7 @@ function createPdfContext_(jsPDFLib, opts) {
   function ensureSpace(needed) {
     if (y + needed <= pageH - mFoot - 6) return;
     doc.addPage();
-    y = drawCompactHeader_();
+    afterPageBreak_();
   }
 
   function remainingSpace_() {
@@ -229,7 +244,7 @@ function createPdfContext_(jsPDFLib, opts) {
     const extra = sectionStarted ? PDF_LAYOUT.sectionGap : 0;
     if (remainingSpace_() < needed + extra) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     }
   }
 
@@ -254,7 +269,7 @@ function createPdfContext_(jsPDFLib, opts) {
   function beginSection_(title, accent) {
     if (sectionStarted && remainingSpace_() < 36) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     } else if (sectionStarted) {
       y += PDF_LAYOUT.sectionGap;
     }
@@ -265,7 +280,7 @@ function createPdfContext_(jsPDFLib, opts) {
   function beginSubsection_(title, accent) {
     if (remainingSpace_() < 28) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     } else {
       y += PDF_LAYOUT.subsectionGap;
     }
@@ -275,10 +290,10 @@ function createPdfContext_(jsPDFLib, opts) {
   function beginFacilityBlock_(title, accent, newPage) {
     if (newPage) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     } else if (sectionStarted && remainingSpace_() < 50) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     } else if (sectionStarted) {
       y += PDF_LAYOUT.subsectionGap;
     }
@@ -290,12 +305,14 @@ function createPdfContext_(jsPDFLib, opts) {
     opts = opts || {};
     if (!body.length) return;
 
+    resetAutoTableState_();
+
     const minStartH = 20;
     const headH = 9;
     const minRowH = 7;
     if (y + headH + minRowH > pageH - mFoot - 8) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     }
 
     const startPage = doc.internal.getNumberOfPages();
@@ -327,8 +344,9 @@ function createPdfContext_(jsPDFLib, opts) {
         cellPadding: { top: 1.2, right: 1, bottom: 1.2, left: 1 },
       },
       alternateRowStyles: { fillColor: [255, 253, 253] },
-      rowPageBreak: opts.rowPageBreak || 'avoid',
+      rowPageBreak: opts.rowPageBreak || 'auto',
       showHead: opts.showHeadEveryPage ? 'everyPage' : 'firstPage',
+      pageBreak: 'auto',
     };
     doc.autoTable(Object.assign({}, base, {
       head: head,
@@ -338,7 +356,7 @@ function createPdfContext_(jsPDFLib, opts) {
       willDrawPage: function(data) {
         if (data.pageNumber > startPage) {
           doc.setPage(data.pageNumber);
-          drawCompactHeader_();
+          if (ctx.pdfMode !== 'summary') drawCompactHeader_();
         }
       },
       didDrawPage: function(data) {
@@ -364,7 +382,7 @@ function createPdfContext_(jsPDFLib, opts) {
     if (!pairs.length) return;
     if (remainingSpace_() < 18) {
       doc.addPage();
-      y = drawCompactHeader_();
+      afterPageBreak_();
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(7.5);
@@ -410,9 +428,26 @@ function createPdfContext_(jsPDFLib, opts) {
       y = coverEndY + 4;
     } else {
       doc.addPage();
+      afterPageBreak_();
+    }
+    sectionStarted = false;
+  }
+
+  function resetAutoTableState_() {
+    try { delete doc.lastAutoTable; } catch (_) { /* ignore */ }
+  }
+
+  /** Each numbered report section starts on its own page. */
+  function beginSectionPage_() {
+    doc.addPage();
+    if (ctx.pdfMode === 'summary') {
+      y = 28;
+    } else {
       y = drawCompactHeader_();
     }
     sectionStarted = false;
+    markContent_(y);
+    return y;
   }
 
   function pruneBlankPages_() {
@@ -429,16 +464,23 @@ function createPdfContext_(jsPDFLib, opts) {
 
   function newPage_() {
     doc.addPage();
-    y = drawCompactHeader_();
-    markContent_(y);
+    afterPageBreak_();
     return y;
   }
 
-  /** Split long tables into fresh autoTable calls — avoids jspdf-autotable dropping rows after large prior tables. */
+  /** Small tables: one autoTable call. Large tables: chunked with fresh pages between chunks. */
   function drawPagedAutoTable_(head, body, accent, colStyles, opts) {
     opts = opts || {};
     if (!body.length) return;
-    const chunkSize = opts.chunkSize || 22;
+    const maxSingle = opts.maxSingleRows != null ? opts.maxSingleRows : 45;
+    if (body.length <= maxSingle) {
+      drawAutoTable_(head, body, accent, colStyles, Object.assign({}, opts, {
+        showHeadEveryPage: true,
+        rowPageBreak: 'auto',
+      }));
+      return;
+    }
+    const chunkSize = opts.chunkSize || 14;
     for (let i = 0; i < body.length; i += chunkSize) {
       if (i > 0) newPage_();
       const chunk = body.slice(i, i + chunkSize);
@@ -458,6 +500,7 @@ function createPdfContext_(jsPDFLib, opts) {
   ctx.drawKvBlock_ = drawKvBlock_;
   ctx.drawMainHeader_ = drawMainHeader_;
   ctx.startBodyAfterCover_ = startBodyAfterCover_;
+  ctx.beginSectionPage_ = beginSectionPage_;
   ctx.pruneBlankPages_ = pruneBlankPages_;
   ctx.newPage_ = newPage_;
   ctx.drawPagedAutoTable_ = drawPagedAutoTable_;
@@ -614,25 +657,26 @@ function drawMillSection_(ctx, data, full) {
 
   if (full) {
     const w = colWidths_([9, 13, 16, 15, 9, 7, 10, 9, 7, 15, 15], ctx.cW);
-    ctx.drawAutoTable_(
+    const body = mills.map(function(item) {
+      const r = item.row;
+      const d = millDetailCells_(item);
+      return [
+        pdfSanitize(item.risk),
+        pdfCellTrim(r['GROUP NAME'], 28),
+        pdfCellTrim(r['COMPANY NAME'], 32),
+        pdfCellTrim(r['MILL NAME'], 28),
+        pdfSanitize(r['PROVINCE']),
+        pdfSanitize(isNblYes_(item.nbl) ? 'Yes' : item.nbl),
+        d.supplierStatus,
+        d.certification,
+        d.grievances,
+        d.facilityCpo,
+        d.facilityPk,
+      ];
+    });
+    ctx.drawPagedAutoTable_(
       pdfTableHead(MRD_MILL_FULL_COLS),
-      mills.map(function(item) {
-        const r = item.row;
-        const d = millDetailCells_(item);
-        return [
-          pdfSanitize(item.risk),
-          pdfCellTrim(r['GROUP NAME'], 28),
-          pdfCellTrim(r['COMPANY NAME'], 32),
-          pdfCellTrim(r['MILL NAME'], 28),
-          pdfSanitize(r['PROVINCE']),
-          pdfSanitize(isNblYes_(item.nbl) ? 'Yes' : item.nbl),
-          d.supplierStatus,
-          d.certification,
-          d.grievances,
-          d.facilityCpo,
-          d.facilityPk,
-        ];
-      }),
+      body,
       BRAND,
       {
         0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
@@ -640,7 +684,7 @@ function drawMillSection_(ctx, data, full) {
         6: { cellWidth: w[6], fontSize: 6.5 }, 7: { cellWidth: w[7], fontSize: 6.5 },
         8: { cellWidth: w[8] }, 9: { cellWidth: w[9], fontSize: 6.5 }, 10: { cellWidth: w[10], fontSize: 6.5 },
       },
-      { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 12, showHeadEveryPage: true, rowPageBreak: 'auto' }
+      { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 12, chunkSize: 16, maxSingleRows: 0 }
     );
   } else {
     const w = colWidths_([10, 15, 18, 18, 11, 10], ctx.cW);
@@ -672,8 +716,6 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
   if (!rows.length) return;
   const stats = data.stats || {};
   const doc = ctx.doc;
-
-  if (full) ctx.newPage_();
 
   if (!noHeader) {
     ctx.beginSection_('High Risk Suppliers', NBL_RED);
@@ -715,7 +757,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
         6: { cellWidth: w[6], fontSize: 6.5 }, 7: { cellWidth: w[7], fontSize: 6.5 },
       },
-      { fontSize: 7, cellPadding: 2.5, headFontSize: 6, headMinHeight: 12, chunkSize: 18 }
+      { fontSize: 7, cellPadding: 2.5, headFontSize: 6, headMinHeight: 12 }
     );
   } else {
     const w = colWidths_([12, 18, 22, 22, 14], ctx.cW);
@@ -737,7 +779,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         0: { cellWidth: w[0], fontStyle: 'bold', textColor: NBL_RED },
         1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] }, 4: { cellWidth: w[4] },
       },
-      { headFontSize: 6, headMinHeight: 11, chunkSize: 24 }
+      { headFontSize: 6, headMinHeight: 11 }
     );
   }
 }
@@ -1089,7 +1131,6 @@ function drawFacilitySection_(ctx, bundles, full) {
 function drawEudrSection_(ctx, rows, noHeader) {
   rows = mrdSortEudrItems_(rows);
   if (!rows.length) return;
-  ctx.newPage_();
   if (!noHeader) ctx.beginSection_('07 · EUDR Potential', EUDR_TEAL);
   const w = colWidths_([12, 18, 20, 20, 14, 16], ctx.cW);
   const body = rows.map(function(item) {
@@ -1100,7 +1141,7 @@ function drawEudrSection_(ctx, rows, noHeader) {
       'Potential',
     ];
   });
-  ctx.drawPagedAutoTable_(
+  ctx.drawAutoTable_(
     pdfTableHead(MRD_EUDR_COLS),
     body,
     EUDR_TEAL,
@@ -1109,7 +1150,7 @@ function drawEudrSection_(ctx, rows, noHeader) {
       3: { cellWidth: w[3] }, 4: { cellWidth: w[4] },
       5: { cellWidth: w[5], fontSize: 6.5 },
     },
-    { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 11, chunkSize: 20 }
+    { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 11, showHeadEveryPage: true, rowPageBreak: 'auto' }
   );
 }
 
@@ -1368,6 +1409,7 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
   bodySections.forEach(function(id) {
     const cfg = sectionSummaryConfig_(id, stats, data, year);
     if (!cfg) return;
+    ctx.beginSectionPage_();
     drawSectionSummaryBlock_(ctx, id, cfg);
     if (id === 'sdd') drawSddSection_(ctx, data.sdd || [], true);
     else if (id === 'highRisk') drawHighRiskSection_(ctx, data, false, true);
@@ -1380,14 +1422,21 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
 }
 
 function drawDetailReportBody_(ctx, data, sections, year) {
-  if (sections.indexOf('sdd') !== -1) drawSddSection_(ctx, data.sdd || []);
-  if (sections.indexOf('highRisk') !== -1) drawHighRiskSection_(ctx, data, true);
-  if (sections.indexOf('mill') !== -1) drawMillSection_(ctx, data, true);
-  if (sections.indexOf('trace') !== -1) drawTraceTotalsSection_(ctx, data.traceTotals || {}, year);
-  if (sections.indexOf('grv') !== -1) drawGrvSection_(ctx, data.grv || [], true);
-  if (sections.indexOf('nbl') !== -1) drawNblSection_(ctx, data.nblAll || []);
-  if (sections.indexOf('facility') !== -1) drawFacilitySection_(ctx, data.facilityBundles || [], true);
-  if (sections.indexOf('eudr') !== -1) drawEudrSection_(ctx, data.eudrPotential || []);
+  const ordered = ['sdd', 'highRisk', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'];
+  let first = true;
+  ordered.forEach(function(id) {
+    if (sections.indexOf(id) === -1) return;
+    if (!first) ctx.beginSectionPage_();
+    first = false;
+    if (id === 'sdd') drawSddSection_(ctx, data.sdd || []);
+    else if (id === 'highRisk') drawHighRiskSection_(ctx, data, true);
+    else if (id === 'mill') drawMillSection_(ctx, data, true);
+    else if (id === 'trace') drawTraceTotalsSection_(ctx, data.traceTotals || {}, year);
+    else if (id === 'grv') drawGrvSection_(ctx, data.grv || [], true);
+    else if (id === 'nbl') drawNblSection_(ctx, data.nblAll || []);
+    else if (id === 'facility') drawFacilitySection_(ctx, data.facilityBundles || [], true);
+    else if (id === 'eudr') drawEudrSection_(ctx, data.eudrPotential || []);
+  });
 }
 
 function pdfFileLabel_(year, month) {

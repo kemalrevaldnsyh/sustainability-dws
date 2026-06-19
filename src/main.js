@@ -24271,8 +24271,8 @@ function initDashboardApp() {
             await window.mrdPreparePfDataForReport_();
           }
           let eudr = _mrdEudrCache;
-          if (needEudr && !eudr) {
-            try { eudr = await this.fetchEudrPotential(); } catch (_) { eudr = []; }
+          if (needEudr) {
+            try { eudr = await this.fetchEudrPotential(); } catch (_) { eudr = _mrdEudrCache || []; }
           }
           return { eudr: needEudr ? (eudr || []) : [] };
         },
