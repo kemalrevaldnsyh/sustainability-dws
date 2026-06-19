@@ -7415,7 +7415,7 @@ function initDashboardApp() {
       var src = String(m && m.source ? m.source : '').trim();
       if (src === 'Unilever NBL') hasUnilever = true;
       var riser = String(m && m.riser ? m.riser : '').trim();
-      if (!riser) return;
+      if (!riser || /^[-\u2013\u2014]+$/.test(riser)) return;
       splitRiserCell_(riser).forEach(function(part) {
         var key = riserDedupeKey_(part);
         if (seen[key]) return;
@@ -17386,10 +17386,16 @@ function initDashboardApp() {
     return parts.length ? parts : [s];
   }
 
+  // Strip placeholder dash values (—, -, –) that are not real data.
+  function nblCleanPlaceholder_(v) {
+    var s = String(v || '').trim();
+    return /^[-\u2013\u2014]+$/.test(s) ? '' : s;
+  }
+
   function prepareNblRegistryRow_(d) {
-    d._nblRiser   = nblPickField_(d, ['Riser', 'Raiser'], /^(riser|raiser)$/);
-    d._nblGroup   = nblPickField_(d, ['Group Name NBL', 'Group Name'], /group\s*name(\s*nbl)?|^group$/);
-    d._nblCompany = nblPickField_(d, ['Company Name NBL', 'Company Name'], /company\s*name(\s*nbl)?|^company$/);
+    d._nblRiser   = nblCleanPlaceholder_(nblPickField_(d, ['Riser', 'Raiser'], /^(riser|raiser)$/));
+    d._nblGroup   = nblCleanPlaceholder_(nblPickField_(d, ['Group Name NBL', 'Group Name'], /group\s*name(\s*nbl)?|^group$/));
+    d._nblCompany = nblCleanPlaceholder_(nblPickField_(d, ['Company Name NBL', 'Company Name'], /company\s*name(\s*nbl)?|^company$/));
     d._nblSource  = nblPickField_(d, ['SOURCE', 'Source'], /^source$/);
     // Aliases: split by "/" so "CBI/Citra Borneo Indah" → ["CBI", "Citra Borneo Indah"]
     d._nblGroupAliases   = nblSplitAliases_(d._nblGroup);
