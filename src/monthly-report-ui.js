@@ -349,7 +349,11 @@ async function exportMonthlyReport_(exportOpts) {
 
     if (btn) btn.textContent = 'Building PDF…';
     const extra = await _deps.preparePdfExport({ sections: sections });
-    _snapshot = rebuildSnapshot_({});
+    // Merge freshly-fetched extra.eudr into the snapshot so stats are correct even
+    // when the background load hadn't completed yet. Use extra.eudr only if non-empty
+    // (a truthy [] would otherwise shadow a previously-loaded _snapshot.eudrPotential).
+    const freshEudr = extra && extra.eudr && extra.eudr.length ? extra.eudr : null;
+    _snapshot = rebuildSnapshot_({ eudrPotential: freshEudr !== null ? freshEudr : undefined });
     const s = _snapshot;
 
     const mills = await resolveAllNblForExport_(
@@ -369,10 +373,10 @@ async function exportMonthlyReport_(exportOpts) {
       });
     }
 
-    const eudrList = filterForExport_(
-      (extra && extra.eudr) || s.eudrPotential || [],
-      function(item) { return matchesSearch(item.search); }
-    );
+    // Use extra.eudr only when non-empty; [] is truthy in JS and would shadow
+    // a valid s.eudrPotential that was already loaded into the snapshot.
+    const eudrSource = (extra && extra.eudr && extra.eudr.length) ? extra.eudr : (s.eudrPotential || []);
+    const eudrList = filterForExport_(eudrSource, function(item) { return matchesSearch(item.search); });
 
     const report = getReportPeriod_();
     await buildMonthlyReportPdfPair_({
