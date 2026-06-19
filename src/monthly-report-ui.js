@@ -1017,13 +1017,18 @@ async function loadFacilityInBackground(gen, opts) {
       scheduleRenderAll();
     }
   } catch (_) {
-    if (gen === _loadGen && _snapshot) {
+    if (_snapshot) {
       _snapshot.facilityLoading = false;
-      _snapshot.facilityBundles = [];
+      if (gen === _loadGen) _snapshot.facilityBundles = [];
       scheduleRenderAll();
     }
   } finally {
     _facilityPending = false;
+    // Guard: always clear loading flag so it can't get permanently stuck
+    if (_snapshot && _snapshot.facilityLoading) {
+      _snapshot.facilityLoading = false;
+      scheduleRenderAll();
+    }
   }
 }
 
@@ -1047,13 +1052,17 @@ async function loadEudrInBackground(gen, opts) {
     scheduleRenderAll();
     updateScopeText();
   } catch (_) {
-    if (gen === _loadGen && _snapshot) {
+    if (_snapshot) {
       _snapshot.eudrLoading = false;
-      _snapshot.eudrPotential = [];
+      if (gen === _loadGen) _snapshot.eudrPotential = [];
       scheduleRenderAll();
     }
   } finally {
     _eudrPending = false;
+    if (_snapshot && _snapshot.eudrLoading) {
+      _snapshot.eudrLoading = false;
+      scheduleRenderAll();
+    }
   }
 }
 
@@ -1153,9 +1162,9 @@ function startBackgroundLoads_(gen, force) {
     loadSupplementalInBackground(gen),
     loadSddInBackground(gen, opts),
   ]).then(function() {
-    if (gen !== _loadGen) return;
-    loadEudrInBackground(gen, opts);
-    loadFacilityInBackground(gen, opts);
+    // Use _loadGen (not gen) so facility always loads for the current active generation
+    loadEudrInBackground(_loadGen, opts);
+    loadFacilityInBackground(_loadGen, opts);
   }).catch(function() {});
 }
 
@@ -1169,7 +1178,8 @@ async function loadAndRender(opts) {
 
   try {
     // Selalu tampilkan UI dari cache memori — jangan blokir menunggu network
-    _snapshot = rebuildSnapshot_({ eudrLoading: false });
+    // Reset loading flags so they don't stay stuck from a previous generation
+    _snapshot = rebuildSnapshot_({ eudrLoading: false, facilityLoading: false });
     renderAll();
     updateScopeText('loading data…');
   } catch (err) {
