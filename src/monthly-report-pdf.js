@@ -61,9 +61,9 @@ const PDF_LAYOUT = {
   descLineH: 3.4,
   cardsToContent: 4,
   cardGap: 3,
-  headerMainH: 44,
-  headerDetailH: 32,
-  headerCompactH: 16,
+  headerMainH: 36,
+  headerDetailH: 26,
+  headerCompactH: 19,
   compactBodyGap: 4,
   autoTableTopMargin: 22,
 };
@@ -199,19 +199,17 @@ function createPdfContext_(jsPDFLib, opts) {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
       doc.text(ctx.periodText || '', mL, 14.5);
-      doc.text(ctx.dataPeriodText || '', mL, 18.5);
-      doc.text(ctx.cutoffText || '', mL, 22.5);
       if (ctx.exportedAt) {
-        doc.text('Generated on ' + ctx.exportedAt, pageW - mR, 22.5, { align: 'right' });
+        doc.text('Generated on ' + ctx.exportedAt, mL, 19);
       }
     } else {
       doc.setFontSize(9.5);
       doc.text('Monthly Report', mL, 6.5);
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(6.5);
-      doc.text(ctx.cutoffCompact || ctx.periodText || '', mL, 11.5);
+      doc.text(ctx.periodText || '', mL, 11.5);
       if (ctx.exportedAt) {
-        doc.text('Generated on ' + ctx.exportedAt, pageW - mR, 11.5, { align: 'right' });
+        doc.text('Generated on ' + ctx.exportedAt, mL, 15);
       }
     }
     return bandH + PDF_LAYOUT.compactBodyGap;
@@ -398,13 +396,10 @@ function createPdfContext_(jsPDFLib, opts) {
     doc.text(ctx.reportTitle || 'Monthly Report', mL, 11.5);
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7.8);
-    doc.text(ctx.periodText || '', mL, 18.5);
-    doc.setFontSize(7.5);
-    doc.text(ctx.dataPeriodText || '', mL, 23.5);
-    doc.text(ctx.cutoffText || '', mL, 28.5);
+    doc.text(ctx.periodText || '', mL, 19);
     if (ctx.exportedAt) {
       doc.setFontSize(6.5);
-      doc.text('Generated on ' + ctx.exportedAt, pageW - mR, 28.5, { align: 'right' });
+      doc.text('Generated on ' + ctx.exportedAt, mL, 24.5);
     }
     markContent_(bandH);
     return bandH;
@@ -1388,10 +1383,8 @@ function drawCompactHeaderForExport_(ctx) {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.text(ctx.periodText || '', ctx.mL, 14.5);
-  doc.text(ctx.dataPeriodText || '', ctx.mL, 18.5);
-  doc.text(ctx.cutoffText || '', ctx.mL, 22.5);
   if (ctx.exportedAt) {
-    doc.text('Generated on ' + ctx.exportedAt, ctx.pageW - ctx.mR, 22.5, { align: 'right' });
+    doc.text('Generated on ' + ctx.exportedAt, ctx.mL, 19);
   }
   ctx.markContent_(bandH);
   return bandH + PDF_LAYOUT.bodyGap;
