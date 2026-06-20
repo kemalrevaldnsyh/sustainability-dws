@@ -10,6 +10,7 @@ import {
   MRD_GRV_SUMMARY_COLS,
   MRD_GRV_DETAIL_COLS,
   MRD_EUDR_COLS,
+  MRD_TRACE_DETAIL_COLS,
   MRD_FACILITY_COMPANY_COLS,
   facilityPctColLabel,
   facilityTtmColLabel,
@@ -50,22 +51,23 @@ const WHITE = [255, 255, 255];
 const BG_SOFT = [252, 250, 250];
 const BORDER = [230, 220, 220];
 
-/** Vertical rhythm — tight within sections; sectionGap only between major points. */
+/** Vertical rhythm — compact; sections flow on same page when space allows. */
 const PDF_LAYOUT = {
-  bodyGap: 6,
-  sectionGap: 8,
-  afterSectionBar: 2,
-  subsectionGap: 4,
+  bodyGap: 4,
+  sectionGap: 5,
+  afterSectionBar: 1.5,
+  subsectionGap: 3,
   sectionDescGap: 1,
-  descToCards: 3,
-  descLineH: 3.4,
-  cardsToContent: 4,
-  cardGap: 3,
+  descToCards: 2,
+  descLineH: 3.2,
+  cardsToContent: 2,
+  cardGap: 2.5,
   headerMainH: 36,
   headerDetailH: 26,
   headerCompactH: 19,
-  compactBodyGap: 4,
+  compactBodyGap: 3,
   autoTableTopMargin: 22,
+  sectionMinRemain: 42,
 };
 
 const DEFAULT_SECTIONS = ['kpi', 'sdd', 'highRisk', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'];
@@ -93,6 +95,41 @@ function applyReportHeaderMeta_(ctx, year, month) {
 
 function isNblYes_(val) {
   return /yes|nbl|no buy/i.test(String(val || ''));
+}
+
+/** PDF Mill Onboarding export — HIGH RISK only (matches website Result Risk Level). */
+function isHighRiskMillPdf_(item) {
+  const risk = String(item && item.risk || '').trim().toUpperCase();
+  if (risk === 'HIGH') return true;
+  const r = (item && item.row) || {};
+  const direct = String(r['RESULT RISK LEVEL'] || r['RISK LEVEL'] || r['Risk Level'] || '').trim().toUpperCase();
+  return direct === 'HIGH';
+}
+
+function pdfMillOnboardingRows_(data) {
+  return mrdSortMillItems_((data.mills || []).filter(isHighRiskMillPdf_));
+}
+
+/** Summary PDF mill table — no Risk Level column (subtitle states high-risk count). */
+const MRD_MILL_SUMMARY_PDF_COLS = MRD_MILL_SUMMARY_COLS.slice(1);
+
+function pdfMillRiskCell_(item) {
+  const risk = String(item && item.risk || '').trim();
+  if (risk) return pdfSanitize(risk);
+  const r = (item && item.row) || {};
+  return pdfSanitize(r['RESULT RISK LEVEL'] || r['RISK LEVEL'] || 'HIGH');
+}
+
+/** Skip 02A when 02 Mill Onboarding is exported — both lists are identical (HIGH RISK only). */
+export function mrdPdfSectionsNoDupHighRisk_(sections) {
+  const hasMill = sections.indexOf('mill') !== -1;
+  if (!hasMill) return sections;
+  return sections.filter(function(id) { return id !== 'highRisk'; });
+}
+
+function fmtTracePct_(n) {
+  if (n == null || isNaN(n)) return '—';
+  return (Math.round(n * 10) / 10) + '%';
 }
 
 function pctFmt_(n) {
@@ -145,6 +182,7 @@ function createPdfContext_(jsPDFLib, opts) {
   let sectionStarted = false;
   const pageBottomY = {};
   const pageTopY = {};
+  const protectedPages = new Set();
 
   const ctx = {
     doc: doc,
@@ -267,7 +305,7 @@ function createPdfContext_(jsPDFLib, opts) {
   }
 
   function beginSection_(title, accent) {
-    if (sectionStarted && remainingSpace_() < 36) {
+    if (sectionStarted && remainingSpace_() < PDF_LAYOUT.sectionMinRemain) {
       doc.addPage();
       afterPageBreak_();
     } else if (sectionStarted) {
@@ -317,20 +355,20 @@ function createPdfContext_(jsPDFLib, opts) {
 
     const startPage = doc.internal.getNumberOfPages();
     const tableTop = y;
-    const tableTopMargin = autoTableTopMargin_();
+    const continuationTop = autoTableTopMargin_();
     const base = {
       theme: 'grid',
-      margin: { left: mL, right: mR, bottom: mFoot + 12, top: tableTopMargin },
+      margin: { left: mL, right: mR, bottom: mFoot + 8, top: continuationTop },
       tableWidth: cW,
       styles: {
-        fontSize: opts.fontSize || 7.5,
-        cellPadding: opts.cellPadding || 2.5,
+        fontSize: opts.fontSize || 7,
+        cellPadding: opts.cellPadding != null ? opts.cellPadding : 1.8,
         textColor: INK,
         lineColor: BORDER,
-        lineWidth: 0.15,
+        lineWidth: 0.12,
         overflow: 'linebreak',
         valign: 'middle',
-        minCellHeight: 5,
+        minCellHeight: 4,
       },
       headStyles: {
         fillColor: accent || BRAND,
@@ -343,9 +381,10 @@ function createPdfContext_(jsPDFLib, opts) {
         minCellHeight: opts.headMinHeight != null ? opts.headMinHeight : 11,
         cellPadding: { top: 1.2, right: 1, bottom: 1.2, left: 1 },
       },
+      bodyStyles: { valign: 'middle' },
       alternateRowStyles: { fillColor: [255, 253, 253] },
       rowPageBreak: opts.rowPageBreak || 'auto',
-      showHead: opts.showHeadEveryPage ? 'everyPage' : 'firstPage',
+      showHead: opts.showHead || (opts.showHeadEveryPage ? 'everyPage' : 'firstPage'),
       pageBreak: 'auto',
     };
     doc.autoTable(Object.assign({}, base, {
@@ -353,17 +392,21 @@ function createPdfContext_(jsPDFLib, opts) {
       body: body,
       startY: tableTop,
       columnStyles: colStyles || {},
-      willDrawPage: function(data) {
-        if (data.pageNumber > startPage) {
-          doc.setPage(data.pageNumber);
+      willDrawPage: function(hookData) {
+        if (hookData.pageNumber > startPage) {
+          doc.setPage(hookData.pageNumber);
           if (ctx.pdfMode !== 'summary') drawCompactHeader_();
+          if (hookData.settings && hookData.settings.margin) {
+            hookData.settings.margin.top = continuationTop;
+          }
         }
       },
       didDrawPage: function(data) {
         const p = data.pageNumber;
+        protectedPages.add(p);
         const cursor = data.cursor || {};
         if (cursor.y != null) {
-          const top = p === startPage ? tableTop : tableTopMargin;
+          const top = p === startPage ? tableTop : continuationTop;
           markPageSpan_(p, top, cursor.y + 6);
         }
       },
@@ -372,10 +415,43 @@ function createPdfContext_(jsPDFLib, opts) {
     const table = doc.lastAutoTable;
     if (table && table.finalY) {
       const endPage = doc.internal.getNumberOfPages();
-      markPageSpan_(endPage, endPage === startPage ? tableTop : tableTopMargin, table.finalY);
+      protectedPages.add(endPage);
+      markPageSpan_(endPage, endPage === startPage ? tableTop : continuationTop, table.finalY);
       y = table.finalY + (opts.gapAfter == null ? 2 : opts.gapAfter);
       markContent_(y);
     }
+  }
+
+  /** One table = one column header. Large tables split without re-printing the header. */
+  function drawTableComplete_(head, allBody, accent, colStyles, opts) {
+    opts = opts || {};
+    if (!allBody.length) return;
+    const maxSingle = opts.maxRowsPerCall != null ? opts.maxRowsPerCall : 200;
+    if (allBody.length <= maxSingle) {
+      drawAutoTable_(head, allBody, accent, colStyles, Object.assign({}, opts, {
+        showHead: 'firstPage',
+        rowPageBreak: 'auto',
+      }));
+      return;
+    }
+    const chunkSize = opts.chunkSize || 36;
+    let idx = 0;
+    while (idx < allBody.length) {
+      resetAutoTableState_();
+      if (idx > 0) newPage_();
+      const end = Math.min(idx + chunkSize, allBody.length);
+      drawAutoTable_(head, allBody.slice(idx, end), accent, colStyles, Object.assign({}, opts, {
+        showHead: idx === 0 ? 'firstPage' : 'never',
+        rowPageBreak: 'auto',
+        gapAfter: end >= allBody.length ? (opts.gapAfter == null ? 1 : opts.gapAfter) : 0,
+      }));
+      idx = end;
+    }
+  }
+
+  /** @deprecated alias */
+  function drawAutoTableAllRows_(head, body, accent, colStyles, opts) {
+    drawTableComplete_(head, body, accent, colStyles, opts);
   }
 
   function drawKvBlock_(heading, pairs, accent) {
@@ -451,15 +527,7 @@ function createPdfContext_(jsPDFLib, opts) {
   }
 
   function pruneBlankPages_() {
-    let total = doc.internal.getNumberOfPages();
-    for (let p = total; p >= 2; p--) {
-      const bottom = pageBottomY[p] || 0;
-      const top = pageTopY[p] || 0;
-      // Only drop pages with no marked content at all (fixes tables losing continuation pages).
-      if (bottom < MIN_CONTENT_Y && top < MIN_CONTENT_Y) {
-        doc.deletePage(p);
-      }
-    }
+    /* Keep all pages — deleting continuation pages was dropping EUDR / table rows. */
   }
 
   function newPage_() {
@@ -468,28 +536,30 @@ function createPdfContext_(jsPDFLib, opts) {
     return y;
   }
 
-  /** Small tables: one autoTable call. Large tables: chunked with fresh pages between chunks. */
+  /** Large tables only (>100 rows). Smaller tables: one continuous autoTable call. */
   function drawPagedAutoTable_(head, body, accent, colStyles, opts) {
     opts = opts || {};
     if (!body.length) return;
-    const maxSingle = opts.maxSingleRows != null ? opts.maxSingleRows : 45;
-    if (body.length <= maxSingle) {
+    const maxSingle = opts.maxSingleRows != null ? opts.maxSingleRows : 100;
+    if (maxSingle > 0 && body.length <= maxSingle) {
       drawAutoTable_(head, body, accent, colStyles, Object.assign({}, opts, {
-        showHeadEveryPage: true,
+        showHead: 'firstPage',
         rowPageBreak: 'auto',
       }));
       return;
     }
-    const chunkSize = opts.chunkSize || 14;
-    for (let i = 0; i < body.length; i += chunkSize) {
-      if (i > 0) newPage_();
-      const chunk = body.slice(i, i + chunkSize);
-      const isLast = i + chunkSize >= body.length;
-      drawAutoTable_(head, chunk, accent, colStyles, Object.assign({}, opts, {
-        showHeadEveryPage: true,
+    const chunkSize = opts.chunkSize || 36;
+    let idx = 0;
+    while (idx < body.length) {
+      if (idx > 0) newPage_();
+      const end = Math.min(idx + chunkSize, body.length);
+      const isLast = end >= body.length;
+      drawAutoTable_(head, body.slice(idx, end), accent, colStyles, Object.assign({}, opts, {
+        showHead: idx === 0 ? 'firstPage' : 'never',
         rowPageBreak: 'auto',
         gapAfter: isLast ? (opts.gapAfter == null ? 2 : opts.gapAfter) : 0,
       }));
+      idx = end;
     }
   }
 
@@ -497,6 +567,8 @@ function createPdfContext_(jsPDFLib, opts) {
   ctx.beginSubsection_ = beginSubsection_;
   ctx.beginFacilityBlock_ = beginFacilityBlock_;
   ctx.drawAutoTable_ = drawAutoTable_;
+  ctx.drawAutoTableAllRows_ = drawAutoTableAllRows_;
+  ctx.drawTableComplete_ = drawTableComplete_;
   ctx.drawKvBlock_ = drawKvBlock_;
   ctx.drawMainHeader_ = drawMainHeader_;
   ctx.startBodyAfterCover_ = startBodyAfterCover_;
@@ -650,18 +722,28 @@ function millDetailCells_(item) {
   };
 }
 
-function drawMillSection_(ctx, data, full) {
-  const mills = mrdSortMillItems_(data.mills || []);
+function drawMillSection_(ctx, data, full, noHeader) {
+  const mills = pdfMillOnboardingRows_(data);
   if (!mills.length) return;
-  ctx.beginSection_('02 · Mill Onboarding', BRAND);
+  const doc = ctx.doc;
+
+  if (!noHeader) {
+    ctx.beginSection_('02 · Mill Onboarding', BRAND);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor.apply(doc, INK_MUTED);
+    doc.text(String(mills.length) + ' high-risk mills', ctx.mL, ctx.getY() + 1);
+    ctx.setY(ctx.getY() + 6);
+    ctx.markContent_(ctx.getY());
+  }
 
   if (full) {
-    const w = colWidths_([9, 13, 16, 15, 9, 7, 10, 9, 7, 15, 15], ctx.cW);
+    const w = colWidths_([9, 13, 16, 15, 9, 7, 10, 9, 7, 14, 14], ctx.cW);
     const body = mills.map(function(item) {
       const r = item.row;
       const d = millDetailCells_(item);
       return [
-        pdfSanitize(item.risk),
+        pdfMillRiskCell_(item),
         pdfCellTrim(r['GROUP NAME'], 28),
         pdfCellTrim(r['COMPANY NAME'], 32),
         pdfCellTrim(r['MILL NAME'], 28),
@@ -674,26 +756,26 @@ function drawMillSection_(ctx, data, full) {
         d.facilityPk,
       ];
     });
-    ctx.drawPagedAutoTable_(
+    ctx.drawTableComplete_(
       pdfTableHead(MRD_MILL_FULL_COLS),
       body,
       BRAND,
       {
-        0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
-        3: { cellWidth: w[3] }, 4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
+        0: { cellWidth: w[0], fontStyle: 'bold', textColor: NBL_RED },
+        1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] },
+        4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
         6: { cellWidth: w[6], fontSize: 6.5 }, 7: { cellWidth: w[7], fontSize: 6.5 },
         8: { cellWidth: w[8] }, 9: { cellWidth: w[9], fontSize: 6.5 }, 10: { cellWidth: w[10], fontSize: 6.5 },
       },
-      { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 12, chunkSize: 16, maxSingleRows: 0 }
+      { fontSize: 6.5, cellPadding: 1.6, headFontSize: 5.6, headMinHeight: 10 }
     );
   } else {
-    const w = colWidths_([10, 15, 18, 18, 11, 10], ctx.cW);
-    ctx.drawAutoTable_(
-      pdfTableHead(MRD_MILL_SUMMARY_COLS),
+    const w = colWidths_([16, 20, 20, 14, 12], ctx.cW);
+    ctx.drawTableComplete_(
+      pdfTableHead(MRD_MILL_SUMMARY_PDF_COLS),
       mills.map(function(item) {
         const r = item.row;
         return [
-          pdfSanitize(item.risk),
           pdfCellTrim(r['GROUP NAME'], 28),
           pdfCellTrim(r['COMPANY NAME'], 32),
           pdfCellTrim(r['MILL NAME'], 28),
@@ -704,9 +786,9 @@ function drawMillSection_(ctx, data, full) {
       BRAND,
       {
         0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
-        3: { cellWidth: w[3] }, 4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
+        3: { cellWidth: w[3] }, 4: { cellWidth: w[4] },
       },
-      { headFontSize: 5.6, headMinHeight: 11, showHeadEveryPage: true, rowPageBreak: 'auto' }
+      { headFontSize: 5.6, headMinHeight: 10, batchSize: 24 }
     );
   }
 }
@@ -747,7 +829,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         d.certification,
       ];
     });
-    ctx.drawPagedAutoTable_(
+    ctx.drawTableComplete_(
       pdfTableHead(['Result Risk Level', 'Group Name', 'Company Name', 'Mill Name', 'Province', 'No Buy List', 'Supplier Status', 'Certification']),
       body,
       NBL_RED,
@@ -757,7 +839,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
         6: { cellWidth: w[6], fontSize: 6.5 }, 7: { cellWidth: w[7], fontSize: 6.5 },
       },
-      { fontSize: 7, cellPadding: 2.5, headFontSize: 6, headMinHeight: 12 }
+      { fontSize: 7, cellPadding: 1.8, headFontSize: 6, headMinHeight: 10 }
     );
   } else {
     const w = colWidths_([12, 18, 22, 22, 14], ctx.cW);
@@ -771,7 +853,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         pdfSanitize(r['PROVINCE']),
       ];
     });
-    ctx.drawPagedAutoTable_(
+    ctx.drawTableComplete_(
       pdfTableHead(['Result Risk Level', 'Group Name', 'Company Name', 'Mill Name', 'Province']),
       body,
       NBL_RED,
@@ -779,7 +861,7 @@ function drawHighRiskSection_(ctx, data, full, noHeader) {
         0: { cellWidth: w[0], fontStyle: 'bold', textColor: NBL_RED },
         1: { cellWidth: w[1] }, 2: { cellWidth: w[2] }, 3: { cellWidth: w[3] }, 4: { cellWidth: w[4] },
       },
-      { headFontSize: 6, headMinHeight: 11 }
+      { headFontSize: 5.6, headMinHeight: 10 }
     );
   }
 }
@@ -794,10 +876,47 @@ function traceMetricCards_(t) {
   ];
 }
 
-function drawTraceTotalsSection_(ctx, totals, year, noHeader) {
-  const t = totals || {};
+function drawTraceSection_(ctx, data, year, full, noHeader) {
+  const totals = data.traceTotals || {};
+  const rows = mrdSortMillItems_(data.traceRows || []);
   if (!noHeader) ctx.beginSection_('03 · Traceability Data ' + pdfSanitize(year), TRACE_ORANGE);
-  drawMetricCardGrid_(ctx, traceMetricCards_(t), { cols: 4, cardH: 24, gapAfter: 0 });
+  drawMetricCardGrid_(ctx, traceMetricCards_(totals), {
+    cols: 4,
+    cardH: 18,
+    gapAfter: full && rows.length ? 2 : 0,
+  });
+  if (!full || !rows.length) return;
+  const w = colWidths_([11, 14, 14, 10, 9, 9, 9, 9, 10], ctx.cW);
+  const body = rows.map(function(item) {
+    const r = item.row;
+    return [
+      pdfCellTrim(r['GROUP NAME'], 28),
+      pdfCellTrim(r['COMPANY NAME'], 32),
+      pdfCellTrim(r['MILL NAME'], 28),
+      pdfSanitize(r['PROVINCE']),
+      fmtTracePct_(item.ttmCpo),
+      fmtTracePct_(item.ttmPk),
+      fmtTracePct_(item.ttpCpo),
+      fmtTracePct_(item.ttpPk),
+      item.hasSupplier ? 'Yes' : 'No',
+    ];
+  });
+  ctx.drawTableComplete_(
+    pdfTableHead(MRD_TRACE_DETAIL_COLS),
+    body,
+    TRACE_ORANGE,
+    {
+      0: { cellWidth: w[0] }, 1: { cellWidth: w[1] }, 2: { cellWidth: w[2] },
+      3: { cellWidth: w[3] }, 4: { cellWidth: w[4] }, 5: { cellWidth: w[5] },
+      6: { cellWidth: w[6] }, 7: { cellWidth: w[7] },
+      8: { cellWidth: w[8], halign: 'center' },
+    },
+    { fontSize: 6.5, cellPadding: 1.6, headFontSize: 5.5, headMinHeight: 10 }
+  );
+}
+
+function drawTraceTotalsSection_(ctx, totals, year, noHeader) {
+  drawTraceSection_(ctx, { traceTotals: totals, traceRows: [] }, year, false, noHeader);
 }
 
 function grvStatusCounts_(rows) {
@@ -878,7 +997,7 @@ function drawGrvSection_(ctx, rows, full, noHeader) {
       9: { cellWidth: w[9], fontSize: 6.5 }, 10: { cellWidth: w[10], fontSize: 6.5 },
       11: { cellWidth: w[11], fontSize: 6.5 },
     },
-    { fontSize: 6.5, cellPadding: 2, headFontSize: 5.4, headMinHeight: 12, rowPageBreak: 'auto', showHeadEveryPage: true }
+    { fontSize: 6.5, cellPadding: 2, headFontSize: 5.4, headMinHeight: 12, rowPageBreak: 'auto' }
   );
   const doc = ctx.doc;
   ctx.ensureSpace_(6);
@@ -1141,7 +1260,7 @@ function drawEudrSection_(ctx, rows, noHeader) {
       'Potential',
     ];
   });
-  ctx.drawAutoTable_(
+  ctx.drawTableComplete_(
     pdfTableHead(MRD_EUDR_COLS),
     body,
     EUDR_TEAL,
@@ -1150,7 +1269,7 @@ function drawEudrSection_(ctx, rows, noHeader) {
       3: { cellWidth: w[3] }, 4: { cellWidth: w[4] },
       5: { cellWidth: w[5], fontSize: 6.5 },
     },
-    { fontSize: 6.5, cellPadding: 2, headFontSize: 5.6, headMinHeight: 11, showHeadEveryPage: true, rowPageBreak: 'auto' }
+    { fontSize: 6.5, cellPadding: 1.6, headFontSize: 5.6, headMinHeight: 10 }
   );
 }
 
@@ -1298,11 +1417,11 @@ function sectionSummaryConfig_(id, stats, data, year) {
     },
     mill: {
       num: '02', title: 'Mill Onboarding', accent: BRAND,
-      desc: (s.totalMills || 0) + ' mills in period',
+      desc: (s.highRisk || 0) + ' high-risk mills',
       metrics: [
+        { label: 'High Risk Mills', value: String(s.highRisk || 0), hot: (s.highRisk || 0) > 0 },
         { label: 'Total Mills', value: String(s.totalMills || 0), sub: (s.totalGroups || 0) + ' groups' },
         { label: 'Active NBL Mills', value: String(s.nblMills || 0) },
-        { label: 'Groups', value: String(s.totalGroups || 0) },
       ],
     },
     highRisk: {
@@ -1380,12 +1499,12 @@ function drawSectionSummaryBlock_(ctx, sectionId, cfg) {
   if (!cfg) return;
   const cols = Math.min(4, cfg.metrics.length);
   const cardRows = Math.ceil(cfg.metrics.length / cols);
-  const cardH = 17;
+  const cardH = 15;
   const gridH = cardRows * cardH + Math.max(0, cardRows - 1) * PDF_LAYOUT.cardGap;
   const doc = ctx.doc;
   const descLines = doc.splitTextToSize(String(cfg.desc || ''), ctx.cW);
   const descH = descLines.length * PDF_LAYOUT.descLineH;
-  const blockNeed = 10 + PDF_LAYOUT.afterSectionBar + PDF_LAYOUT.sectionDescGap
+  const blockNeed = 8 + PDF_LAYOUT.afterSectionBar + PDF_LAYOUT.sectionDescGap
     + descH + PDF_LAYOUT.descToCards + gridH + PDF_LAYOUT.cardsToContent;
   ctx.ensureBlockFits_(blockNeed);
   ctx.beginSection_(cfg.num + ' · ' + cfg.title, cfg.accent);
@@ -1405,14 +1524,14 @@ function drawSectionSummaryBlock_(ctx, sectionId, cfg) {
 }
 
 function drawSummaryReportBody_(ctx, data, sections, stats, year) {
-  const bodySections = sections.filter(function(id) { return id !== 'kpi'; });
+  const bodySections = mrdPdfSectionsNoDupHighRisk_(sections.filter(function(id) { return id !== 'kpi'; }));
   bodySections.forEach(function(id) {
     const cfg = sectionSummaryConfig_(id, stats, data, year);
     if (!cfg) return;
-    ctx.beginSectionPage_();
     drawSectionSummaryBlock_(ctx, id, cfg);
     if (id === 'sdd') drawSddSection_(ctx, data.sdd || [], true);
     else if (id === 'highRisk') drawHighRiskSection_(ctx, data, false, true);
+    else if (id === 'mill') drawMillSection_(ctx, data, false, true);
     else if (id === 'trace') { /* totals shown in metric cards above */ }
     else if (id === 'grv') drawGrvSection_(ctx, data.grv || [], false, true);
     else if (id === 'nbl') drawNblSummaryList_(ctx, data.nblAll || []);
@@ -1422,16 +1541,13 @@ function drawSummaryReportBody_(ctx, data, sections, stats, year) {
 }
 
 function drawDetailReportBody_(ctx, data, sections, year) {
-  const ordered = ['sdd', 'highRisk', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'];
-  let first = true;
+  const ordered = mrdPdfSectionsNoDupHighRisk_(['sdd', 'highRisk', 'mill', 'trace', 'grv', 'nbl', 'facility', 'eudr'])
+    .filter(function(id) { return sections.indexOf(id) !== -1; });
   ordered.forEach(function(id) {
-    if (sections.indexOf(id) === -1) return;
-    if (!first) ctx.beginSectionPage_();
-    first = false;
     if (id === 'sdd') drawSddSection_(ctx, data.sdd || []);
     else if (id === 'highRisk') drawHighRiskSection_(ctx, data, true);
     else if (id === 'mill') drawMillSection_(ctx, data, true);
-    else if (id === 'trace') drawTraceTotalsSection_(ctx, data.traceTotals || {}, year);
+    else if (id === 'trace') drawTraceSection_(ctx, data, year, true);
     else if (id === 'grv') drawGrvSection_(ctx, data.grv || [], true);
     else if (id === 'nbl') drawNblSection_(ctx, data.nblAll || []);
     else if (id === 'facility') drawFacilitySection_(ctx, data.facilityBundles || [], true);
@@ -1469,7 +1585,7 @@ function buildSummaryPdfDoc_(jsPDFLib, opts) {
     docSetSubhead_(ctx, 'Overview');
     drawMetricCardGrid_(ctx, websiteKpiItems_(stats), {
       cols: 4,
-      cardH: 18,
+      cardH: 16,
       gap: PDF_LAYOUT.cardGap,
       gapAfter: 0,
     });

@@ -2,7 +2,7 @@
  * Monthly Report (Detail) — read-only compliance snapshot (fast, in-memory first).
  */
 
-import { buildMonthlyReportPdfPair_, MRD_PDF_SECTIONS } from './monthly-report-pdf.js';
+import { buildMonthlyReportPdfPair_, MRD_PDF_SECTIONS, mrdPdfSectionsNoDupHighRisk_ } from './monthly-report-pdf.js';
 import {
   MRD_SDD_TABLE_TITLE,
   MRD_SDD_COLS,
@@ -364,29 +364,25 @@ async function exportMonthlyReport_(exportOpts) {
     const extra = await _deps.preparePdfExport({ sections: sections });
     const prevEudr = (_snapshot && _snapshot.eudrPotential) || [];
     const extraEudr = (extra && extra.eudr) || [];
-    let bestEudr = extraEudr.length >= prevEudr.length ? extraEudr.slice() : prevEudr.slice();
+    let bestEudr = prevEudr.length >= extraEudr.length ? prevEudr.slice() : extraEudr.slice();
     if (sections.includes('eudr') && _deps.fetchEudrPotential) {
       try {
         const fetched = await _deps.fetchEudrPotential();
         if (Array.isArray(fetched) && fetched.length) bestEudr = fetched;
       } catch (_) { /* keep bestEudr */ }
+    } else if (extraEudr.length > bestEudr.length) {
+      bestEudr = extraEudr.slice();
     }
     _snapshot = rebuildSnapshot_({ eudrPotential: bestEudr.length ? bestEudr : undefined });
     const s = _snapshot;
 
-    let exportSections = sections.slice();
-    if (exportSections.indexOf('mill') !== -1 && exportSections.indexOf('highRisk') === -1) {
-      const millIdx = exportSections.indexOf('mill');
-      exportSections.splice(millIdx, 0, 'highRisk');
-    }
+    const exportSections = mrdPdfSectionsNoDupHighRisk_(sections.slice());
 
-    const mills = await resolveAllNblForExport_(
-      mrdSortMillItems_(filterForExport_(s.mills, function(item) { return matchesSearch(item.search); }))
-    );
-    // Always resolve ALL mills for high-risk — use item.risk (same as main mill table).
+    // Mill Onboarding PDF export: HIGH RISK mills only (same Result Risk Level as website).
     const allMillsResolved = await resolveAllNblForExport_(mrdSortMillItems_(s.mills || []));
     const highRiskMills = mrdSortMillItems_(allMillsResolved.filter(mrdIsHighRiskItem_));
-    const nblMills = mrdSortMillItems_(mills.filter(function(item) {
+    const millsForPdf = highRiskMills;
+    const nblMills = mrdSortMillItems_(highRiskMills.filter(function(item) {
       return isNblYes(item.nbl) && matchesSearch(item.search);
     }));
 
@@ -421,14 +417,14 @@ async function exportMonthlyReport_(exportOpts) {
             r.supplier_type, r.updated_at,
           ].join(' ').toLowerCase());
         })),
-        mills: mills,
+        mills: millsForPdf,
         highRiskMills: highRiskMills,
         emptyMills: filterForExport_(s.emptyMills, function(item) {
           return matchesSearch([
             item.millRow['GROUP NAME'], item.millRow['COMPANY NAME'], item.millRow['MILL NAME'],
           ].join(' ').toLowerCase());
         }),
-        traceRows: filterForExport_(s.traceRows, function(item) { return matchesSearch(item.search); }),
+        traceRows: s.traceRows || [],
         traceTotals: s.traceTotals || {},
         grv: mrdSortGrvItemsByDateDesc_(filterForExport_(s.grv, function(item) { return matchesSearch(item.search); })),
         nblAll: nblMills,

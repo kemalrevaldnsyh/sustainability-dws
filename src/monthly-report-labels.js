@@ -80,6 +80,11 @@ export const MRD_EUDR_COLS = [
   'Group Name', 'Company Name', 'Mill Name', 'Province', 'Supply To', 'Status',
 ];
 
+export const MRD_TRACE_DETAIL_COLS = [
+  'Group Name', 'Company Name', 'Mill Name', 'Province',
+  '% TTM CPO', '% TTM PK', '% TTP CPO', '% TTP PK', 'Supplier Data',
+];
+
 export const MRD_FACILITY_COMPANY_COLS = [
   'Group Name', 'Company Name', 'Certification', 'No Buy List', 'Result Risk Level',
   'Total Grievance', '% TTM TRACEABLE', '% TTP TRACEABLE',
@@ -125,6 +130,11 @@ const PDF_HEAD_SHORT = {
   '% TTP PK TRACEABLE': '% TTP\nPK',
   '% TTM TRACEABLE': '% TTM\nTRACEABLE',
   '% TTM PK TRACEABLE': '% TTM\nPK',
+  '% TTM CPO': '% TTM\nCPO',
+  '% TTM PK': '% TTM\nPK',
+  '% TTP CPO': '% TTP\nCPO',
+  '% TTP PK': '% TTP\nPK',
+  'Supplier Data': 'Supplier\nData',
   'Company Group Name': 'Company\nGroup',
   'NBL Riser': 'NBL\nRiser',
   'Last Update': 'Last\nUpdate',
