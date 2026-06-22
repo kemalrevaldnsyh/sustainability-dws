@@ -3343,6 +3343,11 @@ function mirrorGrvFieldsOnRead_(obj, headers, row) {
   obj['Grievance Subject Group'] = val;
   obj['Group'] = val;
   if (groupHeader) obj[groupHeader] = val;
+
+  if (obj['Consequense'] != null && String(obj['Consequense']).trim() !== ''
+      && !String(obj['Consequence'] || '').trim()) {
+    obj['Consequence'] = String(obj['Consequense']).trim();
+  }
 }
 
 /** Map form field "Grievance Subject Group" to actual sheet header on write. */

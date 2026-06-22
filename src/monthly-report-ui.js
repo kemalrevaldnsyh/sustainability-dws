@@ -896,8 +896,9 @@ function renderGrvSection(rows) {
     { key: 'Complainant', label: MRD_GRV_SUMMARY_COLS[2], always: true },
     { key: 'Grievance Subject Group', label: MRD_GRV_SUMMARY_COLS[3], always: true, group: true },
     { key: 'Grievance Subject', label: MRD_GRV_SUMMARY_COLS[4], altKey: 'Subject', always: true },
-    { key: 'Risk Classification', label: MRD_GRV_SUMMARY_COLS[5], pill: 'risk', always: true },
-    { key: 'Grievance Status', label: MRD_GRV_SUMMARY_COLS[6], pill: 'grv', always: true },
+    { key: 'Total Score', label: MRD_GRV_SUMMARY_COLS[5], always: true },
+    { key: 'Risk Classification', label: MRD_GRV_SUMMARY_COLS[6], pill: 'risk', always: true },
+    { key: 'Grievance Status', label: MRD_GRV_SUMMARY_COLS[7], pill: 'grv', always: true },
   ];
   const cols = fieldDefs.map(function(f) {
     return {

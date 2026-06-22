@@ -14,6 +14,13 @@ import {
   dashNormalizeToIso,
   initDashDateFields,
 } from './dash-date-field.js';
+import {
+  GRV_RISK_SCORE_FIELDS,
+  grvRiskSectionHtml_,
+  grvInitRiskSection_,
+  grvNormalizeRiskRow_,
+  grvRiskTableCellHtml_,
+} from './grievance-risk.js';
 
 // ─── GLOBAL NAVIGATION NOTE: switchPanel is defined later in the file. ────
   let supplierWorkbook = null;
@@ -10863,7 +10870,7 @@ function initDashboardApp() {
   }
 
   // ─── GRIEVANCE DATA ─────────────────────────────────────
-  const GRV_FIELDS = ['Grievance ID','Date Received','Complainant','Grievance Source','Grievance Publisher','Grievance Category','Subject','Relationship','Grievance Subject','Grievance Subject Group','Subject ID','Grievance Description','Risk Classification','Verification Findings','Corrective Action','Preventive Action','Responsible Div./Dep.','Grievance Status','Date Closed','Action Taken','Published'];
+  const GRV_FIELDS = ['Grievance ID','Date Received','Complainant','Grievance Source','Grievance Publisher','Grievance Category','Subject','Relationship','Grievance Subject','Grievance Subject Group','Subject ID','Grievance Description','Publish Grievance','Subject Grievance','Repeat Grievance','Consequence','Group Scale','No Response','Total Score','Risk Classification','Verification Findings','Corrective Action','Preventive Action','Responsible Div./Dep.','Grievance Status','Date Closed','Action Taken','Published'];
   /** Fields shown when a table row is expanded (edit modal still uses full GRV_FIELDS). */
   const GRV_EXPAND_FIELDS = [
     'Grievance ID',
@@ -10878,6 +10885,13 @@ function initDashboardApp() {
     'Grievance Subject Group',
     'Subject ID',
     'Grievance Description',
+    'Publish Grievance',
+    'Subject Grievance',
+    'Repeat Grievance',
+    'Consequence',
+    'Group Scale',
+    'No Response',
+    'Total Score',
     'Risk Classification',
     'Verification Findings',
     'Corrective Action',
@@ -10898,7 +10912,6 @@ function initDashboardApp() {
     'Grievance Category': ['No Buy List', 'Deforestation', 'Social', 'Environment', 'Labour', 'OHS', 'Compliance', 'Ethic'],
     'Subject': ['Operational', 'Supplier', 'Contractor'],
     'Relationship': ['Direct', 'Indirect'],
-    'Risk Classification': ['Low', 'Medium', 'High'],
     'Grievance Status': ['Closed', 'Open', 'Invalid'],
     'Action Taken': ['None', 'Monitoring', 'Suspended'],
     'Published': ['Yes', 'No'],
@@ -10914,9 +10927,13 @@ function initDashboardApp() {
   function buildGrvForm(data) {
     const grid = document.getElementById('modalFormGrid');
     if (!grid) return;
-    grid.className = 'modal-form-grid';
+    grid.className = 'modal-form-grid grv-form-grid';
     let html = '';
+    let riskSectionDone = false;
     GRV_FIELDS.forEach(function(f) {
+      if (GRV_RISK_SCORE_FIELDS.indexOf(f) !== -1 || f === 'Total Score' || f === 'Risk Classification') {
+        return;
+      }
       const val = data ? (data[f] || '') : '';
       const isFull = GRV_TEXTAREA_FIELDS.includes(f) || f === 'Subject ID';
       if (GRV_DROPDOWN_FIELDS[f]) {
@@ -10927,6 +10944,10 @@ function initDashboardApp() {
           + '<label>' + escHtml(f) + '</label>'
           + '<textarea data-field="' + escHtml(f) + '" rows="3" placeholder="' + escHtml(f) + '">'
           + escHtml(String(val)) + '</textarea></div>';
+        if (f === 'Grievance Description' && !riskSectionDone) {
+          html += grvRiskSectionHtml_(data, escHtml);
+          riskSectionDone = true;
+        }
       } else if (GRV_DATE_FIELDS.includes(f)) {
         html += dashDateFieldHtml(f, val);
       } else {
@@ -10936,9 +10957,11 @@ function initDashboardApp() {
           + '</div>';
       }
     });
+    if (!riskSectionDone) html += grvRiskSectionHtml_(data, escHtml);
     grid.innerHTML = html;
     initCustomSelects(grid);
     initDashDateFields(grid);
+    grvInitRiskSection_(grid, data);
   }
 
   let grvData = [], grvLoaded = false, grvSearch = '';
@@ -10984,6 +11007,7 @@ function initDashboardApp() {
 
   function prepareGrvRowPerfCache(row) {
     if (!row || typeof row !== 'object') return row;
+    grvNormalizeRiskRow_(row);
     const groupVal = grvGroupCell_(row);
     if (groupVal !== '—') {
       row['Grievance Subject Group'] = groupVal;
@@ -11139,7 +11163,7 @@ function initDashboardApp() {
     return `<span class="status-badge ${cls}"><span class="s-dot"></span>${val}</span>`;
   }
 
-  function grvExpandFieldHtml_(f, raw) {
+  function grvExpandFieldHtml_(f, raw, row) {
     let valHtml;
     if (f === 'Risk Classification') {
       valHtml = raw ? riskBadge(raw) : '—';
@@ -11172,7 +11196,7 @@ function initDashboardApp() {
     }
     body.innerHTML = filtered.map((d, i) => {
       const detailHTML = GRV_EXPAND_FIELDS.map(function(f) {
-        return grvExpandFieldHtml_(f, d[f]);
+        return grvExpandFieldHtml_(f, d[f], d);
       }).join('');
       const rowJson = JSON.stringify(d).replace(/'/g, '&#39;');
       const grvId = String(d['Grievance ID'] || '').trim();
@@ -11183,7 +11207,7 @@ function initDashboardApp() {
           <td><span class="mill-name">${escHtml(d['Complainant'] || '—')}</span></td>
           <td>${escHtml(grvGroupCell_(d))}</td>
           <td>${escHtml(d['Grievance Subject'] || '—')}</td>
-          <td>${riskBadge(d['Risk Classification'])}</td>
+          <td>${grvRiskTableCellHtml_(d, escHtml, riskBadge)}</td>
           <td>${statusBadgeGrv(d['Grievance Status'])}</td>
           <td class="grv-cell-date"><span class="grv-date-val">${escHtml(grvFormatDateDisplay_(d['Date Closed']))}</span></td>
           <td class="grv-cell-action">${escHtml(d['Action Taken'] || '—')}</td>

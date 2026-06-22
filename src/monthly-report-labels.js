@@ -67,12 +67,12 @@ export const MRD_MILL_FULL_COLS = [
 
 export const MRD_GRV_SUMMARY_COLS = [
   'Date Received', 'Category', 'Complainant', 'Group', 'Grievance Subject',
-  'Risk Classification', 'Grievance Status',
+  'Total Score', 'Risk Classification', 'Grievance Status',
 ];
 
 export const MRD_GRV_DETAIL_COLS = [
   'Grievance ID', 'Date Received', 'Category', 'Complainant', 'Group', 'Grievance Subject',
-  'Risk Classification', 'Grievance Status', 'Grievance Description', 'Verification Findings',
+  'Total Score', 'Risk Classification', 'Grievance Status', 'Grievance Description', 'Verification Findings',
   'Corrective Action', 'Preventive Action',
 ];
 
@@ -124,6 +124,7 @@ const PDF_HEAD_SHORT = {
   'Facility Name PK': 'Facility\nPK',
   'Date Received': 'Date\nReceived',
   'Grievance Subject': 'Grievance\nSubject',
+  'Total Score': 'Total\nScore',
   'Risk Classification': 'Risk\nClass.',
   'Grievance Status': 'Grievance\nStatus',
   'Grievance Description': 'Description',

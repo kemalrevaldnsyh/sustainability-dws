@@ -3294,6 +3294,141 @@
      overflow: hidden;
      text-overflow: ellipsis;
    }
+   .grv-risk-total-hint {
+     display: inline-block;
+     margin-left: 6px;
+     padding: 1px 6px;
+     border-radius: 999px;
+     font-size: 10px;
+     font-weight: 700;
+     color: #8B1A1A;
+     background: rgba(139, 26, 26, 0.08);
+     vertical-align: middle;
+   }
+   .grv-form-grid {
+     grid-template-columns: 1fr 1fr;
+   }
+   .grv-risk-section {
+     grid-column: 1 / -1;
+     border: 1px solid rgba(139, 26, 26, 0.1);
+     border-radius: 12px;
+     padding: 14px 16px 12px;
+     margin: 4px 0 8px;
+     background: linear-gradient(180deg, #fffbfb 0%, #fdf8f8 100%);
+   }
+   .grv-risk-section-head {
+     margin-bottom: 10px;
+   }
+   .grv-risk-section-title {
+     margin: 0 0 4px;
+     font-size: 12px;
+     font-weight: 700;
+     letter-spacing: 0.4px;
+     text-transform: uppercase;
+     color: #8B1A1A;
+   }
+   .grv-risk-section-desc {
+     margin: 0;
+     font-size: 12px;
+     line-height: 1.45;
+     color: #7a6565;
+   }
+   .grv-risk-guidance {
+     margin-bottom: 12px;
+     border: 1px solid rgba(139, 26, 26, 0.08);
+     border-radius: 10px;
+     background: #fff;
+     overflow: hidden;
+   }
+   .grv-risk-guidance > summary {
+     cursor: pointer;
+     list-style: none;
+     padding: 10px 12px;
+     font-size: 12px;
+     font-weight: 600;
+     color: #8B1A1A;
+     background: rgba(139, 26, 26, 0.04);
+   }
+   .grv-risk-guidance > summary::-webkit-details-marker { display: none; }
+   .grv-risk-guidance > summary::after {
+     content: '▾';
+     float: right;
+     opacity: 0.6;
+   }
+   .grv-risk-guidance[open] > summary::after { transform: rotate(180deg); }
+   .grv-risk-guidance-body {
+     padding: 8px 10px 10px;
+     overflow-x: auto;
+   }
+   .grv-risk-guide-table {
+     width: 100%;
+     border-collapse: collapse;
+     font-size: 11px;
+   }
+   .grv-risk-guide-table th,
+   .grv-risk-guide-table td {
+     border: 1px solid rgba(74, 28, 28, 0.1);
+     padding: 6px 8px;
+     vertical-align: top;
+     text-align: left;
+   }
+   .grv-risk-guide-table th {
+     background: rgba(139, 26, 26, 0.06);
+     font-weight: 700;
+     color: #5c4040;
+   }
+   .grv-risk-guide-score {
+     text-align: center;
+     font-weight: 700;
+     color: #8B1A1A;
+     white-space: nowrap;
+   }
+   .grv-risk-pickers {
+     display: grid;
+     grid-template-columns: 1fr 1fr;
+     gap: 10px 14px;
+   }
+   .grv-risk-picker select {
+     width: 100%;
+     padding: 8px 10px;
+     border-radius: 8px;
+     border: 1.5px solid rgba(139, 26, 26, 0.12);
+     font-size: 12px;
+     background: #fff;
+   }
+   .grv-risk-picker-hint {
+     margin: 4px 0 0;
+     font-size: 11px;
+     line-height: 1.35;
+     color: #9a8484;
+     min-height: 14px;
+   }
+   .grv-risk-result-row {
+     display: grid;
+     grid-template-columns: 1fr 1fr;
+     gap: 12px;
+     margin-top: 12px;
+     padding-top: 12px;
+     border-top: 1px solid rgba(139, 26, 26, 0.08);
+   }
+   .grv-risk-result-badge {
+     display: flex;
+     align-items: center;
+     min-height: 40px;
+     padding: 8px 12px;
+     border-radius: 8px;
+     background: rgba(139, 26, 26, 0.04);
+     border: 1.5px solid rgba(139, 26, 26, 0.1);
+   }
+   .grv-risk-placeholder {
+     font-size: 12px;
+     color: #b0a0a0;
+     font-style: italic;
+   }
+   @media (max-width: 720px) {
+     .grv-risk-pickers,
+     .grv-risk-result-row { grid-template-columns: 1fr; }
+   }
    
    /* â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       16. COMING SOON PANEL
