@@ -5649,7 +5649,10 @@ function initDashboardApp() {
       if (!visibleFields.length) return;
       html += `<div class="mill-form-section"><div class="mill-form-section-title">${sec.title}</div><div class="mill-form-grid">`;
       visibleFields.forEach(f => {
-        const val = data ? (data[f] || '') : '';
+        let val = data ? (data[f] || '') : '';
+        if (f === 'MILL CAPACITY (TON/HOUR)' && data) {
+          val = millCapacityFromRow_(data) || val;
+        }
         const isFull = f === 'ADDRESS' || f === 'COORDINATES';
         if (YESNO_FIELDS.includes(f)) {
           html += buildCustomSelect(f, ['Yes','No'], val, true, isFull);
@@ -8276,6 +8279,16 @@ function initDashboardApp() {
       }
     }
     return '';
+  }
+
+  function millCapacityFromRow_(row) {
+    return millPickField_(row, [
+      'MILL CAPACITY (TON/HOUR)',
+      'MILL CAPACITY',
+      'Mill Capacity (Ton/Hour)',
+      'Mill Capacity',
+      'KCP Capacity (Ton/Hour)',
+    ]);
   }
 
   /** Like millPickField_ but preserves numeric API values (SUPPLY CPO/PK). */
@@ -23173,6 +23186,8 @@ function initDashboardApp() {
         const v = profile[f];
         if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
       });
+      const cap = millCapacityFromRow_(profile);
+      if (cap) prefill['MILL CAPACITY (TON/HOUR)'] = cap;
     }
     if (batch) {
       if (batch.month) prefill['MONTH'] = String(batch.month);
