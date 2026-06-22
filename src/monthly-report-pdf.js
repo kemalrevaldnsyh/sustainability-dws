@@ -144,7 +144,7 @@ function drawUntraceableMillsTable_(ctx, emptyMills) {
   if (!count) return;
 
   const w = colWidths_([22, 26, 26, 14], ctx.cW);
-  ctx.drawTableComplete_(
+  ctx.drawPagedAutoTable_(
     pdfTableHead(['Group Name', 'Company Name', 'Mill Name', 'Province']),
     rows.map(function(item) {
       const r = item.millRow || item.row || item;
@@ -160,20 +160,26 @@ function drawUntraceableMillsTable_(ctx, emptyMills) {
       0: { cellWidth: w[0] }, 1: { cellWidth: w[1] },
       2: { cellWidth: w[2] }, 3: { cellWidth: w[3] },
     },
-    { fontSize: 6.5, cellPadding: 1.6, headFontSize: 5.5, headMinHeight: 10 }
+    {
+      fontSize: 6.5,
+      cellPadding: 1.6,
+      headFontSize: 5.5,
+      headMinHeight: 10,
+      maxSingleRows: 0,
+      chunkSize: 30,
+    }
   );
 }
 
 function drawTraceSection_(ctx, data, year, full, noHeader) {
   const totals = data.traceTotals || {};
   if (!noHeader) ctx.beginSection_('03 · Traceability Data ' + pdfSanitize(year), TRACE_ORANGE);
+  if (full) drawUntraceableMillsTable_(ctx, data.emptyMills);
   drawMetricCardGrid_(ctx, traceMetricCards_(totals), {
     cols: 4,
     cardH: 18,
-    gapAfter: full ? 4 : 0,
+    gapAfter: 0,
   });
-  if (!full) return;
-  drawUntraceableMillsTable_(ctx, data.emptyMills);
 }
 
 function pctFmt_(n) {
@@ -1348,13 +1354,17 @@ function drawFacilitySummaryTables_(ctx, facility) {
 function websiteKpiItems_(stats) {
   const s = stats || {};
   const untrace = s.emptyTraceMills != null ? s.emptyTraceMills : 0;
-  const untraceSub = untrace > 0
-    ? untrace + ' untraceable mill' + (untrace === 1 ? '' : 's') + ' in Detail'
-    : 'all mills have suppliers';
   return [
     { label: 'SDD Requested', value: String(s.sddRequested != null ? s.sddRequested : (s.sddTotal || 0)), sub: (s.sddDone != null ? s.sddDone : (s.sddSubmitted || 0)) + ' done' },
     { label: 'Total Mills', value: String(s.totalMills != null ? s.totalMills : 0), sub: (s.totalGroups || 0) + ' groups' },
-    { label: 'Untraceable Mills', value: String(untrace), sub: untraceSub, hot: untrace > 0 },
+    {
+      label: 'Untraceable Mills',
+      value: String(untrace),
+      sub: 'mills without supplier data',
+      subHint: untrace > 0 ? 'Full list in Detail report' : '',
+      hot: untrace > 0,
+      cardH: untrace > 0 ? 22 : undefined,
+    },
     { label: 'EUDR Potential', value: String(s.eudrPotential != null ? s.eudrPotential : 0), sub: 'by formula' },
   ];
 }
@@ -1367,20 +1377,35 @@ function drawMetricCardGrid_(ctx, items, opts) {
   const cW = ctx.cW;
   const cols = opts.cols || 3;
   const gap = opts.gap != null ? opts.gap : PDF_LAYOUT.cardGap;
-  const cardH = opts.cardH || 20;
+  const defaultCardH = opts.cardH || 20;
   const cardW = (cW - gap * (cols - 1)) / cols;
-  const rowCount = Math.ceil(items.length / cols);
-  const blockH = rowCount * cardH + Math.max(0, rowCount - 1) * gap;
+  const rowHeights = [];
+  items.forEach(function(item, i) {
+    const row = Math.floor(i / cols);
+    const h = item.cardH || defaultCardH;
+    rowHeights[row] = Math.max(rowHeights[row] || 0, h);
+  });
+  const blockH = rowHeights.reduce(function(sum, h, ri) {
+    return sum + h + (ri > 0 ? gap : 0);
+  }, 0);
   ctx.ensureSpace_(blockH + 2);
   const y0 = ctx.getY();
+  const rowTops = [];
+  let accY = y0;
+  rowHeights.forEach(function(h, ri) {
+    rowTops[ri] = accY;
+    accY += h + gap;
+  });
 
   items.forEach(function(item, i) {
     const col = i % cols;
     const row = Math.floor(i / cols);
     const x = mL + col * (cardW + gap);
-    const cy = y0 + row * (cardH + gap);
+    const cy = rowTops[row];
+    const cardH = item.cardH || defaultCardH;
     const accent = item.hot ? NBL_RED : (item.accent || opts.accent || BRAND);
     const valueColor = item.hot ? NBL_RED : (item.valueColor || accent || INK);
+    const hasHint = !!item.subHint;
 
     doc.setDrawColor.apply(doc, BORDER);
     doc.setFillColor.apply(doc, WHITE);
@@ -1400,10 +1425,16 @@ function drawMetricCardGrid_(ctx, items, opts) {
     doc.text(item.value, x + cardW / 2, cy + 12.5, { align: 'center' });
 
     if (item.sub) {
-      doc.setFont('helvetica', item.hot ? 'bold' : 'normal');
-      doc.setFontSize(item.hot ? 6.4 : 5.8);
-      doc.setTextColor.apply(doc, item.hot ? NBL_RED : INK_LIGHT);
-      doc.text(String(item.sub), x + cardW / 2, cy + 16.5, { align: 'center' });
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(5.6);
+      doc.setTextColor.apply(doc, INK_LIGHT);
+      doc.text(String(item.sub), x + cardW / 2, cy + (hasHint ? 16 : 16.5), { align: 'center' });
+    }
+    if (item.subHint) {
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(5.4);
+      doc.setTextColor.apply(doc, item.hot ? [168, 72, 62] : INK_MUTED);
+      doc.text(String(item.subHint), x + cardW / 2, cy + 19.5, { align: 'center' });
     }
   });
 
