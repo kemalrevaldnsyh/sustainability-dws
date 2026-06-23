@@ -65,6 +65,28 @@ export const MRD_MILL_FULL_COLS = [
   'Supplier Status', 'Certification', 'Total Grievances', 'Facility Name CPO', 'Facility Name PK',
 ];
 
+/** Mill onboarding row — SOURCE TYPE column (MILL / TRADER / REFINERY). */
+export function mrdSourceTypeVal_(rowOrItem) {
+  const r = rowOrItem && rowOrItem.row ? rowOrItem.row : rowOrItem;
+  if (!r || typeof r !== 'object') return '';
+  const keys = ['SOURCE TYPE', 'Source Type', 'SOURCE_TYPE'];
+  for (let i = 0; i < keys.length; i++) {
+    const v = r[keys[i]];
+    if (v != null && String(v).trim() !== '') return String(v).trim().toUpperCase();
+  }
+  return '';
+}
+
+export function mrdIsTraderSourceType_(rowOrItem) {
+  const st = mrdSourceTypeVal_(rowOrItem).replace(/\s+/g, '');
+  return st === 'TRADER' || st === 'TRD';
+}
+
+/** Mill Onboarding sections exclude TRADER even when high risk. */
+export function mrdShowInMillOnboarding_(rowOrItem) {
+  return !mrdIsTraderSourceType_(rowOrItem);
+}
+
 export const MRD_GRV_SUMMARY_COLS = [
   'Date Received', 'Category', 'Complainant', 'Group', 'Grievance Subject',
   'Risk Classification', 'Grievance Status',

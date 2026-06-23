@@ -27,6 +27,7 @@ import {
   mrdFormatNblRisers_,
   mrdReportHeaderMeta_,
   grvGroupName_,
+  mrdShowInMillOnboarding_,
   normalizeSddCategory,
   sddStatusText,
   sddCompanyName,
@@ -391,7 +392,9 @@ async function exportMonthlyReport_(exportOpts) {
 
     // Mill Onboarding PDF export: HIGH RISK mills only (same Result Risk Level as website).
     const allMillsResolved = await resolveAllNblForExport_(mrdSortMillItems_(s.mills || []));
-    const highRiskMills = mrdSortMillItems_(allMillsResolved.filter(mrdIsHighRiskItem_));
+    const highRiskMills = mrdSortMillItems_(allMillsResolved.filter(function(item) {
+      return mrdIsHighRiskItem_(item) && mrdShowInMillOnboarding_(item);
+    }));
     const millsForPdf = highRiskMills;
     const nblMills = mrdSortMillItems_(highRiskMills.filter(function(item) {
       return isNblYes(item.nbl) && matchesSearch(item.search);
@@ -771,7 +774,9 @@ function renderHighRiskSection(rows) {
 }
 
 function renderMillSection(rows) {
-  const filtered = rows.filter(function(item) { return matchesSearch(item.search); });
+  const filtered = rows.filter(function(item) {
+    return mrdShowInMillOnboarding_(item) && matchesSearch(item.search);
+  });
   // Sort: HIGH risk first so they're always visible even when list is capped.
   filtered.sort(function(a, b) {
     const aH = isHighRisk(a.risk) ? 0 : 1;

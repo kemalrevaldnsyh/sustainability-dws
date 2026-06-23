@@ -34,6 +34,7 @@ import {
   mrdFormatNblRisers_,
   mrdReportHeaderMeta_,
   grvGroupName_,
+  mrdShowInMillOnboarding_,
 } from './monthly-report-labels.js';
 
 const BRAND = [139, 26, 26];
@@ -109,7 +110,9 @@ function isHighRiskMillPdf_(item) {
 }
 
 function pdfMillOnboardingRows_(data) {
-  return mrdSortMillItems_((data.mills || []).filter(isHighRiskMillPdf_));
+  return mrdSortMillItems_((data.mills || []).filter(function(item) {
+    return isHighRiskMillPdf_(item) && mrdShowInMillOnboarding_(item);
+  }));
 }
 
 /** Summary PDF mill table includes Result Risk Level (HIGH). */

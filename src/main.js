@@ -8870,9 +8870,8 @@ function initDashboardApp() {
 
   function ttpFormatTraceablePct_(n) {
     if (isNaN(n)) return '—';
-    if (n > 0 && n < 0.05) return '<0.1%';
-    if (n >= 10) return (Math.round(n * 10) / 10).toFixed(1).replace(/\.0$/, '') + '%';
-    return (Math.round(n * 10) / 10).toFixed(1) + '%';
+    if (n > 0 && n < 0.005) return '<0.01%';
+    return (Math.round(n * 100) / 100).toFixed(2) + '%';
   }
 
   /** TTM card: 2 decimal places to match spreadsheet (e.g. 94.13%, 97.46%). */
