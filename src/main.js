@@ -24076,43 +24076,119 @@ function initDashboardApp() {
     return null;
   }
 
+  /**
+   * Canonical supply import Excel (CPO & PK) — columns A→F:
+   * PLANT | CATEGORY | COMPANY GROUP NAME | COMPANY NAME | MILL NAME | QTY SUPPLY
+   */
+  const SUPPLY_IMPORT_TEMPLATE_HEADERS = [
+    'PLANT',
+    'CATEGORY',
+    'COMPANY GROUP NAME',
+    'COMPANY NAME',
+    'MILL NAME',
+    'QTY SUPPLY',
+  ];
+  const SUPPLY_IMPORT_QTY_COL_F = 5;
+
+  function supplyNormalizeImportHeader_(h) {
+    return String(h || '').trim().toUpperCase().replace(/\s+/g, ' ');
+  }
+
+  function supplyHeaderRowNorm_(row) {
+    return (row || []).map(function(h) { return supplyNormalizeImportHeader_(h); });
+  }
+
+  function supplyIsCanonicalImportHeader_(normHeaders) {
+    if (!normHeaders || normHeaders.length < 6) return false;
+    return normHeaders[0] === 'PLANT'
+      && normHeaders[1] === 'CATEGORY'
+      && (normHeaders[2] === 'COMPANY GROUP NAME' || normHeaders[2] === 'GROUP NAME')
+      && normHeaders[3] === 'COMPANY NAME'
+      && normHeaders[4] === 'MILL NAME'
+      && (normHeaders[5] === 'QTY SUPPLY' || normHeaders[5] === 'QUANTITY SUPPLY' || normHeaders[5] === 'SUPPLY QTY');
+  }
+
+  function supplyFindQtySupplyCol_(headers) {
+    if (!headers || !headers.length) return -1;
+    for (let hi = 0; hi < headers.length; hi++) {
+      const norm = supplyNormalizeImportHeader_(headers[hi]);
+      if (norm === 'QTY SUPPLY' || norm === 'QUANTITY SUPPLY' || norm === 'SUPPLY QTY') return hi;
+    }
+    if (supplyIsCanonicalImportHeader_(headers.map(supplyNormalizeImportHeader_))) {
+      return SUPPLY_IMPORT_QTY_COL_F;
+    }
+    if (headers.indexOf('COMPANY NAME') >= 0 && headers.length > SUPPLY_IMPORT_QTY_COL_F) {
+      return SUPPLY_IMPORT_QTY_COL_F;
+    }
+    const legacySum = headers.indexOf('SUM OF QTY KG');
+    if (legacySum >= 0) return legacySum;
+    let colTotal = headers.indexOf('TOTAL');
+    if (colTotal < 0) colTotal = headers.indexOf('GRAND TOTAL');
+    return colTotal;
+  }
+
+  function supplyResolveImportColumns_(headers) {
+    const norm = supplyHeaderRowNorm_(headers);
+    if (supplyIsCanonicalImportHeader_(norm)) {
+      return {
+        plant: 0,
+        category: 1,
+        coGroup: 2,
+        coName: 3,
+        millName: 4,
+        qty: 5,
+        legacyGroup: -1,
+      };
+    }
+    let colCoGroup = norm.indexOf('COMPANY GROUP NAME');
+    if (colCoGroup < 0) colCoGroup = norm.indexOf('GROUP NAME');
+    return {
+      plant: norm.indexOf('PLANT'),
+      category: norm.indexOf('CATEGORY'),
+      coGroup: colCoGroup,
+      coName: norm.indexOf('COMPANY NAME'),
+      millName: norm.indexOf('MILL NAME'),
+      qty: supplyFindQtySupplyCol_(norm),
+      legacyGroup: norm.indexOf('GROUP'),
+    };
+  }
+
   function supplyParseExcelRows_(ws) {
     const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     if (!rows.length) return { error: 'Sheet kosong.' };
 
     let headerRowIdx = 0;
-    let headers = (rows[0] || []).map(function(h) { return String(h || '').trim().toUpperCase(); });
+    let headers = supplyHeaderRowNorm_(rows[0]);
     const scanMax = Math.min(rows.length, 12);
     for (let i = 0; i < scanMax; i++) {
-      const candidate = (rows[i] || []).map(function(h) { return String(h || '').trim().toUpperCase(); });
-      if (candidate.indexOf('COMPANY NAME') >= 0) {
+      const candidate = supplyHeaderRowNorm_(rows[i]);
+      if (candidate.indexOf('COMPANY NAME') >= 0 && candidate.indexOf('QTY SUPPLY') >= 0) {
+        headerRowIdx = i;
+        headers = candidate;
+        break;
+      }
+      if (candidate.indexOf('COMPANY NAME') >= 0 && supplyIsCanonicalImportHeader_(candidate)) {
         headerRowIdx = i;
         headers = candidate;
         break;
       }
     }
 
-    const colPlant    = headers.indexOf('PLANT');
-    const colGroup    = headers.indexOf('GROUP');
-    const colCategory = headers.indexOf('CATEGORY');
-    let colCoGroup  = headers.indexOf('COMPANY GROUP NAME');
-    if (colCoGroup < 0) colCoGroup = headers.indexOf('GROUP NAME');
-    const colCoName   = headers.indexOf('COMPANY NAME');
-    const colMillName = headers.indexOf('MILL NAME');
-    const colSumQty   = headers.indexOf('SUM OF QTY KG');
-    let colTotal = headers.indexOf('TOTAL');
-    if (colTotal < 0) colTotal = headers.indexOf('GRAND TOTAL');
-    if (colTotal < 0) {
-      for (let hi = 0; hi < headers.length; hi++) {
-        if (/^TOTAL$/i.test(String(headers[hi] || '').trim())) { colTotal = hi; break; }
-      }
-    }
+    const cols = supplyResolveImportColumns_(headers);
+    const colPlant = cols.plant;
+    const colCategory = cols.category;
+    const colCoGroup = cols.coGroup;
+    const colCoName = cols.coName;
+    const colMillName = cols.millName;
+    const colGroup = cols.legacyGroup;
+    const qtyCol = cols.qty;
 
     if (colCoName < 0) {
-      return { error: 'COMPANY NAME column not found.' };
+      return { error: 'COMPANY NAME column not found. Required headers: ' + SUPPLY_IMPORT_TEMPLATE_HEADERS.join(', ') + '.' };
     }
-
-    const qtyCol = colTotal >= 0 ? colTotal : colSumQty;
+    if (qtyCol < 0) {
+      return { error: 'QTY SUPPLY column not found. Required headers: ' + SUPPLY_IMPORT_TEMPLATE_HEADERS.join(', ') + '.' };
+    }
     let lastPlant = '';
     let lastCoGroup = '';
     const parsed = [];
@@ -24485,7 +24561,7 @@ function initDashboardApp() {
     });
 
     tHead.innerHTML = '<tr>'
-      + ['Group', 'Company', 'Mill', 'Plant', 'Qty', 'Match', pctLabel].map(function(h) {
+      + ['Plant', 'Category', 'Group', 'Company', 'Mill', 'Qty Supply', 'Match', pctLabel].map(function(h) {
           return '<th>' + escHtml(h) + '</th>';
         }).join('') + '</tr>';
 
@@ -24501,13 +24577,13 @@ function initDashboardApp() {
       const match = supplyFindMillProfileMatch_(r, kind);
       const millDisp = names.mill || '—';
       return '<tr>'
-        + [names.group, names.company, millDisp, r.PLANT, r.SUPPLY_QTY,
+        + [r.PLANT, r.CATEGORY, names.group, names.company, millDisp, r.SUPPLY_QTY,
             supplyMatchBadgeHtml_(match.status), r.SUPPLY_PCT].map(function(v) {
             return '<td>' + (typeof v === 'string' && v.indexOf('<span') === 0 ? v : escHtml(String(v != null && v !== '' ? v : '—'))) + '</td>';
           }).join('') + '</tr>';
     }).join('');
     if (parsedRows.length > 8) {
-      tBody.innerHTML += '<tr><td colspan="7" class="supply-import-preview-more">… +' + (parsedRows.length - 8) + ' baris lainnya</td></tr>';
+      tBody.innerHTML += '<tr><td colspan="8" class="supply-import-preview-more">… +' + (parsedRows.length - 8) + ' baris lainnya</td></tr>';
     }
     if (stats) {
       let statTxt = parsedRows.length + ' baris · ' + matchedN + ' matched · ' + newN + ' baru';

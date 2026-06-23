@@ -146,6 +146,9 @@
         <div class="supply-import-callout" role="note">
           <svg class="supply-import-callout__icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
           <div>
+            <strong>Format Excel (kolom A–F):</strong>
+            PLANT · CATEGORY · COMPANY GROUP NAME · COMPANY NAME · MILL NAME · <strong>QTY SUPPLY</strong>
+            <br>
             <strong>Tip:</strong> Import CPO dulu, lalu PK dengan month &amp; year yang sama. Baris company yang cocok otomatis jadi <span class="supply-pill supply-pill--cpopk">CPO+PK</span>.
           </div>
         </div>
@@ -206,7 +209,7 @@
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
             </span>
             <span class="supply-import-drop-zone__title">Drag &amp; drop atau klik untuk pilih file</span>
-            <span class="supply-import-drop-zone__hint">.xlsx · sheet &quot;Contoh Pengisian&quot; atau &quot;Supplied CPO/PK …&quot;</span>
+            <span class="supply-import-drop-zone__hint">.xlsx · header: PLANT, CATEGORY, COMPANY GROUP NAME, COMPANY NAME, MILL NAME, QTY SUPPLY</span>
             <input type="file" id="supply-import-file-input" accept=".xlsx,.xls" class="supply-import-file-input">
           </label>
           <div id="supply-import-file-info" class="supply-import-file-info" hidden>
