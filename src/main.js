@@ -8678,16 +8678,7 @@ function initDashboardApp() {
   }
 
   function ttpRowCompanyNameVal_(row) {
-    if (!row || typeof row !== 'object') return '';
-    const keys = Object.keys(row);
-    for (let i = 0; i < keys.length; i++) {
-      const k = keys[i];
-      if (k === '_row' || (String(k).length && String(k)[0] === '_')) continue;
-      if (normalizeTtpHeaderKey_(k) === 'COMPANY NAME') {
-        return String(row[k] || '').trim();
-      }
-    }
-    return String(row['COMPANY NAME'] != null ? row['COMPANY NAME'] : (row['Company Name'] || '')).trim();
+    return pickMillCompanyName_(row);
   }
 
   function ttpIsDataRow_(row) {
@@ -8702,8 +8693,15 @@ function initDashboardApp() {
       const v = String(row[k] || '').trim();
       if (/^total traceable/i.test(v)) return false;
     }
-    const companyName = ttpRowCompanyNameVal_(row);
-    return companyName.length > 0 && companyName !== '—' && companyName !== '-';
+    function ok(v) {
+      const s = String(v || '').trim();
+      return s.length > 0 && s !== '—' && s !== '-';
+    }
+    if (ok(ttpRowCompanyNameVal_(row))) return true;
+    if (ok(millPickField_(row, ['MILL NAME', 'Mill Name']))) return true;
+    if (ok(millPickField_(row, ['FFB SUPPLIER NAME', 'FFB Supplier Name']))) return true;
+    if (ok(pickMillGroupName_(row))) return true;
+    return false;
   }
 
   /** Sheet footer: PK = SUM(PK Traceable) / SUM(PK SUPPLY to KCP); CPO = SUM(CPO Traceable) / SUM(CPO SUPPLY to REFINERY). */
@@ -10008,6 +10006,8 @@ function initDashboardApp() {
     let group = pickMillGroupName_(o);
     if (ttpLooksLikeBadGroupName_(group)) group = '';
     if (group) o['GROUP NAME'] = group;
+    const company = pickMillCompanyName_(o);
+    if (company) o['COMPANY NAME'] = company;
     const ffbGroup = pickTtpFfbSupplierGroupName_(o);
     if (ffbGroup) o['FFB SUPPLIER GROUP NAME'] = ffbGroup;
     return o;
@@ -15248,46 +15248,35 @@ function initDashboardApp() {
   }
 
   function eudrBuildMillRegistry_() {
-    const seen = new Map();
-    (allData || []).forEach(function(r) {
-      const group = String(r['GROUP NAME'] || r['Group Name'] || r['Grup Name'] || '').trim();
-      const company = String(r['COMPANY NAME'] || r['Company Name'] || '').trim();
-      const mill = String(r['MILL NAME'] || r['Mill Name'] || '').trim();
-      if (!mill && !company) return;
-      const key = eudrEntityKey_(group, company, mill);
-      const cap = eudrMillCapacityFromMill_(r);
-      const supply = eudrSupplyToFromMill_(r);
-      const supplyPk = eudrSupplyPkFromMill_(r);
-      if (seen.has(key)) {
-        const prev = seen.get(key);
-        prev['MILL CAPACITY'] = eudrMergePreferNonEmpty_(prev['MILL CAPACITY'], cap);
-        prev['SUPPLY TO'] = eudrMergePreferNonEmpty_(prev['SUPPLY TO'], supply);
-        prev['SUPPLY TO PK'] = eudrMergePreferNonEmpty_(prev['SUPPLY TO PK'], supplyPk);
-        if (!prev['UML ID']) prev['UML ID'] = String(r['UML ID'] || '').trim();
-        if (!prev['PROVINCE']) prev['PROVINCE'] = String(r['PROVINCE'] || r['Province'] || '').trim();
-        return;
-      }
-      seen.set(key, {
-        'GROUP NAME': group,
-        'COMPANY NAME': company,
-        'MILL NAME': mill,
-        'UML ID': String(r['UML ID'] || '').trim(),
-        'PROVINCE': String(r['PROVINCE'] || r['Province'] || '').trim(),
-        'SUPPLY TO': supply,
-        'SUPPLY TO PK': supplyPk,
-        'MILL CAPACITY': cap,
-        _entityKey: key,
+    return (allData || [])
+      .filter(millRowHasCompanyName_)
+      .map(function(r, idx) {
+        const group = pickMillGroupName_(r);
+        const company = pickMillCompanyName_(r);
+        const mill = millPickField_(r, ['MILL NAME', 'Mill Name']);
+        const rowKey = r._row != null ? String(r._row) : String(idx);
+        return {
+          'GROUP NAME': group,
+          'COMPANY NAME': company,
+          'MILL NAME': mill,
+          'UML ID': String(r['UML ID'] || '').trim(),
+          'PROVINCE': String(r['PROVINCE'] || r['Province'] || '').trim(),
+          'SUPPLY TO': eudrSupplyToFromMill_(r),
+          'SUPPLY TO PK': eudrSupplyPkFromMill_(r),
+          'MILL CAPACITY': eudrMillCapacityFromMill_(r),
+          _entityKey: eudrEntityKey_(group, company, mill) + '|row:' + rowKey,
+          _millRow: r._row,
+        };
+      })
+      .sort(function(a, b) {
+        const ga = String(a['GROUP NAME'] || '').toLowerCase();
+        const gb = String(b['GROUP NAME'] || '').toLowerCase();
+        if (ga !== gb) return ga.localeCompare(gb);
+        const ca = String(a['COMPANY NAME'] || '').toLowerCase();
+        const cb = String(b['COMPANY NAME'] || '').toLowerCase();
+        if (ca !== cb) return ca.localeCompare(cb);
+        return String(a['MILL NAME'] || '').toLowerCase().localeCompare(String(b['MILL NAME'] || '').toLowerCase());
       });
-    });
-    return Array.from(seen.values()).sort(function(a, b) {
-      const ga = String(a['GROUP NAME'] || '').toLowerCase();
-      const gb = String(b['GROUP NAME'] || '').toLowerCase();
-      if (ga !== gb) return ga.localeCompare(gb);
-      const ca = String(a['COMPANY NAME'] || '').toLowerCase();
-      const cb = String(b['COMPANY NAME'] || '').toLowerCase();
-      if (ca !== cb) return ca.localeCompare(cb);
-      return String(a['MILL NAME'] || '').toLowerCase().localeCompare(String(b['MILL NAME'] || '').toLowerCase());
-    });
   }
 
   function eudrMillToSyncPayload_(m) {
@@ -15308,7 +15297,8 @@ function initDashboardApp() {
       sheetMap[eudrEntityKey_(r['GROUP NAME'], r['COMPANY NAME'], r['MILL NAME'])] = r;
     });
     return (mills || []).map(function(m) {
-      const hit = sheetMap[m._entityKey];
+      const entityKey = eudrEntityKey_(m['GROUP NAME'], m['COMPANY NAME'], m['MILL NAME']);
+      const hit = sheetMap[entityKey];
       var cap = m['MILL CAPACITY'] || '';
       var supply = m['SUPPLY TO'] || '';
       var out = Object.assign({}, m, {
@@ -15316,6 +15306,7 @@ function initDashboardApp() {
         'SUPPLY TO': supply,
         STATUS: '',
         _sheetRow: null,
+        _entityKey: m._entityKey || entityKey,
       });
       if (hit) {
         cap = eudrMergePreferNonEmpty_(cap, hit['MILL CAPACITY']);
@@ -16981,6 +16972,10 @@ function initDashboardApp() {
 
   function renderEudrTable_() {
     const body = document.getElementById('eudrTableBody');
+    const table = document.getElementById('eudrTable');
+    const loading = document.getElementById('eudr-loading');
+    if (loading) loading.style.display = 'none';
+    if (table) table.style.display = 'table';
     if (!body) return;
     const filtered = eudrGetFilteredRows_();
     if (!filtered.length) {

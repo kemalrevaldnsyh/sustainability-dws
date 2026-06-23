@@ -641,7 +641,7 @@ function doGet(e) {
       return respond({
         success: true,
         message: 'Apps Script is alive',
-        version: 'v3-grievance-risk-headers',
+        version: 'v3-ttp-header-detect-fix',
         blMonitoring: !!resolveSheetTabName_('blMonitoring'),
         questionnaireMonitoring: !!resolveSheetTabName_('questionnaireMonitoring'),
         eudrPotential: !!resolveSheetTabName_('eudrPotential'),
@@ -1278,6 +1278,15 @@ function facilityProfileRowHasContent_(obj) {
     String(obj['COMPANY NAME'] || '').trim() ||
     String(obj['SITE NAME'] || '').trim()
   );
+}
+
+function ttpRowHasContent_(obj) {
+  if (!obj) return false;
+  if (String(obj['COMPANY NAME'] || obj['Company Name'] || '').trim()) return true;
+  if (String(obj['MILL NAME'] || '').trim()) return true;
+  if (String(obj['FFB SUPPLIER NAME'] || '').trim()) return true;
+  if (String(obj['GROUP NAME'] || '').trim()) return true;
+  return false;
 }
 
 function millRowHasContent_(obj) {
@@ -2633,22 +2642,74 @@ function detectHeaderRowByKeys_(sheet, requiredKeys, scanMaxRows) {
     }
     // Consider this row as header if enough key columns are present.
     if (hit >= Math.min(4, wanted.length)) {
-      return { headerRow: r + 1, headers: data[r].map(function(h) { return String(h || '').trim(); }) };
+      const headers = data[r].map(function(h) { return String(h || '').trim(); });
+      if (isTtpInvalidHeaderRow_(headers)) continue;
+      return { headerRow: r + 1, headers: headers };
     }
   }
   return null;
 }
 
+function isTtpInvalidHeaderRow_(headers) {
+  var list = (headers || []).map(function(h) { return String(h || '').trim(); }).filter(Boolean);
+  if (!list.length) return true;
+  for (var i = 0; i < list.length; i++) {
+    var h = list[i];
+    var hu = h.toUpperCase();
+    if (/^TOTAL TRACEABLE/i.test(h)) return true;
+    if (/^TOTAL CPO|^TOTAL PK/i.test(hu)) return true;
+    if (/^[\d.,]+$/.test(h)) return true;
+  }
+  return false;
+}
+
 function detectTtpHeaderRow_(sheet) {
-  return detectHeaderRowByKeys_(
-    sheet,
-    ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'FFB SUPPLIER NAME', 'CATEGORY'],
-    15
-  ) || detectHeaderRowByKeys_(
-    sheet,
-    ['Quarter', 'Year', 'UML ID', 'FFB SUPPLIER NAME', 'CATEGORY'],
-    15
-  );
+  const lastRow = sheet.getLastRow();
+  const lastCol = sheet.getLastColumn();
+  if (!lastRow || !lastCol) return null;
+  const scanRows = Math.min(25, lastRow);
+  const data = sheet.getRange(1, 1, scanRows, lastCol).getValues();
+  const primaryKeys = ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'FFB SUPPLIER NAME', 'CATEGORY'];
+  const legacyKeys = ['Quarter', 'Year', 'UML ID', 'FFB SUPPLIER NAME', 'CATEGORY'];
+  var best = null;
+  var bestScore = 0;
+
+  for (var r = 0; r < data.length; r++) {
+    const headers = data[r].map(function(h) { return String(h || '').trim(); });
+    if (!headers.some(Boolean)) continue;
+    if (isTtpInvalidHeaderRow_(headers)) continue;
+
+    const rowLower = headers.map(function(h) { return h.toLowerCase(); });
+    var hitPrimary = 0;
+    for (var pi = 0; pi < primaryKeys.length; pi++) {
+      if (rowLower.indexOf(String(primaryKeys[pi]).trim().toLowerCase()) !== -1) hitPrimary++;
+    }
+    var hitLegacy = 0;
+    for (var li = 0; li < legacyKeys.length; li++) {
+      if (rowLower.indexOf(String(legacyKeys[li]).trim().toLowerCase()) !== -1) hitLegacy++;
+    }
+
+    const hasNo = rowLower.indexOf('no') !== -1 || rowLower.indexOf('no.') !== -1;
+    const hasCompany = rowLower.indexOf('company name') !== -1;
+    const hasMill = rowLower.indexOf('mill name') !== -1;
+    const hasFfb = rowLower.indexOf('ffb supplier name') !== -1;
+    const hasGroup = rowLower.indexOf('group name') !== -1;
+
+    var score = hitPrimary;
+    if (hasCompany && hasMill) score += 6;
+    if (hasFfb) score += 3;
+    if (hasGroup) score += 2;
+    if (hasNo) score += 2;
+    if (hitLegacy >= 4 && rowLower.indexOf('uml id') !== -1) score = Math.max(score, hitLegacy + 4);
+
+    if (score > bestScore) {
+      bestScore = score;
+      best = { headerRow: r + 1, headers: headers };
+    }
+  }
+
+  if (best && bestScore >= 4) return best;
+  return detectHeaderRowByKeys_(sheet, primaryKeys, 15) || detectHeaderRowByKeys_(sheet, legacyKeys, 15);
 }
 
 function looksLikeTtpYearOrQuarterValue_(s) {
@@ -3660,6 +3721,7 @@ function getData(sheetKey) {
       mirrorGroupNameOnRead_(obj);
       if (looksLikeTtpYearOrQuarterValue_(obj['GROUP NAME'])) delete obj['GROUP NAME'];
       mirrorGroupNameOnRead_(obj);
+      mirrorMillCompanyNameOnRead_(obj);
       mirrorTtpFieldsByPosition_(obj, row, headers);
     }
     if (sheetKey === 'nbl') {
@@ -3673,6 +3735,7 @@ function getData(sheetKey) {
   }).filter(function(obj) {
     if (sheetKey === 'facilityProfile') return facilityProfileRowHasContent_(obj);
     if (sheetKey === 'mill') return millRowHasContent_(obj);
+    if (sheetKey === 'ttp') return ttpRowHasContent_(obj);
     if (sheetKey !== 'blMonitoring') return true;
     return blRowHasContent_(obj);
   });
