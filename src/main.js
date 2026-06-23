@@ -23226,6 +23226,7 @@ function initDashboardApp() {
       draftRow.target_mill_row = found.row._row;
       draftRow._mill_row = found.row._row;
       draftRow._profile_group_hint = '';
+      supplyCopyProfileIntoDraft_(draftRow, found.row, batch);
     } else if (found.status === 'group_mismatch' && found.row) {
       draftRow._profile_group_hint = found.row['GROUP NAME'] || '';
       draftRow.target_mill_row = null;
@@ -23237,14 +23238,48 @@ function initDashboardApp() {
     }
   }
 
-  const MILL_SUPPLY_IDENTITY_PREFILL_FIELDS = [
-    'COMPANY CODE', 'TRADER NAME', 'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID',
-    'PROVINCE', 'ADDRESS', 'COORDINATES', 'MILL CATEGORY', 'MILL CAPACITY (TON/HOUR)',
-  ];
+  function supplyDraftProfileSkipFields_(draftRow, batch) {
+    const kind = supplyResolveKindFromDraft_(draftRow, batch);
+    const pctField = kind === 'PK' ? SUPPLY_PCT_COL_PK : SUPPLY_PCT_COL_CPO;
+    const facField = kind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+    return new Set([
+      pctField, SUPPLY_PCT_COL_CPO, SUPPLY_PCT_COL_PK,
+      'MONTH', 'QUARTER', 'YEAR',
+      'COMPANY NAME', 'MILL NAME', 'GROUP NAME',
+      'FACILITY NAME CPO', 'FACILITY NAME PK', 'TRADER NAME',
+      'SUPPLY CPO', 'SUPPLY PK', 'SUPPLY_QTY', 'SUPPLY_PERCENTAGE',
+      facField,
+    ]);
+  }
 
-  const MILL_SUPPLY_SPATIAL_PREFILL_FIELDS = [
-    'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH', 'MILL LOC',
-  ];
+  /** Copy full Mill Onboarding profile into a supply draft row (import / re-match). */
+  function supplyCopyProfileIntoDraft_(draftRow, profile, batch) {
+    if (!draftRow || !profile) return;
+    const skip = supplyDraftProfileSkipFields_(draftRow, batch);
+    (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
+      if (skip.has(f)) return;
+      if (millIsSheetComputedField_(f)) return;
+      if (profile[f] !== undefined && profile[f] !== null && String(profile[f]).trim() !== '') {
+        draftRow[f] = profile[f];
+      }
+    });
+    const cap = millCapacityFromRow_(profile);
+    if (cap) draftRow['MILL CAPACITY (TON/HOUR)'] = cap;
+  }
+
+  /** Build modal prefill object from a matched Mill Onboarding profile row. */
+  function supplyProfilePrefillFromRow_(profile) {
+    const prefill = {};
+    if (!profile) return prefill;
+    (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
+      if (millIsSheetComputedField_(f)) return;
+      const v = profile[f];
+      if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
+    });
+    const cap = millCapacityFromRow_(profile);
+    if (cap) prefill['MILL CAPACITY (TON/HOUR)'] = cap;
+    return prefill;
+  }
 
   function supplyResolveKindFromDraft_(draftRow, batch) {
     const rawKind = String((batch && batch.supply_type) || (draftRow && draftRow.supply_type) || 'CPO').toUpperCase();
@@ -23280,19 +23315,10 @@ function initDashboardApp() {
     return found.row || null;
   }
 
-  /** Prefill add-mill form through Mill Capacity; month/year from import batch (editable). */
+  /** Prefill add-mill form from matched profile (all editable fields); month/year from import batch. */
   function supplyBuildMillPrefillFromDraft_(draftRow, batch) {
     const profile = supplyGetDraftProfileRow_(draftRow, batch);
-    const prefill = {};
-    if (profile) {
-      MILL_SUPPLY_IDENTITY_PREFILL_FIELDS.concat(MILL_SUPPLY_SPATIAL_PREFILL_FIELDS).forEach(function(f) {
-        if (millIsSheetComputedField_(f)) return;
-        const v = profile[f];
-        if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
-      });
-      const cap = millCapacityFromRow_(profile);
-      if (cap) prefill['MILL CAPACITY (TON/HOUR)'] = cap;
-    }
+    const prefill = supplyProfilePrefillFromRow_(profile);
     if (batch) {
       if (batch.month) prefill['MONTH'] = String(batch.month);
       else if (batch.quarter) prefill['MONTH'] = String(batch.quarter);
@@ -23914,19 +23940,7 @@ function initDashboardApp() {
       if (profile && found.status === 'matched') {
         draft.target_mill_row = profile._row;
         draft._mill_row = profile._row;
-        const PREFILL_SKIP = new Set([
-          pctField, SUPPLY_PCT_COL_CPO, SUPPLY_PCT_COL_PK,
-          'MONTH', 'QUARTER', 'YEAR', 'COMPANY NAME', 'MILL NAME', 'GROUP NAME',
-          'FACILITY NAME CPO', 'FACILITY NAME PK', 'TRADER NAME',
-          'SUPPLY CPO', 'SUPPLY PK', 'SUPPLY_QTY', 'SUPPLY_PERCENTAGE',
-        ]);
-        (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
-          if (PREFILL_SKIP.has(f)) return;
-          if (millIsSheetComputedField_(f)) return;
-          if (profile[f] !== undefined && profile[f] !== null && String(profile[f]).trim() !== '') {
-            draft[f] = profile[f];
-          }
-        });
+        supplyCopyProfileIntoDraft_(draft, profile, { month: month, year: year, supply_type: kind });
         draft['GROUP NAME']   = names.group || profile['GROUP NAME'] || draft['GROUP NAME'];
         draft['COMPANY NAME'] = names.company || profile['COMPANY NAME'] || draft['COMPANY NAME'];
         draft['MILL NAME']    = names.mill || profile['MILL NAME'] || draft['MILL NAME'];
@@ -23936,19 +23950,7 @@ function initDashboardApp() {
         draft._profile_group_hint = profile['GROUP NAME'] || '';
         draft.target_mill_row = profile._row;
         draft._mill_row = profile._row;
-        const PREFILL_SKIP2 = new Set([
-          pctField, SUPPLY_PCT_COL_CPO, SUPPLY_PCT_COL_PK,
-          'QUARTER', 'YEAR', 'COMPANY NAME', 'MILL NAME', 'GROUP NAME',
-          'FACILITY NAME CPO', 'FACILITY NAME PK', 'TRADER NAME',
-          'SUPPLY CPO', 'SUPPLY PK', 'SUPPLY_QTY', 'SUPPLY_PERCENTAGE',
-        ]);
-        (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
-          if (PREFILL_SKIP2.has(f)) return;
-          if (millIsSheetComputedField_(f)) return;
-          if (profile[f] !== undefined && profile[f] !== null && String(profile[f]).trim() !== '') {
-            draft[f] = profile[f];
-          }
-        });
+        supplyCopyProfileIntoDraft_(draft, profile, { month: month, year: year, supply_type: kind });
         draft['GROUP NAME'] = names.group || draft['GROUP NAME'];
         draft[pctField] = r.SUPPLY_PCT;
         draft[facField] = r.PLANT || profile[facField] || '';
@@ -24134,7 +24136,7 @@ function initDashboardApp() {
       + '</div>';
   }
 
-  /** Open mill Add modal with profile prefill through Mill Capacity (all fields editable). */
+  /** Open mill Add modal with full matched profile prefill (all fields editable). */
   async function supplyOpenMillModalFromDraft_(draftRow, batch, bId, rowIdx) {
     if ((!allDataRaw || !allDataRaw.length) && typeof loadMillData === 'function') {
       await loadMillData();
