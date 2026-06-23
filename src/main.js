@@ -5801,6 +5801,7 @@ function initDashboardApp() {
           await supplySubmitDraftFromModal_(supplyCtx, data);
         } else {
           await supplySaveDraftFromModal_(supplyCtx, data);
+          ensureMillTaskListPanelOpen_();
         }
         closeModal();
         if (typeof window.showSddToast === 'function') {
@@ -23900,7 +23901,11 @@ function initDashboardApp() {
     draftRow.profile_draft_saved = 'true';
     draftRow.status = 'draft';
     await apiPost({ action: 'saveSupplyDraft', batch_id: ctx.batchId, rows: [draftRow], meta: {} });
-    renderSupplyDraftList_();
+    renderSupplyDraftList_({
+      expandBatchIds: [ctx.batchId],
+      scrollToBatchId: ctx.batchId,
+      highlightRow: { batchId: ctx.batchId, rowIdx: ctx.rowIdx },
+    });
   }
 
   async function supplyCommitDraftRowToMill_(batch, draftRow, data) {
@@ -24605,10 +24610,30 @@ function initDashboardApp() {
     }
   }
 
-  function renderSupplyDraftList_() {
+  function ensureMillTaskListPanelOpen_() {
+    if (currentFilter !== 'Task List') {
+      currentFilter = 'Task List';
+      filterChipEls.forEach(function(c) {
+        c.classList.toggle('active', c.dataset.filter === 'Task List');
+      });
+    }
+    const taskPanel = document.getElementById('mill-task-list-panel');
+    const tableCard = document.querySelector('#panel-mill-onboarding .table-card');
+    if (taskPanel) taskPanel.style.display = 'block';
+    if (tableCard) tableCard.style.display = 'none';
+  }
+
+  function renderSupplyDraftList_(opts) {
+    opts = opts || {};
     const container = document.getElementById('supply-draft-list');
     const empty     = document.getElementById('supply-draft-empty');
     if (!container) return;
+
+    const expandedBatchIds = new Set(Array.isArray(opts.expandBatchIds) ? opts.expandBatchIds : []);
+    container.querySelectorAll('.supply-batch-table-wrap:not([hidden])').forEach(function(wrap) {
+      const batchId = String(wrap.id || '').replace(/^supply-batch-table-/, '');
+      if (batchId) expandedBatchIds.add(batchId);
+    });
 
     const batches = window._supplyDraftBatches || [];
     if (!batches.length) {
@@ -24676,6 +24701,30 @@ function initDashboardApp() {
         btn.setAttribute('aria-expanded', isOpen ? 'false' : 'true');
       });
     });
+
+    expandedBatchIds.forEach(function(batchId) {
+      const wrap = document.getElementById('supply-batch-table-' + batchId);
+      const btn = container.querySelector('.supply-btn--expand[data-batch="' + batchId + '"]');
+      if (wrap) wrap.hidden = false;
+      if (btn) {
+        btn.textContent = 'Tutup';
+        btn.setAttribute('aria-expanded', 'true');
+      }
+    });
+
+    if (opts.scrollToBatchId) {
+      const card = container.querySelector('.supply-batch-card[data-batch-id="' + opts.scrollToBatchId + '"]');
+      if (card) card.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    if (opts.highlightRow && opts.highlightRow.batchId != null && opts.highlightRow.rowIdx != null) {
+      const wrap = document.getElementById('supply-batch-table-' + opts.highlightRow.batchId);
+      if (wrap) {
+        const rows = wrap.querySelectorAll('tbody tr');
+        const rowEl = rows[opts.highlightRow.rowIdx];
+        if (rowEl) dashFlashRow_(rowEl);
+      }
+    }
   }
 
   function renderSupplyBatchTable_(batch) {
@@ -24757,6 +24806,8 @@ function initDashboardApp() {
     }
 
     const prefill = supplyBuildMillPrefillFromDraft_(draftRow, batch);
+    modalTaskKey = '';
+    modalTaskLineId = '';
     window._supplyModalContext = { batchId: bId, rowIdx: rowIdx };
     openModal('mill', MILL_FIELDS, 'add', prefill);
     syncSupplyModalChrome_(true);
