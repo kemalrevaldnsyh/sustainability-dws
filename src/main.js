@@ -23527,9 +23527,37 @@ function initDashboardApp() {
     }
   }
 
+  function supplyFacilityFieldForKind_(kind) {
+    const k = String(kind || 'CPO').toUpperCase();
+    return (k === 'PK' || (k.indexOf('PK') >= 0 && k.indexOf('CPO') < 0)) ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+  }
+
+  /** Excel PLANT → FACILITY NAME CPO (import CPO) or FACILITY NAME PK (import PK). */
+  function supplyApplyPlantToDraftFacility_(draft, plant, kind) {
+    if (!draft) return;
+    const k = String(kind || draft.supply_type || draft.SUPPLY_TYPE || 'CPO').toUpperCase();
+    const singleKind = (k === 'PK' || (supplyRowHasPk_(draft) && !supplyRowHasCpo_(draft))) ? 'PK' : 'CPO';
+    const p = String(plant != null ? plant : draft.PLANT || '').trim();
+    if (!p) return;
+    draft.PLANT = p;
+    draft[supplyFacilityFieldForKind_(singleKind)] = p;
+  }
+
+  function supplyFacilityFromDraftRow_(row, field, kind) {
+    if (!row) return '';
+    const direct = String(row[field] || '').trim();
+    if (direct) return direct;
+    const plant = String(row.PLANT || '').trim();
+    if (!plant) return '';
+    const k = String(kind || row.supply_type || row.SUPPLY_TYPE || 'CPO').toUpperCase();
+    if (field === 'FACILITY NAME PK' && (k === 'PK' || k.indexOf('PK') >= 0)) return plant;
+    if (field === 'FACILITY NAME CPO' && (k === 'CPO' || k.indexOf('CPO') >= 0)) return plant;
+    return '';
+  }
+
   function supplyApplyImportToDraftRow_(existing, r, kind, pctField, facField, batch) {
     existing[pctField] = r.SUPPLY_PCT;
-    existing[facField] = r.PLANT || existing[facField] || '';
+    supplyApplyPlantToDraftFacility_(existing, r.PLANT, kind);
     if (r.CATEGORY && !existing['TRADER NAME']) existing['TRADER NAME'] = r.CATEGORY;
     supplyApplyParsedQtyToDraft_(existing, r, kind);
     existing.supply_type = supplyCombineSupplyTypes_(existing.supply_type, kind);
@@ -23879,7 +23907,7 @@ function initDashboardApp() {
     else if (done > 0 && batch.status === 'submitted') batch.status = 'draft';
   }
 
-  function supplyPrepareMillSavePayload_(data, batch) {
+  function supplyPrepareMillSavePayload_(data, batch, draftRow) {
     const payload = millStripComputedFromSavePayload_(Object.assign({}, data || {}));
     if (!payload['SOURCE TYPE']) payload['SOURCE TYPE'] = 'MILL';
     const trader = String(payload['TRADER NAME'] || '').trim();
@@ -23888,6 +23916,18 @@ function initDashboardApp() {
       if (batch.month && !String(payload['MONTH'] || '').trim()) payload['MONTH'] = String(batch.month);
       else if (batch.quarter && !String(payload['MONTH'] || '').trim()) payload['MONTH'] = String(batch.quarter);
       if (batch.year && !String(payload['YEAR'] || '').trim()) payload['YEAR'] = String(batch.year);
+    }
+    const kind = supplyResolveKindFromDraft_(draftRow || payload, batch);
+    const plant = String(payload.PLANT || (draftRow && draftRow.PLANT) || '').trim();
+    if (plant) {
+      const facField = supplyFacilityFieldForKind_(kind === 'CPO+PK' ? (draftRow && draftRow.supply_type) || 'CPO' : kind);
+      if (!String(payload[facField] || '').trim()) payload[facField] = plant;
+    }
+    if (kind === 'PK' && !String(payload['FACILITY NAME PK'] || '').trim()) {
+      payload['FACILITY NAME PK'] = supplyFacilityFromDraftRow_(draftRow || payload, 'FACILITY NAME PK', 'PK');
+    }
+    if (kind === 'CPO' && !String(payload['FACILITY NAME CPO'] || '').trim()) {
+      payload['FACILITY NAME CPO'] = supplyFacilityFromDraftRow_(draftRow || payload, 'FACILITY NAME CPO', 'CPO');
     }
     return payload;
   }
@@ -23977,7 +24017,7 @@ function initDashboardApp() {
   }
 
   async function supplyCommitDraftRowToMill_(batch, draftRow, data) {
-    const payload = supplyPrepareMillSavePayload_(data, batch);
+    const payload = supplyPrepareMillSavePayload_(data, batch, draftRow);
     supplyValidateMillPayloadForSubmit_(payload);
     supplyCopyModalIntoDraftRow_(draftRow, payload, batch);
 
@@ -24703,7 +24743,7 @@ function initDashboardApp() {
       };
       supplyApplyParsedQtyToDraft_(draft, r, kind);
       draft[pctField] = r.SUPPLY_PCT;
-      draft[facField] = r.PLANT;
+      supplyApplyPlantToDraftFacility_(draft, r.PLANT, kind);
       draft['TRADER NAME']  = r.CATEGORY;
       draft['GROUP NAME']   = names.group || (profile ? (profile['GROUP NAME'] || '') : '');
       draft['COMPANY NAME'] = names.company;
@@ -24717,7 +24757,7 @@ function initDashboardApp() {
         draft['COMPANY NAME'] = names.company || profile['COMPANY NAME'] || draft['COMPANY NAME'];
         draft['MILL NAME']    = names.mill || profile['MILL NAME'] || draft['MILL NAME'];
         draft[pctField] = r.SUPPLY_PCT;
-        draft[facField] = r.PLANT || profile[facField] || '';
+        supplyApplyPlantToDraftFacility_(draft, r.PLANT || profile[facField] || '', kind);
       } else if (profile && found.status === 'group_mismatch') {
         draft._profile_group_hint = profile['GROUP NAME'] || '';
         draft.target_mill_row = profile._row;
@@ -24725,7 +24765,7 @@ function initDashboardApp() {
         supplyCopyProfileIntoDraft_(draft, profile, { month: month, year: year, supply_type: kind });
         draft['GROUP NAME'] = names.group || draft['GROUP NAME'];
         draft[pctField] = r.SUPPLY_PCT;
-        draft[facField] = r.PLANT || profile[facField] || '';
+        supplyApplyPlantToDraftFacility_(draft, r.PLANT || profile[facField] || '', kind);
       }
 
       draft['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(draft);
@@ -25173,6 +25213,7 @@ function initDashboardApp() {
           }
           batches[bid].rows.push(row);
           supplyApplyDraftRowStatus_(row);
+          supplyApplyPlantToDraftFacility_(row, row.PLANT, row.supply_type || row.SUPPLY_TYPE);
           row._profile_draft_saved = String(row.profile_draft_saved || '').toLowerCase() === 'true';
         });
         window._supplyDraftBatches = supplyConsolidateBatchesByPeriod_(Object.values(batches).map(function(b) {

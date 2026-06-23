@@ -181,7 +181,7 @@ const SUPPLY_DRAFT_HEADERS = [
   'SUPPLIER LEVEL', 'BUYER NO BUY LIST', 'VOLUME SUPPLY STATUS',
   'RECOMMENDATION LEVEL', 'PRIORITY ENGAGEMENT', 'SIGN', 'SUPPLIER STATUS', 'RISK LEVEL',
   'RESULT RISK LEVEL', 'FACILITY NAME CPO', 'FACILITY NAME PK',
-  'PRODUCT SUPPLY', 'SUPPLY CPO', 'SUPPLY PK',
+  'PLANT', 'PRODUCT SUPPLY', 'SUPPLY CPO', 'SUPPLY PK',
 ];
 
 const NBL_HEADERS = [
@@ -5274,7 +5274,18 @@ function mergeMillIdentityWithSupplyPatchGs_(baseObj, patch, submitKind) {
   return out;
 }
 
+function supplyFacilityFromDraftGs_(row, field, submitKind) {
+  var direct = String(row[field] || '').trim();
+  if (direct) return direct;
+  var plant = String(row.PLANT || '').trim();
+  if (!plant) return '';
+  if (field === 'FACILITY NAME PK' && (submitKind === 'PK' || submitKind === 'BOTH')) return plant;
+  if (field === 'FACILITY NAME CPO' && (submitKind === 'CPO' || submitKind === 'BOTH')) return plant;
+  return '';
+}
+
 function buildSupplyPatchFromDraftGs_(row) {
+  var submitKind = supplySubmitKindFromDraftGs_(row);
   var supplyType = String(row.supply_type || row.SUPPLY_TYPE || 'CPO').trim().toUpperCase();
   var pctCpo = row['PERCENTAGE SUPPLY CPO'];
   var pctPk  = row['PERCENTAGE SUPPLY PK'];
@@ -5290,32 +5301,39 @@ function buildSupplyPatchFromDraftGs_(row) {
   }
 
   var patch = {};
-  if (hasCpo || supplyType.indexOf('CPO') >= 0) {
-    patch['PERCENTAGE SUPPLY CPO'] = hasCpo ? pctCpo : '';
-    if (row['FACILITY NAME CPO']) patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
+  if (submitKind === 'CPO' || submitKind === 'BOTH') {
+    if (hasCpo || submitKind === 'CPO' || submitKind === 'BOTH') {
+      patch['PERCENTAGE SUPPLY CPO'] = hasCpo ? pctCpo : '';
+    }
+    var facCpo = supplyFacilityFromDraftGs_(row, 'FACILITY NAME CPO', submitKind);
+    if (facCpo) patch['FACILITY NAME CPO'] = facCpo;
   }
-  if (hasPk || supplyType.indexOf('PK') >= 0) {
-    patch['PERCENTAGE SUPPLY PK'] = hasPk ? pctPk : '';
-    if (row['FACILITY NAME PK']) patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
+  if (submitKind === 'PK' || submitKind === 'BOTH') {
+    if (hasPk || submitKind === 'PK' || submitKind === 'BOTH') {
+      patch['PERCENTAGE SUPPLY PK'] = hasPk ? pctPk : '';
+    }
+    var facPk = supplyFacilityFromDraftGs_(row, 'FACILITY NAME PK', submitKind);
+    if (facPk) patch['FACILITY NAME PK'] = facPk;
   }
-  if (!hasCpo && !hasPk) {
-    var pctField = supplyType === 'PK' ? 'PERCENTAGE SUPPLY PK' : 'PERCENTAGE SUPPLY CPO';
+  if (!hasCpo && !hasPk && submitKind !== 'BOTH') {
+    var pctField = submitKind === 'PK' ? 'PERCENTAGE SUPPLY PK' : 'PERCENTAGE SUPPLY CPO';
     var pctVal = row[pctField];
     if (pctVal === undefined || pctVal === null || String(pctVal).trim() === '') {
       pctVal = row.SUPPLY_PERCENTAGE || '';
     }
     patch[pctField] = pctVal;
-    if (supplyType === 'PK' && row['FACILITY NAME PK']) {
-      patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
-    }
-    if (supplyType === 'CPO' && row['FACILITY NAME CPO']) {
-      patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
+    if (submitKind === 'PK') {
+      var facPkOnly = supplyFacilityFromDraftGs_(row, 'FACILITY NAME PK', submitKind);
+      if (facPkOnly) patch['FACILITY NAME PK'] = facPkOnly;
+    } else {
+      var facCpoOnly = supplyFacilityFromDraftGs_(row, 'FACILITY NAME CPO', submitKind);
+      if (facCpoOnly) patch['FACILITY NAME CPO'] = facCpoOnly;
     }
   }
 
   var psTokens = [];
-  if (hasCpo || supplyType.indexOf('CPO') >= 0) psTokens.push('CPO');
-  if (hasPk || supplyType.indexOf('PK') >= 0) psTokens.push('PK');
+  if (submitKind === 'CPO' || submitKind === 'BOTH') psTokens.push('CPO');
+  if (submitKind === 'PK' || submitKind === 'BOTH') psTokens.push('PK');
   if (psTokens.length) {
     patch['PRODUCT SUPPLY'] = psTokens.length > 1 ? 'CPO, PK' : psTokens[0];
   } else if (row['PRODUCT SUPPLY']) {
@@ -5330,10 +5348,10 @@ function buildSupplyPatchFromDraftGs_(row) {
   if ((qtyPk === undefined || qtyPk === null || String(qtyPk).trim() === '') && row.SUPPLY_QTY && (hasPk || supplyType.indexOf('PK') >= 0)) {
     qtyPk = row.SUPPLY_QTY;
   }
-  if (qtyCpo !== undefined && qtyCpo !== null && String(qtyCpo).trim() !== '' && (hasCpo || supplyType.indexOf('CPO') >= 0)) {
+  if (qtyCpo !== undefined && qtyCpo !== null && String(qtyCpo).trim() !== '' && (submitKind === 'CPO' || submitKind === 'BOTH')) {
     patch['SUPPLY CPO'] = qtyCpo;
   }
-  if (qtyPk !== undefined && qtyPk !== null && String(qtyPk).trim() !== '' && (hasPk || supplyType.indexOf('PK') >= 0)) {
+  if (qtyPk !== undefined && qtyPk !== null && String(qtyPk).trim() !== '' && (submitKind === 'PK' || submitKind === 'BOTH')) {
     patch['SUPPLY PK'] = qtyPk;
   }
   return patch;
