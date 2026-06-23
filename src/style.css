@@ -7331,6 +7331,22 @@ body.bl-detail-open { overflow: hidden; }
 @media (max-width: 560px) {
   .qm-export-col-list { grid-template-columns: 1fr; }
 }
+.eudr-export-modal { z-index: 9060; }
+.eudr-export-col-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 14px;
+  max-height: 320px;
+}
+.eudr-export-scope-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 16px;
+}
+@media (max-width: 560px) {
+  .eudr-export-col-list { grid-template-columns: 1fr; }
+}
 body.qm-form-open { overflow: hidden; }
 .qm-form-overlay {
   display: none;
@@ -8558,6 +8574,23 @@ body.eudr-ffb-modal-open { overflow: hidden; }
 }
 .mrd-export-modal { z-index: 9080; }
 .mrd-export-section-item span { flex: 1; }
+.mrd-export-period-row {
+  margin-bottom: 14px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid #eee0e0;
+}
+.mrd-export-period-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin-top: 8px;
+}
+.mrd-export-period-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: #7a6565;
+  line-height: 1.45;
+}
 
 #panel-monthly-report-detail .mrd-export-btn {
   height: 32px;

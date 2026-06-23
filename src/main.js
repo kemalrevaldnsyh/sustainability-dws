@@ -15209,6 +15209,54 @@ function initDashboardApp() {
   let eudrModalMillRow = null;
   let eudrFormulaPanelBound = false;
 
+  const EUDR_EXPORT_COLUMN_DEFS = [
+    { id: 'group', label: 'Group Name', header: 'Group Name', field: 'GROUP NAME' },
+    { id: 'company', label: 'Company Name', header: 'Company Name', field: 'COMPANY NAME' },
+    { id: 'mill', label: 'Mill Name', header: 'Mill Name', field: 'MILL NAME' },
+    { id: 'uml', label: 'UML ID', header: 'UML ID', field: 'UML ID' },
+    { id: 'province', label: 'Province', header: 'Province', field: 'PROVINCE' },
+    { id: 'supply_to', label: 'Supply To (CPO)', header: 'Supply To (CPO)', field: 'SUPPLY TO' },
+    { id: 'supply_pk', label: 'Supply To (PK)', header: 'Supply To (PK)', field: 'SUPPLY TO PK' },
+    { id: 'mill_capacity', label: 'Mill Capacity', header: 'Mill Capacity (Ton/Hour)', field: 'MILL CAPACITY' },
+    { id: 'ffb_pct', label: '% FFB by Category', header: '% FFB by Category', format: 'ffb' },
+    { id: 'status', label: 'EUDR Status', header: 'EUDR Status', format: 'status' },
+    { id: 'source_type', label: 'Source Type', header: 'Source Type', millKeys: ['SOURCE TYPE', 'Source Type'] },
+    { id: 'address', label: 'Address', header: 'Address', millKeys: ['ADDRESS', 'Address'] },
+    { id: 'coordinates', label: 'Coordinates', header: 'Coordinates', millKeys: ['COORDINATES', 'Coordinates'] },
+    { id: 'mill_category', label: 'Mill Category', header: 'Mill Category', millKeys: ['MILL CATEGORY', 'Mill Category'] },
+    { id: 'product_supply', label: 'Product Supply', header: 'Product Supply', millKeys: ['PRODUCT SUPPLY', 'Product Supply'] },
+    { id: 'result_risk', label: 'Result Risk Level', header: 'Result Risk Level', millKeys: ['RESULT RISK LEVEL', 'Result Risk Level'] },
+    { id: 'facility_cpo', label: 'Facility Name CPO', header: 'Facility Name CPO', millKeys: ['FACILITY NAME CPO'] },
+    { id: 'hgu', label: 'HGU / HGB', header: 'HGU / HGB', millKeys: ['HGU/HGB'] },
+    { id: 'izin_lokasi', label: 'Izin Lokasi', header: 'Izin Lokasi', millKeys: ['IZIN LOKASI', 'Izin Lokasi'] },
+    { id: 'iup', label: 'IUP', header: 'IUP', millKeys: ['IUP'] },
+    { id: 'izin_lingkungan', label: 'Izin Lingkungan', header: 'Izin Lingkungan', millKeys: ['IZIN LINGKUNGAN', 'Izin Lingkungan'] },
+    { id: 'mill_loc', label: 'Mill Location', header: 'Mill Location', millKeys: ['MILL LOC', 'MILL LOCATION', 'Mill Location'] },
+    { id: 'legality', label: 'Legality', header: 'Legality', millKeys: ['LEGALITY', 'Legality', 'LEGALITY SCORE'] },
+    { id: 'certification', label: 'Certification', header: 'Certification', millKeys: ['CERTIFICATION', 'Certification'] },
+    { id: 'rspo', label: 'RSPO', header: 'RSPO', millKeys: ['RSPO'] },
+    { id: 'ispo', label: 'ISPO', header: 'ISPO', millKeys: ['ISPO'] },
+    { id: 'iscc', label: 'ISCC', header: 'ISCC', millKeys: ['ISCC'] },
+    { id: 'total_grievances', label: 'Total Grievances', header: 'Total Grievances', millKeys: ['TOTAL GRIEVANCES', 'Total Grievances'] },
+    { id: 'ndpe', label: 'NDPE Policy', header: 'NDPE Policy', millKeys: ['NDPE', 'NDPE Policy'] },
+    { id: 'hrdd', label: 'HRDD', header: 'HRDD', millKeys: ['HRDD'] },
+    { id: 'nbl', label: 'No Buy List', header: 'No Buy List', millKeys: ['BUYER NO BUY LIST', 'Buyer No Buy List'] },
+    { id: 'deforestation_after', label: 'Deforestation (After 2020)', header: 'Deforestation (After 2020)', field: 'DEFORESTATION (AFTER 2020)' },
+    { id: 'complete_questionnaire', label: 'Complete Questionnaire', header: 'Complete Questionnaire', field: 'COMPLETE QUESTIONNAIRE' },
+    { id: 'ndpe_irf_def', label: 'NDPE IRF Deforestation', header: 'NDPE IRF Deforestation', field: 'NDPE IRF DEFORESTATION' },
+    { id: 'ndpe_irf_peat', label: 'NDPE IRF Peat', header: 'NDPE IRF Peat', field: 'NDPE IRF PEAT' },
+    { id: 'satellite', label: 'Satellite Monitoring', header: 'Satellite Monitoring', field: 'SATELLITE MONITORING' },
+    { id: 'verify_ndpe', label: '3rd Party Verification NDPE', header: '3rd Party Verification NDPE', field: '3RD PARTY VERIFICATION NDPE' },
+    { id: 'verify_trace', label: '3rd Party Verification Traceability', header: '3rd Party Verification Traceability', field: '3RD PARTY VERIFICATION TRACEABILITY' },
+    { id: 'verify_defor', label: '3rd Party Verification Deforestation Free', header: '3rd Party Verification Deforestation Free', field: '3RD PARTY VERIFICATION DEFORESTATION FREE' },
+    { id: 'last_update', label: 'Last Update', header: 'Last Update', field: 'LAST UPDATE', format: 'date' },
+    { id: 'updated_by', label: 'Updated By', header: 'Updated By', field: 'UPDATED BY' },
+  ];
+  const EUDR_EXPORT_DEFAULT_COL_IDS = [
+    'group', 'company', 'mill', 'uml', 'province', 'supply_to', 'mill_capacity', 'ffb_pct', 'status',
+  ];
+  let eudrExportSelectedColIds = EUDR_EXPORT_DEFAULT_COL_IDS.slice();
+
   function eudrEntityKey_(group, company, mill) {
     return [group, company, mill].map(function(s) {
       return String(s || '').trim().toLowerCase();
@@ -17006,6 +17054,250 @@ function initDashboardApp() {
     });
   }
 
+  function eudrExportPickMill_(eudrRow) {
+    return eudrPickBestMillRow_(eudrFindMillRowsForEntity_(eudrRow)) || {};
+  }
+
+  function eudrExportCellValue_(eudrRow, colDef) {
+    eudrRow = eudrRow || {};
+    colDef = colDef || {};
+    if (colDef.format === 'status') return eudrGetDisplayStatus_(eudrRow);
+    if (colDef.format === 'ffb') return eudrRow._eudrOwnPlasmaPctLabel || '—';
+    if (colDef.format === 'date') {
+      const raw = colDef.field ? eudrSheetVal_(eudrRow, colDef.field) : '';
+      return raw ? (typeof qmFormatDisplayDate_ === 'function' ? qmFormatDisplayDate_(raw) : raw) : '';
+    }
+    if (colDef.millKeys && colDef.millKeys.length) {
+      const mill = eudrExportPickMill_(eudrRow);
+      const v = pickSavedCol(mill, colDef.millKeys);
+      if (v !== '') return v;
+      if (colDef.id === 'legality') {
+        return millProfileLegalityFromScore_(mill) || '';
+      }
+      return '';
+    }
+    if (colDef.field) {
+      const direct = eudrPickField_(eudrRow, [colDef.field]);
+      if (direct) return direct;
+      return eudrSheetVal_(eudrRow, colDef.field);
+    }
+    return '';
+  }
+
+  function eudrGetExportColDefs_(selectedIds) {
+    const ids = selectedIds || eudrExportSelectedColIds;
+    return EUDR_EXPORT_COLUMN_DEFS.filter(function(c) { return ids.indexOf(c.id) !== -1; });
+  }
+
+  function eudrRowToExport_(eudrRow, colDefs) {
+    return (colDefs || []).map(function(col) {
+      const v = eudrExportCellValue_(eudrRow, col);
+      return v != null ? String(v) : '';
+    });
+  }
+
+  function eudrExcelStamp_() {
+    const now = new Date();
+    return now.getFullYear()
+      + String(now.getMonth() + 1).padStart(2, '0')
+      + String(now.getDate()).padStart(2, '0')
+      + '_'
+      + String(now.getHours()).padStart(2, '0')
+      + String(now.getMinutes()).padStart(2, '0');
+  }
+
+  function writeEudrExcelFile_(dataRows, colDefs, filename) {
+    if (typeof XLSX === 'undefined') {
+      alert('Excel library not loaded. Refresh the page and try again.');
+      return;
+    }
+    const defs = colDefs || eudrGetExportColDefs_();
+    if (!defs.length) {
+      alert('Select at least one column to export.');
+      return;
+    }
+    const headers = defs.map(function(c) { return c.header; });
+    const rows = (dataRows || []).map(function(d) { return eudrRowToExport_(d, defs); });
+    const wsData = [headers].concat(rows);
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+
+    ws['!cols'] = headers.map(function(h, ci) {
+      let maxLen = String(h).length;
+      rows.forEach(function(r) {
+        maxLen = Math.max(maxLen, String(r[ci] || '').length);
+      });
+      return { wch: Math.min(Math.max(maxLen + 3, 12), 44) };
+    });
+
+    const headerFill = '8B1A1A';
+    const headerFont = 'FFFFFF';
+    const borderThin = {
+      top: { style: 'thin', color: { rgb: 'D4C4C4' } },
+      bottom: { style: 'thin', color: { rgb: 'D4C4C4' } },
+      left: { style: 'thin', color: { rgb: 'D4C4C4' } },
+      right: { style: 'thin', color: { rgb: 'D4C4C4' } },
+    };
+    const statusColIdx = defs.findIndex(function(c) { return c.format === 'status'; });
+
+    headers.forEach(function(h, ci) {
+      const cellAddr = XLSX.utils.encode_cell({ r: 0, c: ci });
+      if (!ws[cellAddr]) ws[cellAddr] = { t: 's', v: h };
+      ws[cellAddr].s = {
+        font: { bold: true, color: { rgb: headerFont }, sz: 11, name: 'Calibri' },
+        fill: { fgColor: { rgb: headerFill } },
+        alignment: { horizontal: 'center', vertical: 'center', wrapText: true },
+        border: borderThin,
+      };
+    });
+
+    if (!ws['!rows']) ws['!rows'] = [];
+    ws['!rows'][0] = { hpt: 30 };
+
+    rows.forEach(function(rowVals, ri) {
+      rowVals.forEach(function(val, ci) {
+        const cellAddr = XLSX.utils.encode_cell({ r: ri + 1, c: ci });
+        if (!ws[cellAddr]) ws[cellAddr] = { t: 's', v: val != null ? String(val) : '' };
+        const isEven = ri % 2 === 0;
+        let fillRgb = isEven ? 'FFFFFF' : 'FBF7F7';
+        let fontRgb = '3D2020';
+        if (ci === statusColIdx) {
+          const sl = String(val || '').trim().toLowerCase();
+          if (sl === 'potential') {
+            fillRgb = 'E8F5E9';
+            fontRgb = '1B5E20';
+          } else if (sl === 'not potential') {
+            fillRgb = 'FFEBEE';
+            fontRgb = 'B71C1C';
+          }
+        }
+        ws[cellAddr].s = {
+          font: { sz: 10, name: 'Calibri', color: { rgb: fontRgb }, bold: ci === statusColIdx },
+          fill: { fgColor: { rgb: fillRgb } },
+          alignment: { vertical: 'center', wrapText: true },
+          border: borderThin,
+        };
+      });
+    });
+
+    if (rows.length) {
+      ws['!autofilter'] = {
+        ref: XLSX.utils.encode_range({
+          s: { r: 0, c: 0 },
+          e: { r: rows.length, c: headers.length - 1 },
+        }),
+      };
+      ws['!freeze'] = { xSplit: 0, ySplit: 1, topLeftCell: 'A2', activePane: 'bottomLeft', state: 'frozen' };
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'EUDR Potential');
+    XLSX.writeFile(wb, filename || ('eudr_potential_' + eudrExcelStamp_() + '.xlsx'), { cellStyles: true });
+  }
+
+  function eudrRefreshExportColList_() {
+    const listEl = document.getElementById('eudrExportColList');
+    if (!listEl) return;
+    listEl.innerHTML = EUDR_EXPORT_COLUMN_DEFS.map(function(col) {
+      const checked = eudrExportSelectedColIds.indexOf(col.id) !== -1 ? ' checked' : '';
+      return ''
+        + '<label class="pf-export-facility-item">'
+        + '<input type="checkbox" name="eudrExportCol" value="' + escHtml(col.id) + '"' + checked + ' />'
+        + '<span>' + escHtml(col.label) + '</span>'
+        + '</label>';
+    }).join('');
+  }
+
+  function eudrReadExportColSelection_() {
+    const checked = Array.from(document.querySelectorAll('#eudrExportColList input[name="eudrExportCol"]:checked'))
+      .map(function(cb) { return cb.value; });
+    const ordered = EUDR_EXPORT_COLUMN_DEFS
+      .map(function(c) { return c.id; })
+      .filter(function(id) { return checked.indexOf(id) !== -1; });
+    eudrExportSelectedColIds = ordered;
+    return eudrGetExportColDefs_(ordered);
+  }
+
+  function eudrRowsForExportScope_(scope) {
+    const q = eudrSearch;
+    return eudrRows.filter(function(d) {
+      if (q && !(d._eudrSearchBlob || '').includes(q)) return false;
+      const status = eudrGetDisplayStatus_(d);
+      if (scope === 'potential') return status === 'Potential';
+      if (scope === 'not-potential') return status === 'Not Potential';
+      if (scope === 'filtered') {
+        if (eudrStatusFilter === 'potential') return status === 'Potential';
+        if (eudrStatusFilter === 'not-potential') return status === 'Not Potential';
+        return true;
+      }
+      return true;
+    });
+  }
+
+  function eudrUpdateExportHint_() {
+    const hint = document.getElementById('eudrExportHint');
+    if (!hint) return;
+    const scopes = ['filtered', 'all', 'potential', 'not-potential'];
+    const parts = scopes.map(function(scope) {
+      return eudrRowsForExportScope_(scope).length + ' ' + scope.replace('-', ' ');
+    });
+    hint.textContent = 'Registry: ' + eudrRows.length + ' mills · '
+      + parts.join(' · ')
+      + '. Pick rows and columns for a formatted Excel file.';
+  }
+
+  function mountEudrExportModal_() {
+    const modal = document.getElementById('eudr-export-modal');
+    if (!modal) return null;
+    if (modal.parentElement !== document.body) document.body.appendChild(modal);
+    return modal;
+  }
+
+  function openEudrExportModal_() {
+    if (!eudrRows.length) {
+      alert('No data to export yet.');
+      return;
+    }
+    const modal = mountEudrExportModal_();
+    if (!modal) return;
+    eudrUpdateExportHint_();
+    eudrRefreshExportColList_();
+    const scopeFiltered = document.querySelector('#eudr-export-modal input[name="eudrExportScope"][value="filtered"]');
+    const scopePotential = document.querySelector('#eudr-export-modal input[name="eudrExportScope"][value="potential"]');
+    const scopeNot = document.querySelector('#eudr-export-modal input[name="eudrExportScope"][value="not-potential"]');
+    const scopeAll = document.querySelector('#eudr-export-modal input[name="eudrExportScope"][value="all"]');
+    if (eudrStatusFilter === 'potential' && scopePotential) scopePotential.checked = true;
+    else if (eudrStatusFilter === 'not-potential' && scopeNot) scopeNot.checked = true;
+    else if (scopeFiltered) scopeFiltered.checked = true;
+    else if (scopeAll) scopeAll.checked = true;
+    modal.style.display = 'flex';
+    modal.setAttribute('aria-hidden', 'false');
+  }
+
+  function closeEudrExportModal_() {
+    const modal = document.getElementById('eudr-export-modal');
+    if (!modal) return;
+    modal.style.display = 'none';
+    modal.setAttribute('aria-hidden', 'true');
+  }
+
+  function confirmEudrExport_() {
+    const colDefs = eudrReadExportColSelection_();
+    if (!colDefs.length) {
+      alert('Select at least one column.');
+      return;
+    }
+    const scopeEl = document.querySelector('#eudr-export-modal input[name="eudrExportScope"]:checked');
+    const scope = scopeEl ? scopeEl.value : 'filtered';
+    const rows = eudrRowsForExportScope_(scope);
+    if (!rows.length) {
+      alert('No rows match the selected export scope.');
+      return;
+    }
+    const scopeTag = scope === 'filtered' ? 'view' : scope.replace('-', '_');
+    writeEudrExcelFile_(rows, colDefs, 'eudr_potential_' + scopeTag + '_' + eudrExcelStamp_() + '.xlsx');
+    closeEudrExportModal_();
+  }
+
   function renderEudrTable_() {
     const body = document.getElementById('eudrTableBody');
     const table = document.getElementById('eudrTable');
@@ -17136,6 +17428,7 @@ function initDashboardApp() {
     const clearEl = document.getElementById('eudrSearchClear');
     const btnRefresh = document.getElementById('btn-refresh-eudr');
     const btnSync = document.getElementById('btn-sync-eudr');
+    const btnExport = document.getElementById('btn-export-eudr');
     const statusFilterEl = document.getElementById('eudrStatusFilter');
     const detailOverlay = document.getElementById('eudrDetailOverlay');
     if (!searchEl || !clearEl || !btnRefresh) return;
@@ -17173,6 +17466,28 @@ function initDashboardApp() {
     btnRefresh.addEventListener('click', function() {
       eudrLoaded = false;
       loadEudrData(true);
+    });
+
+    if (btnExport) {
+      btnExport.addEventListener('click', openEudrExportModal_);
+    }
+
+    ['eudrExportModalClose', 'eudrExportCancel', 'eudrExportModalBackdrop'].forEach(function(id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('click', closeEudrExportModal_);
+    });
+    document.getElementById('eudrExportConfirm')?.addEventListener('click', confirmEudrExport_);
+    document.getElementById('eudrExportColAll')?.addEventListener('click', function() {
+      eudrExportSelectedColIds = EUDR_EXPORT_COLUMN_DEFS.map(function(c) { return c.id; });
+      eudrRefreshExportColList_();
+    });
+    document.getElementById('eudrExportColDefault')?.addEventListener('click', function() {
+      eudrExportSelectedColIds = EUDR_EXPORT_DEFAULT_COL_IDS.slice();
+      eudrRefreshExportColList_();
+    });
+    document.getElementById('eudrExportColNone')?.addEventListener('click', function() {
+      eudrExportSelectedColIds = [];
+      eudrRefreshExportColList_();
     });
 
     if (btnSync) {

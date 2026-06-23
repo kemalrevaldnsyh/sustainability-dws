@@ -65,6 +65,37 @@
             </div>
             <div class="pf-export-modal-body">
               <p class="pf-export-hint">One click downloads <strong>2 PDF files</strong>: a Summary (KPI cards per section, like the dashboard) and a Detail file (full row tables).</p>
+              <div class="mrd-export-period-row">
+                <span class="pf-export-label">Reporting period (PDF header)</span>
+                <div class="mrd-export-period-fields">
+                  <div class="pf-period-group">
+                    <label class="pf-period-label" for="mrdExportYearSel">Year</label>
+                    <select id="mrdExportYearSel" class="pf-period-select">
+                      <option value="2026">2026</option>
+                      <option value="2025">2025</option>
+                      <option value="2024">2024</option>
+                    </select>
+                  </div>
+                  <div class="pf-period-group">
+                    <label class="pf-period-label" for="mrdExportMonthSel">Month</label>
+                    <select id="mrdExportMonthSel" class="pf-period-select" title="Shown as Reporting period in Summary &amp; Detail PDFs">
+                      <option value="1">Jan</option>
+                      <option value="2">Feb</option>
+                      <option value="3">Mar</option>
+                      <option value="4">Apr</option>
+                      <option value="5">May</option>
+                      <option value="6">Jun</option>
+                      <option value="7">Jul</option>
+                      <option value="8">Aug</option>
+                      <option value="9">Sep</option>
+                      <option value="10">Oct</option>
+                      <option value="11">Nov</option>
+                      <option value="12">Dec</option>
+                    </select>
+                  </div>
+                </div>
+                <p class="mrd-export-period-hint">This label appears on both PDF files. Data uses the <strong>previous month</strong> rule (e.g. June 2026 → May 2026 data).</p>
+              </div>
               <div class="pf-export-facility-toolbar">
                 <span class="pf-export-label">Sections</span>
                 <button type="button" class="pf-export-link-btn" id="mrdExportSelectAll">Select all</button>

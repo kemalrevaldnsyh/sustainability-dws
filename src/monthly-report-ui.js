@@ -112,8 +112,22 @@ function getReportPeriod_() {
 
 function getDataPeriod_() {
   const report = getReportPeriod_();
-  const meta = mrdReportHeaderMeta_(report.year, report.month);
+  return mrdDataPeriodFromReport_(report.year, report.month);
+}
+
+function mrdDataPeriodFromReport_(year, month) {
+  const meta = mrdReportHeaderMeta_(year, month);
   return { year: meta.dataYear, month: meta.dataMonth };
+}
+
+function mrdResolveReportPeriod_(override) {
+  if (override && (override.year != null || override.month != null)) {
+    return {
+      year: override.year != null ? String(override.year) : _year,
+      month: override.month != null ? String(override.month) : _month,
+    };
+  }
+  return getReportPeriod_();
 }
 
 function parseMonthFromDate(raw) {
@@ -310,6 +324,26 @@ function mrdRefreshExportSectionList_() {
   }).join('');
 }
 
+function mrdSyncExportPeriodFromPage_() {
+  const report = getReportPeriod_();
+  const yearSel = document.getElementById('mrdExportYearSel');
+  const monthSel = document.getElementById('mrdExportMonthSel');
+  if (yearSel) yearSel.value = report.year || String(new Date().getFullYear());
+  if (monthSel) {
+    const m = report.month || String(new Date().getMonth() + 1);
+    monthSel.value = m;
+  }
+}
+
+function mrdExportReportPeriod_() {
+  const yearSel = document.getElementById('mrdExportYearSel');
+  const monthSel = document.getElementById('mrdExportMonthSel');
+  return {
+    year: yearSel ? yearSel.value : _year,
+    month: monthSel ? monthSel.value : _month,
+  };
+}
+
 function mrdOpenExportModal_() {
   if (!_snapshot) {
     alert('Data not loaded yet — wait a moment and try again.');
@@ -321,6 +355,7 @@ function mrdOpenExportModal_() {
   }
   const modal = document.getElementById('mrd-export-modal');
   if (!modal) return;
+  mrdSyncExportPeriodFromPage_();
   mrdRefreshExportSectionList_();
   modal.style.display = 'flex';
   modal.setAttribute('aria-hidden', 'false');
@@ -363,6 +398,11 @@ async function exportMonthlyReport_(exportOpts) {
   if (btn) { btn.disabled = true; btn.textContent = 'Preparing…'; }
 
   try {
+    const reportPeriod = exportOpts.reportPeriod || getReportPeriod_();
+    if (!reportPeriod.month) {
+      alert('Select a reporting month for the PDF header.');
+      return;
+    }
     syncPeriodFromUi_();
     if (sections.includes('sdd') && _sddCache.length === 0 && _deps.fetchSddList) {
       try {
@@ -386,7 +426,20 @@ async function exportMonthlyReport_(exportOpts) {
       bestEudr = extraEudr.slice();
     }
     _snapshot = rebuildSnapshot_({ eudrPotential: bestEudr.length ? bestEudr : undefined });
-    const s = _snapshot;
+    const pagePeriod = getReportPeriod_();
+    const periodChanged = String(reportPeriod.year) !== String(pagePeriod.year)
+      || String(reportPeriod.month || '') !== String(pagePeriod.month || '');
+    const exportDataPeriod = mrdDataPeriodFromReport_(reportPeriod.year, reportPeriod.month);
+    const s = periodChanged
+      ? buildSnapshotSync({
+        sddRows: _sddCache,
+        eudrPotential: (_snapshot && _snapshot.eudrPotential) || [],
+        eudrLoading: false,
+        sddLoading: false,
+        reportPeriod: reportPeriod,
+        facilityBundles: _facilityBundles,
+      })
+      : _snapshot;
 
     const exportSections = mrdPdfSectionsNoDupHighRisk_(sections.slice());
 
@@ -400,7 +453,9 @@ async function exportMonthlyReport_(exportOpts) {
       return isNblYes(item.nbl) && matchesSearch(item.search);
     }));
 
-    let facilityBundles = _deps.getFacilityBundles ? _deps.getFacilityBundles(getDataPeriod_().year) : [];
+    let facilityBundles = _deps.getFacilityBundles
+      ? _deps.getFacilityBundles(exportDataPeriod.year || reportPeriod.year)
+      : [];
     if (_search) {
       const q = _search;
       facilityBundles = facilityBundles.filter(function(b) {
@@ -416,11 +471,10 @@ async function exportMonthlyReport_(exportOpts) {
       eudrPotential: eudrList.length,
     });
 
-    const report = getReportPeriod_();
     await buildMonthlyReportPdfPair_({
       getJsPDF: _deps.getJsPDF,
-      year: report.year,
-      month: report.month,
+      year: reportPeriod.year,
+      month: reportPeriod.month,
       sections: exportSections,
       data: {
         stats: exportStats,
@@ -494,16 +548,21 @@ function mrdBindExportModalOnce_() {
         alert('Select at least one section to export.');
         return;
       }
+      const reportPeriod = mrdExportReportPeriod_();
+      if (!reportPeriod.month) {
+        alert('Select a reporting month for the PDF header.');
+        return;
+      }
       mrdCloseExportModal_();
-      await exportMonthlyReport_({ sections: sections });
+      await exportMonthlyReport_({ sections: sections, reportPeriod: reportPeriod });
     });
   }
 }
 
 function buildSnapshotSync(opts) {
   opts = opts || {};
-  const reportPeriod = getReportPeriod_();
-  const dataPeriod = getDataPeriod_();
+  const reportPeriod = mrdResolveReportPeriod_(opts.reportPeriod);
+  const dataPeriod = mrdDataPeriodFromReport_(reportPeriod.year, reportPeriod.month);
   const dataYear = dataPeriod.year;
   const dataMonth = dataPeriod.month;
   const millData = (_deps.getMillData() || []);
