@@ -23576,6 +23576,10 @@ function initDashboardApp() {
     });
   }
 
+  // Supply import state — must be declared before initSupplyImport() runs loadSupplyDraftsFromServer_().
+  window._supplyDraftBatches = window._supplyDraftBatches || [];
+  let _supplyBuildTaskInFlight = null;
+
   (function initSupplyImport() {
     // ── Year options ─────────────────────────────────────────────────────────
     const yearSel = document.getElementById('supply-import-year');
@@ -23849,10 +23853,6 @@ function initDashboardApp() {
   }
 
   // ── Build task list in panel ──────────────────────────────────────────────
-  // State: current open/editing draft batches
-  window._supplyDraftBatches = window._supplyDraftBatches || [];
-  let _supplyBuildTaskInFlight = null;
-
   async function buildSupplyTaskList_(parsedRows, month, year, supplyType) {
     if (_supplyBuildTaskInFlight) return _supplyBuildTaskInFlight;
     _supplyBuildTaskInFlight = buildSupplyTaskListImpl_(parsedRows, month, year, supplyType)
