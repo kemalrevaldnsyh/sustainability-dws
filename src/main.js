@@ -6273,21 +6273,6 @@ function initDashboardApp() {
     return millRowHasCompanyName_(row);
   }
 
-  function millDedupKey_(row) {
-    const uml = millPickField_(row, ['UML ID', 'UML Id', 'UML_ID', 'MILL ID', 'Mill ID']);
-    const y = String(millYearVal(row) || '').trim().toLowerCase();
-    const m = String(millMonthVal(row) || '').trim().toLowerCase();
-    const q = String(millQuarterVal(row) || '').trim().toLowerCase();
-    const period = m || q || '';
-    if (uml) return 'uml:' + uml.toLowerCase() + '|y:' + y + '|p:' + period;
-    // Tanpa UML ID: jangan merge — tiap baris sheet tetap tampil
-    if (row._row != null) return 'row:' + row._row;
-    return 'noml:' + [
-      pickMillGroupName_(row), pickMillCompanyName_(row),
-      millPickField_(row, ['MILL NAME', 'Mill Name']), y, period,
-    ].map(function(x) { return String(x || '').trim().toLowerCase(); }).join('|');
-  }
-
   function millRegistryRowScore_(row) {
     let score = 0;
     Object.keys(row || {}).forEach(function(k) {
@@ -6701,7 +6686,7 @@ function initDashboardApp() {
 
   function millRowsAfterRegistryDimFilters() {
     return allData.filter(function(d) {
-      return millRowHasRegistryIdentity_(d)
+      return millRowHasCompanyName_(d)
         && millRowMatchesChipAndSearch(d)
         && millRowMatchesPdfDimFilters(d);
     });
@@ -7081,28 +7066,10 @@ function initDashboardApp() {
       const rawRows = await apiGet('mill');
       const rawData = (Array.isArray(rawRows) ? rawRows : [])
         .map(normalizeMillApiRow)
-        .filter(millRowHasRegistryIdentity_);
+        .filter(millRowHasCompanyName_);
       allDataRaw = rawData.map(prepareMillRowPerfCache);
-
-      // Dedup hanya untuk baris dengan UML ID + periode sama (ambil yang paling lengkap).
-      // Baris tanpa UML ID tidak di-merge — semua company name tetap tampil.
-      const dedupMap = new Map();
-      const noUmlRows = [];
-      rawData.forEach(function(row) {
-        const uml = millPickField_(row, ['UML ID', 'UML Id', 'UML_ID', 'MILL ID', 'Mill ID']);
-        if (!uml) {
-          noUmlRows.push(Object.assign({}, row));
-          return;
-        }
-        const key = millDedupKey_(row);
-        const existing = dedupMap.get(key);
-        if (!existing || millRegistryRowScore_(row) > millRegistryRowScore_(existing)) {
-          dedupMap.set(key, Object.assign({}, row));
-        }
-      });
-      allData = Array.from(dedupMap.values()).concat(noUmlRows).map(prepareMillRowPerfCache);
-      // If no IDs were found (different column name), fall back to raw
-      if (allData.length === 0 && rawData.length > 0) allData = allDataRaw.slice();
+      // Satu baris sheet = satu baris tabel — tidak ada dedup/merge by UML atau field lain.
+      allData = allDataRaw.slice();
 
       // ── SORT by Date Imported DESC for Top 5 ──
       function parseDateImported(row) {

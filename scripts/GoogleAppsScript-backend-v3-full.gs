@@ -1282,13 +1282,17 @@ function facilityProfileRowHasContent_(obj) {
 
 function millRowHasContent_(obj) {
   if (!obj) return false;
-  return !!(
-    String(obj['MILL NAME'] || '').trim() ||
-    String(obj['COMPANY NAME'] || '').trim() ||
-    String(obj['GROUP NAME'] || '').trim() ||
-    String(obj['UML ID'] || '').trim() ||
-    String(obj['COMPANY CODE'] || '').trim()
-  );
+  var co = String(obj['COMPANY NAME'] || obj['Company Name'] || '').trim();
+  if (co && co !== '—' && co !== '-') return true;
+  Object.keys(obj).forEach(function(k) {
+    if (k === '_row' || co) return;
+    var nk = String(k).replace(/\s+/g, ' ').trim();
+    if (!/^company(\s*name)?$/i.test(nk)) return;
+    if (/group|trader|code|facility|supply|nbl|profile|owner|tml|ffb/i.test(nk)) return;
+    var v = String(obj[k] || '').trim();
+    if (v && v !== '—' && v !== '-') co = v;
+  });
+  return !!co;
 }
 
 function ensureQuestionnaireMonitoringHeaders_() {
