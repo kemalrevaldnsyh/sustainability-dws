@@ -173,9 +173,9 @@ const SUPPLY_DRAFT_HEADERS = [
   'COORDINATES', 'MILL CATEGORY', 'MILL CAPACITY (TON/HOUR)',
   'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN', 'SCORE',
   'MILL LOC', 'COMPLIMENT/NOT COMPLIMENT',
-  'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH', 'LEGALITY',
-  'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
-  'HUMAN RIGHT', 'SAFETY', 'SOCIAL', 'ENVIRONMENT', 'TOTAL GRIEVANCES',
+  'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH',
+  'LEGALITY GRIEVANCE', 'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+  'HUMAN RIGHTS GRIEVANCE', 'SAFETY GRIEVANCE', 'SOCIAL GRIEVANCE', 'ENVIRONMENT GRIEVANCE',
   'NDPE', 'HRDD', 'TOTAL POLICY',
   'CERTIFICATION', 'TOTAL CERTIFICATION', 'TOTAL SCORE',
   'SUPPLIER LEVEL', 'BUYER NO BUY LIST', 'VOLUME SUPPLY STATUS',
@@ -5479,8 +5479,10 @@ function mergeReferenceIdentityIntoPatchGs_(patch, refObj) {
   var identityKeys = [
     'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID', 'COMPANY CODE',
     'ADDRESS', 'PROVINCE', 'COORDINATES', 'MILL CATEGORY', 'MILL CAPACITY (TON/HOUR)',
-    'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN', 'NDPE', 'HRDD', 'LEGALITY',
+    'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN', 'NDPE', 'HRDD',
     'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH', 'MILL LOC', 'CERTIFICATION', 'SOURCE TYPE',
+    'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+    'LEGALITY GRIEVANCE', 'HUMAN RIGHTS GRIEVANCE', 'SAFETY GRIEVANCE', 'SOCIAL GRIEVANCE', 'ENVIRONMENT GRIEVANCE',
   ];
   identityKeys.forEach(function(key) {
     if (millIsFormulaColumnGs_(key)) return;
@@ -5488,6 +5490,12 @@ function mergeReferenceIdentityIntoPatchGs_(patch, refObj) {
     var v = refObj[key];
     if (v !== undefined && v !== null && String(v).trim() !== '') out[key] = v;
   });
+  if (!millCapacityFromObjGs_(out) && refObj) {
+    var refCap = millCapacityFromObjGs_(refObj);
+    if (refCap !== undefined && refCap !== null && String(refCap).trim() !== '') {
+      out['MILL CAPACITY (TON/HOUR)'] = refCap;
+    }
+  }
   return out;
 }
 
@@ -5506,7 +5514,9 @@ function millAppendSupplyRowGs_(millSheet, millHeaders, row, millData, state) {
     Object.assign({}, buildSupplyIdentityPatchFromDraftGs_(row), buildSupplyPatchFromDraftGs_(row)),
     ref
   );
+  supplyMapLegacyGrievanceIntoPatchGs_(patch, row, ref);
   resolveMillQuarterYearKeys_(patch, millHeaders);
+  resolveMillCapacityKeyOnPatch_(patch, millHeaders);
   patch = millStripFormulaFromPatchGs_(patch);
   if (!Object.keys(patch).length) return 0;
 
@@ -5625,14 +5635,45 @@ function supplyFacilityFromDraftGs_(row, field, submitKind) {
   return '';
 }
 
+function supplyGrievanceValFromObjsGs_(objs, canonical, legacyKeys) {
+  var keys = [canonical].concat(legacyKeys || []);
+  for (var oi = 0; oi < objs.length; oi++) {
+    var obj = objs[oi];
+    if (!obj) continue;
+    for (var ki = 0; ki < keys.length; ki++) {
+      var v = obj[keys[ki]];
+      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+  }
+  return '';
+}
+
+function supplyMapLegacyGrievanceIntoPatchGs_(patch, row, refObj) {
+  var objs = [row, refObj];
+  [
+    ['LEGALITY GRIEVANCE', ['LEGALITY']],
+    ['HUMAN RIGHTS GRIEVANCE', ['HUMAN RIGHT', 'HUMAN RIGHTS']],
+    ['SAFETY GRIEVANCE', ['SAFETY']],
+    ['SOCIAL GRIEVANCE', ['SOCIAL']],
+    ['ENVIRONMENT GRIEVANCE', ['ENVIRONMENT']],
+  ].forEach(function(pair) {
+    var canon = pair[0];
+    if (patch[canon] !== undefined && patch[canon] !== null && String(patch[canon]).trim() !== '') return;
+    var v = supplyGrievanceValFromObjsGs_(objs, canon, pair[1]);
+    if (v !== '') patch[canon] = v;
+  });
+}
+
 function buildSupplyIdentityPatchFromDraftGs_(row) {
   var kind = supplySubmitKindFromDraftGs_(row);
   var fillKeys = [
     'MONTH', 'YEAR', 'QUARTER', 'SOURCE TYPE', 'GROUP NAME', 'COMPANY NAME', 'MILL NAME',
     'UML ID', 'COMPANY CODE', 'ADDRESS', 'PROVINCE', 'COORDINATES', 'MILL CATEGORY',
     'MILL CAPACITY (TON/HOUR)', 'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN',
-    'NDPE', 'HRDD', 'LEGALITY', 'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH',
+    'NDPE', 'HRDD', 'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH',
     'MILL LOC', 'CERTIFICATION',
+    'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+    'LEGALITY GRIEVANCE', 'HUMAN RIGHTS GRIEVANCE', 'SAFETY GRIEVANCE', 'SOCIAL GRIEVANCE', 'ENVIRONMENT GRIEVANCE',
   ];
   var patch = {};
   fillKeys.forEach(function(k) {
@@ -5640,6 +5681,10 @@ function buildSupplyIdentityPatchFromDraftGs_(row) {
     var v = row[k];
     if (v !== undefined && v !== null && String(v).trim() !== '') patch[k] = v;
   });
+  var cap = millCapacityFromObjGs_(row);
+  if (cap !== undefined && cap !== null && String(cap).trim() !== '') {
+    patch['MILL CAPACITY (TON/HOUR)'] = cap;
+  }
   if (kind === 'CPO' || kind === 'BOTH') {
     if (row['FACILITY NAME CPO']) patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
     if (row['SUPPLY CPO'] != null && String(row['SUPPLY CPO']).trim() !== '') patch['SUPPLY CPO'] = row['SUPPLY CPO'];
@@ -5648,6 +5693,7 @@ function buildSupplyIdentityPatchFromDraftGs_(row) {
     if (row['FACILITY NAME PK']) patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
     if (row['SUPPLY PK'] != null && String(row['SUPPLY PK']).trim() !== '') patch['SUPPLY PK'] = row['SUPPLY PK'];
   }
+  supplyMapLegacyGrievanceIntoPatchGs_(patch, row, null);
   return patch;
 }
 

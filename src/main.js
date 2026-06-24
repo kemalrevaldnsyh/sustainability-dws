@@ -5314,7 +5314,54 @@ function initDashboardApp() {
     window.refreshSavedScreeningListGlobal();
   }
 
-  const MILL_FIELDS = ['MONTH','YEAR','COMPANY CODE','SOURCE TYPE','GROUP NAME','COMPANY NAME','MILL NAME','UML ID','ADDRESS','PROVINCE','COORDINATES','MILL CATEGORY','MILL CAPACITY (TON/HOUR)','HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','SCORE','MILL LOC','COMPLIMENT/NOT COMPLIMENT','DEFORESTATION WIDTH','BURN AREA WIDTH','PEAT WIDTH','LEGALITY','DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT','TOTAL GRIEVANCES','NDPE','HRDD','TOTAL POLICY','CERTIFICATION','TOTAL CERTIFICATION','TOTAL SCORE','SUPPLIER LEVEL','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','PRIORITY ENGAGEMENT','SUPPLIER STATUS','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'];
+  const MILL_LEGALITY_GRIEVANCE = 'LEGALITY GRIEVANCE';
+  const MILL_HUMAN_RIGHTS_GRIEVANCE = 'HUMAN RIGHTS GRIEVANCE';
+  const MILL_SAFETY_GRIEVANCE = 'SAFETY GRIEVANCE';
+  const MILL_SOCIAL_GRIEVANCE = 'SOCIAL GRIEVANCE';
+  const MILL_ENVIRONMENT_GRIEVANCE = 'ENVIRONMENT GRIEVANCE';
+
+  const MILL_GRIEVANCE_FLAG_ALIASES_ = {
+    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY', 'Legality'],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHT', 'HUMAN RIGHTS', 'Human Right', 'Human Rights'],
+    [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY', 'Safety'],
+    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL', 'Social'],
+    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT', 'Environment'],
+  };
+
+  const MILL_GRIEVANCE_FLAG_FIELDS_ = [
+    'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+    MILL_LEGALITY_GRIEVANCE, MILL_HUMAN_RIGHTS_GRIEVANCE, MILL_SAFETY_GRIEVANCE,
+    MILL_SOCIAL_GRIEVANCE, MILL_ENVIRONMENT_GRIEVANCE,
+  ];
+
+  function millGrievanceFlagVal_(row, canonical) {
+    if (!row) return '';
+    const keys = MILL_GRIEVANCE_FLAG_ALIASES_[canonical] || [canonical];
+    return millPickField_(row, keys) || '';
+  }
+
+  function millNormalizeGrievanceFlagsOnRow_(row) {
+    if (!row || typeof row !== 'object') return;
+    Object.keys(MILL_GRIEVANCE_FLAG_ALIASES_).forEach(function(canonical) {
+      const v = millGrievanceFlagVal_(row, canonical);
+      if (v !== undefined && v !== null && String(v).trim() !== '') row[canonical] = v;
+    });
+  }
+
+  function millGrievanceFieldLabel_(field) {
+    const labels = {
+      'LEGALITY GRIEVANCE': 'Legality Grievance',
+      'HUMAN RIGHTS GRIEVANCE': 'Human Rights Grievance',
+      'SAFETY GRIEVANCE': 'Safety Grievance',
+      'SOCIAL GRIEVANCE': 'Social Grievance',
+      'ENVIRONMENT GRIEVANCE': 'Environment Grievance',
+      'DEFORESTATION GRIEVANCES': 'Deforestation Grievances',
+      'BURN AREA GRIEVANCES': 'Burn Area Grievances',
+    };
+    return labels[field] || field;
+  }
+
+  const MILL_FIELDS = ['MONTH','YEAR','COMPANY CODE','SOURCE TYPE','GROUP NAME','COMPANY NAME','MILL NAME','UML ID','ADDRESS','PROVINCE','COORDINATES','MILL CATEGORY','MILL CAPACITY (TON/HOUR)','HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','SCORE','MILL LOC','COMPLIMENT/NOT COMPLIMENT','DEFORESTATION WIDTH','BURN AREA WIDTH','PEAT WIDTH',MILL_LEGALITY_GRIEVANCE,'DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES',MILL_HUMAN_RIGHTS_GRIEVANCE,MILL_SAFETY_GRIEVANCE,MILL_SOCIAL_GRIEVANCE,MILL_ENVIRONMENT_GRIEVANCE,'TOTAL GRIEVANCES','NDPE','HRDD','TOTAL POLICY','CERTIFICATION','TOTAL CERTIFICATION','TOTAL SCORE','SUPPLIER LEVEL','BUYER NO BUY LIST','VOLUME SUPPLY STATUS','RECOMMENDATION LEVEL','PRIORITY ENGAGEMENT','SUPPLIER STATUS','RISK LEVEL','RESULT RISK LEVEL','FACILITY NAME CPO','FACILITY NAME PK','PRODUCT SUPPLY'];
 
   /** Sheet formulas — jangan ditulis supply submit / form save (rumus di belakang). */
   const MILL_SHEET_COMPUTED_FIELDS = new Set([
@@ -5444,9 +5491,9 @@ function initDashboardApp() {
   });
 
   // Field definitions for mill form
-  const YESNO_FIELDS = ['HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','LEGALITY','DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT','NDPE','HRDD'];
+  const YESNO_FIELDS = ['HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN',MILL_LEGALITY_GRIEVANCE,'DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES',MILL_HUMAN_RIGHTS_GRIEVANCE,MILL_SAFETY_GRIEVANCE,MILL_SOCIAL_GRIEVANCE,MILL_ENVIRONMENT_GRIEVANCE,'NDPE','HRDD'];
   const SCORE_SOURCES = ['HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN'];           // → SCORE
-  const GRIEVANCE_SOURCES = ['DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT']; // → TOTAL GRIEVANCES
+  const GRIEVANCE_SOURCES = MILL_GRIEVANCE_FLAG_FIELDS_.slice(); // → TOTAL GRIEVANCES
   const POLICY_SOURCES = ['NDPE','HRDD'];                                             // → TOTAL POLICY
   const AUTO_FIELDS = ['SCORE','TOTAL GRIEVANCES','TOTAL POLICY','TOTAL SCORE'];      // auto-calculated
 
@@ -5522,9 +5569,9 @@ function initDashboardApp() {
 
   const FIELD_SECTIONS = [
     { title: 'Identitas Mill', fields: ['MONTH','YEAR','COMPANY CODE','SOURCE TYPE','GROUP NAME','COMPANY NAME','MILL NAME','UML ID','PROVINCE','ADDRESS','COORDINATES','MILL CATEGORY','MILL CAPACITY (TON/HOUR)'] },
-    { title: 'Legalitas', fields: ['HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN','LEGALITY'] },
+    { title: 'Legalitas', fields: ['HGU/HGB','IZIN LOKASI','IUP','IZIN LINGKUNGAN'] },
     { title: 'Spatial & Peat', fields: ['DEFORESTATION WIDTH','BURN AREA WIDTH','PEAT WIDTH','MILL LOC'] },
-    { title: 'Grievances', fields: ['DEFORESTATION GRIEVANCES','BURN AREA GRIEVANCES','HUMAN RIGHT','SAFETY','SOCIAL','ENVIRONMENT'] },
+    { title: 'Grievances', fields: MILL_GRIEVANCE_FLAG_FIELDS_.slice() },
     { title: 'Policy', fields: ['NDPE','HRDD'] },
     { title: 'Sertifikasi', fields: ['CERTIFICATION'] },
   ];
@@ -5534,8 +5581,9 @@ function initDashboardApp() {
   }
 
   // ─── CUSTOM DROPDOWN BUILDER ────────────────────────────
-  function buildCustomSelect(field, options, currentVal, isYesNo, isFull) {
+  function buildCustomSelect(field, options, currentVal, isYesNo, isFull, displayLabel) {
     const wrapClass = ['custom-select-wrap', isYesNo ? 'yesno-wrap' : '', isFull ? '' : ''].join(' ').trim();
+    const label = displayLabel || field;
     const arrowSvg = `<svg class="cs-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg>`;
     const checkSvg = `<svg class="cs-opt-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>`;
 
@@ -5558,7 +5606,7 @@ function initDashboardApp() {
     }
 
     return `<div class="form-field${isFull ? ' full' : ''}">
-      <label>${field}</label>
+      <label>${label}</label>
       <input type="hidden" data-field="${field}" value="${currentVal}">
       <div class="${wrapClass}${currentVal==='Yes'?' val-yes':currentVal==='No'?' val-no':''}">
         <div class="custom-select-trigger">${triggerInner}${arrowSvg}</div>
@@ -5655,6 +5703,7 @@ function initDashboardApp() {
   function buildMillForm(data) {
     const grid = document.getElementById('modalFormGrid');
     grid.className = 'modal-form-grid cols-1';
+    if (data) millNormalizeGrievanceFlagsOnRow_(data);
     let html = '';
     FIELD_SECTIONS.forEach(sec => {
       const visibleFields = sec.fields.filter(f => !millIsSheetComputedField_(f));
@@ -5662,6 +5711,9 @@ function initDashboardApp() {
       html += `<div class="mill-form-section"><div class="mill-form-section-title">${sec.title}</div><div class="mill-form-grid">`;
       visibleFields.forEach(f => {
         let val = data ? (data[f] || '') : '';
+        if (MILL_GRIEVANCE_FLAG_ALIASES_[f] && data) {
+          val = millGrievanceFlagVal_(data, f) || val;
+        }
         if (f === 'SOURCE TYPE' && data) {
           val = millSourceTypeValFromRow_(data) || val;
         }
@@ -5669,8 +5721,9 @@ function initDashboardApp() {
           val = millCapacityFromRow_(data) || val;
         }
         const isFull = f === 'ADDRESS' || f === 'COORDINATES';
+        const fieldLabel = millGrievanceFieldLabel_(f);
         if (YESNO_FIELDS.includes(f)) {
-          html += buildCustomSelect(f, ['Yes','No'], val, true, isFull);
+          html += buildCustomSelect(f, ['Yes','No'], val, true, isFull, fieldLabel);
         } else if (MILL_HA_WIDTH_FIELDS.has(f)) {
           html += buildMillHaWidthField_(f, val);
         } else if (DROPDOWN_FIELDS[f]) {
@@ -7867,10 +7920,18 @@ function initDashboardApp() {
     'PEAT WIDTH': ['PEAT WIDTH', 'Peat Width'],
     'NDPE': ['NDPE'],
     'HRDD': ['HRDD'],
+    [MILL_LEGALITY_GRIEVANCE]: MILL_GRIEVANCE_FLAG_ALIASES_[MILL_LEGALITY_GRIEVANCE],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: MILL_GRIEVANCE_FLAG_ALIASES_[MILL_HUMAN_RIGHTS_GRIEVANCE],
+    [MILL_SAFETY_GRIEVANCE]: MILL_GRIEVANCE_FLAG_ALIASES_[MILL_SAFETY_GRIEVANCE],
+    [MILL_SOCIAL_GRIEVANCE]: MILL_GRIEVANCE_FLAG_ALIASES_[MILL_SOCIAL_GRIEVANCE],
+    [MILL_ENVIRONMENT_GRIEVANCE]: MILL_GRIEVANCE_FLAG_ALIASES_[MILL_ENVIRONMENT_GRIEVANCE],
   };
 
   const MILL_PROFILE_YESNO_KEYS_ = new Set([
     'NDPE', 'HRDD',
+    'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+    MILL_LEGALITY_GRIEVANCE, MILL_HUMAN_RIGHTS_GRIEVANCE, MILL_SAFETY_GRIEVANCE,
+    MILL_SOCIAL_GRIEVANCE, MILL_ENVIRONMENT_GRIEVANCE,
   ]);
 
   /** Sheet column LEGALITY SCORE (or SCORE): 1 → Complete, 0 → Not Complete. */
@@ -7941,8 +8002,19 @@ function initDashboardApp() {
       {
         title: 'Legality',
         fields: [
-          ['LEGALITY', 'Legality'],
           ['MILL LOC', 'Mill Location'],
+        ],
+      },
+      {
+        title: 'Grievances',
+        fields: [
+          ['DEFORESTATION GRIEVANCES', 'Deforestation Grievances'],
+          ['BURN AREA GRIEVANCES', 'Burn Area Grievances'],
+          [MILL_LEGALITY_GRIEVANCE, 'Legality Grievance'],
+          [MILL_HUMAN_RIGHTS_GRIEVANCE, 'Human Rights Grievance'],
+          [MILL_SAFETY_GRIEVANCE, 'Safety Grievance'],
+          [MILL_SOCIAL_GRIEVANCE, 'Social Grievance'],
+          [MILL_ENVIRONMENT_GRIEVANCE, 'Environment Grievance'],
         ],
       },
       {
@@ -7972,14 +8044,12 @@ function initDashboardApp() {
       return `
       <div class="mp-section">
         <div class="mp-section-title">${sec.title}</div>
-        <div class="mp-grid${visibleFields.length <= 4 ? ' cols2' : ''}${sec.title === 'Legality' ? ' legalitas-stack' : ''}${sec.title === 'Spatial' ? ' spatial-stack' : ''}${sec.title === 'Policy' ? ' policy-stack' : ''}">
+        <div class="mp-grid${visibleFields.length <= 4 ? ' cols2' : ''}${sec.title === 'Legality' ? ' legalitas-stack' : ''}${sec.title === 'Grievances' ? ' grievances-stack' : ''}${sec.title === 'Spatial' ? ' spatial-stack' : ''}${sec.title === 'Policy' ? ' policy-stack' : ''}">
           ${visibleFields.map(function(fl) {
             const key = fl[0];
             const label = fl[1];
             let val = '';
-            if (key === 'LEGALITY') {
-              val = millProfileLegalityFromScore_(d);
-            } else if (key === 'SOURCE TYPE') {
+            if (key === 'SOURCE TYPE') {
               val = millSourceTypeValFromRow_(d);
             } else if (MILL_HA_WIDTH_FIELDS.has(key)) {
               const raw = millProfileResolveField_(d, key);
@@ -8042,7 +8112,16 @@ function initDashboardApp() {
       const periodText = (year || month) ? ('Period: ' + [year ? year : '', month ? (millMonthLabel_(parseInt(month, 10)) + ' (' + month + ')') : ''].filter(Boolean).join(' ')) : '';
       const sections = [
         { title: 'Mill Identity', fields: [['COMPANY CODE','Company Code'], ['MILL NAME','Mill Name'], ['SOURCE TYPE','Source Type'], ['ADDRESS','Address'], ['PROVINCE','Province'], ['COORDINATES','Coordinates'], ['MILL CATEGORY','Mill Category'], ['UML ID','UML ID'], ['MILL CAPACITY (TON/HOUR)','Capacity (Ton/Hour)']] },
-        { title: 'Legality', fields: [['LEGALITY', 'Legality'], ['MILL LOC', 'Mill Location']] },
+        { title: 'Legality', fields: [['MILL LOC', 'Mill Location']] },
+        { title: 'Grievances', fields: [
+          ['DEFORESTATION GRIEVANCES', 'Deforestation Grievances'],
+          ['BURN AREA GRIEVANCES', 'Burn Area Grievances'],
+          [MILL_LEGALITY_GRIEVANCE, 'Legality Grievance'],
+          [MILL_HUMAN_RIGHTS_GRIEVANCE, 'Human Rights Grievance'],
+          [MILL_SAFETY_GRIEVANCE, 'Safety Grievance'],
+          [MILL_SOCIAL_GRIEVANCE, 'Social Grievance'],
+          [MILL_ENVIRONMENT_GRIEVANCE, 'Environment Grievance'],
+        ] },
         { title: 'Certification', fields: [['CERTIFICATION','Certification']] },
         { title: 'Spatial', fields: [['DEFORESTATION WIDTH','Deforestation Width (Ha)'], ['BURN AREA WIDTH','Burn Area Width (Ha)'], ['PEAT WIDTH','Peat Width (Ha)']] },
         { title: 'Policy', fields: [['NDPE','NDPE'], ['HRDD','HRDD']] },
@@ -8095,8 +8174,8 @@ function initDashboardApp() {
         if (key === 'SOURCE TYPE') {
           return valOrDash(millSourceTypeValFromRow_(row));
         }
-        if (key === 'LEGALITY') {
-          return valOrDash(millProfileLegalityFromScore_(row));
+        if (key === MILL_LEGALITY_GRIEVANCE) {
+          return valOrDash(millProfileResolveField_(row, key, { yesNo: true }));
         }
         if (MILL_PROFILE_YESNO_KEYS_.has(key)) {
           return valOrDash(millProfileResolveField_(row, key, { yesNo: true }));
@@ -15441,7 +15520,7 @@ function initDashboardApp() {
     { id: 'iup', label: 'IUP', header: 'IUP', millKeys: ['IUP'] },
     { id: 'izin_lingkungan', label: 'Izin Lingkungan', header: 'Izin Lingkungan', millKeys: ['IZIN LINGKUNGAN', 'Izin Lingkungan'] },
     { id: 'mill_loc', label: 'Mill Location', header: 'Mill Location', millKeys: ['MILL LOC', 'MILL LOCATION', 'Mill Location'] },
-    { id: 'legality', label: 'Legality', header: 'Legality', millKeys: ['LEGALITY', 'Legality', 'LEGALITY SCORE'] },
+    { id: 'legality_grievance', label: 'Legality Grievance', header: 'Legality Grievance', millKeys: ['LEGALITY GRIEVANCE', 'LEGALITY', 'Legality'] },
     { id: 'certification', label: 'Certification', header: 'Certification', millKeys: ['CERTIFICATION', 'Certification'] },
     { id: 'rspo', label: 'RSPO', header: 'RSPO', millKeys: ['RSPO'] },
     { id: 'ispo', label: 'ISPO', header: 'ISPO', millKeys: ['ISPO'] },
@@ -16560,13 +16639,10 @@ function initDashboardApp() {
       const tok = eudrGrievanceToken_(totalRaw);
       if (tok !== null) return tok;
     }
-    const flags = [
-      'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES', 'HUMAN RIGHT',
-      'SAFETY', 'SOCIAL', 'ENVIRONMENT',
-    ];
+    const flags = MILL_GRIEVANCE_FLAG_FIELDS_.slice();
     var count = 0;
     flags.forEach(function(k) {
-      const raw = eudrRawMillField_(row, [k]);
+      const raw = eudrRawMillField_(row, MILL_GRIEVANCE_FLAG_ALIASES_[k] || [k]);
       const tok = eudrGrievanceToken_(raw);
       if (tok === 1) count++;
       else if (tok !== null && tok > 1) count += tok;
@@ -16607,7 +16683,7 @@ function initDashboardApp() {
     eudrRow = eudrRow || {};
     formulaCfg = formulaCfg || eudrGetFormulaConfig_();
     if (key === 'legality') {
-      const v = millProfileLegalityFromScore_(millRow) || pickSavedCol(millRow, ['LEGALITY', 'Legality']);
+      const v = millGrievanceFlagVal_(millRow, MILL_LEGALITY_GRIEVANCE) || millProfileLegalityFromScore_(millRow);
       const score = pickSavedCol(millRow, ['LEGALITY SCORE', 'SCORE', 'Score']);
       const vl = String(v).toLowerCase();
       const scoreNum = parseFloat(String(score).replace(',', '.'));
@@ -17119,7 +17195,6 @@ function initDashboardApp() {
     const capacity = eudrMillCapacityFromMill_(millRow) || eudrRow['MILL CAPACITY'] || '';
     const supplyTo = eudrSupplyToFromMill_(millRow) || eudrRow['SUPPLY TO'] || '';
     const traceable = eudrResolveTraceableCpo_(millRow, eudrRow);
-    const legalityOverall = millProfileLegalityFromScore_(millRow) || pickSavedCol(millRow, ['LEGALITY', 'Legality']);
     const ndpe = pickSavedCol(millRow, ['NDPE', 'NDPE Policy', 'NDPE COMMITMENT']);
     const ndpeVal = ndpe ? (millProfileFormatYesNo_(ndpe) || ndpe) : '—';
     const nbl = pickSavedCol(millRow, ['BUYER NO BUY LIST', 'Buyer No Buy List']) || '—';
@@ -17148,18 +17223,18 @@ function initDashboardApp() {
       eudrYesNoField_(millRow, ['IUP'], 'IUP'),
       eudrYesNoField_(millRow, ['IZIN LINGKUNGAN', 'Izin Lingkungan'], 'Izin Lingkungan'),
       eudrDetailFieldHtml_('Mill Location', pickSavedCol(millRow, ['MILL LOC', 'MILL LOCATION', 'Mill Location'])),
-      eudrDetailFieldHtml_('Legality', legalityOverall || '—'),
     ].join('');
 
     const grievanceFields = [
-      ['DEFORESTATION GRIEVANCES', 'Deforestation'],
-      ['BURN AREA GRIEVANCES', 'Burn Area'],
-      ['HUMAN RIGHT', 'Human Right'],
-      ['SAFETY', 'Safety'],
-      ['SOCIAL', 'Social'],
-      ['ENVIRONMENT', 'Environment'],
+      ['DEFORESTATION GRIEVANCES', 'Deforestation Grievances'],
+      ['BURN AREA GRIEVANCES', 'Burn Area Grievances'],
+      [MILL_LEGALITY_GRIEVANCE, 'Legality Grievance'],
+      [MILL_HUMAN_RIGHTS_GRIEVANCE, 'Human Rights Grievance'],
+      [MILL_SAFETY_GRIEVANCE, 'Safety Grievance'],
+      [MILL_SOCIAL_GRIEVANCE, 'Social Grievance'],
+      [MILL_ENVIRONMENT_GRIEVANCE, 'Environment Grievance'],
     ].map(function(pair) {
-      return eudrYesNoField_(millRow, [pair[0]], pair[1]);
+      return eudrYesNoField_(millRow, MILL_GRIEVANCE_FLAG_ALIASES_[pair[0]] || [pair[0]], pair[1]);
     }).join('');
 
     return ''
@@ -24016,6 +24091,7 @@ function initDashboardApp() {
   /** Copy full Mill Onboarding profile into a supply draft row (import / re-match). */
   function supplyCopyProfileIntoDraft_(draftRow, profile, batch) {
     if (!draftRow || !profile) return;
+    millNormalizeGrievanceFlagsOnRow_(profile);
     const skip = supplyDraftProfileSkipFields_(draftRow, batch);
     if (!String(draftRow['SOURCE TYPE'] || '').trim()) skip.delete('SOURCE TYPE');
     (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
@@ -24033,6 +24109,7 @@ function initDashboardApp() {
   function supplyProfilePrefillFromRow_(profile) {
     const prefill = {};
     if (!profile) return prefill;
+    millNormalizeGrievanceFlagsOnRow_(profile);
     (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
       if (millIsSheetComputedField_(f)) return;
       const v = profile[f];
