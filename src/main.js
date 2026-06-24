@@ -23736,9 +23736,20 @@ function initDashboardApp() {
   }
 
   /**
-   * Match Mill Onboarding Profile by COMPANY NAME only (sheet column COMPANY NAME).
-   * Target row = company terakhir; jika baris di bawahnya slot kosong, pakai baris itu.
+   * Profil referensi (baris pertama dengan COMPANY NAME sama) — hanya untuk prefill, tidak untuk update.
    */
+  function supplyFindMillReferenceProfile_(company) {
+    const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
+    const want = String(company || '').trim();
+    if (!want) return null;
+    let first = null;
+    src.forEach(function(d) {
+      if (!supplyCompanyMatchesProfile_(want, d)) return;
+      if (!first || (d._row || 0) < (first._row || 0)) first = d;
+    });
+    return first;
+  }
+
   function supplyMillRowIsEmptySlot_(profile) {
     if (!profile) return false;
     const keys = ['COMPANY NAME', 'MILL NAME', 'GROUP NAME', 'UML ID', 'COMPANY CODE'];
@@ -23748,22 +23759,9 @@ function initDashboardApp() {
     });
   }
 
+  /** @deprecated use supplyFindMillReferenceProfile_ — jangan dipakai untuk submit target */
   function supplyResolveMillTargetRow_(company) {
-    const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
-    const want = String(company || '').trim();
-    if (!want) return null;
-    const matches = [];
-    src.forEach(function(d) {
-      if (supplyCompanyMatchesProfile_(want, d)) matches.push(d);
-    });
-    matches.sort(function(a, b) { return (a._row || 0) - (b._row || 0); });
-    if (!matches.length) return null;
-    const last = matches[matches.length - 1];
-    const belowRowNum = (last._row || 0) + 1;
-    for (let i = 0; i < src.length; i++) {
-      if (src[i]._row === belowRowNum && supplyMillRowIsEmptySlot_(src[i])) return src[i];
-    }
-    return last;
+    return supplyFindMillReferenceProfile_(company);
   }
 
   function supplyFindMillProfileMatch_(excelRow, supplyKind) {
@@ -23774,8 +23772,8 @@ function initDashboardApp() {
     const company = String(excel.company || '').trim();
     if (!company) return { status: 'new', row: null };
 
-    const target = supplyResolveMillTargetRow_(company);
-    if (target) return { status: 'matched', row: target };
+    const ref = supplyFindMillReferenceProfile_(company);
+    if (ref) return { status: 'matched', row: ref };
     return { status: 'new', row: null };
   }
 
@@ -24103,42 +24101,28 @@ function initDashboardApp() {
     return out;
   }
 
-  function supplyResolveTargetMillRow_(draftRow, batch) {
-    const company = String(draftRow && draftRow['COMPANY NAME'] || '').trim();
-    let profile = company ? supplyResolveMillTargetRow_(company) : null;
-    if (!profile) profile = supplyGetDraftProfileRow_(draftRow, batch);
-    if (profile && profile._row) return { rowNum: profile._row, profile: profile };
-    supplyRematchDraftRow_(draftRow, batch);
-    const rowNum = Number(draftRow.target_mill_row || draftRow._mill_row || 0);
-    if (rowNum >= 2) {
-      return { rowNum: rowNum, profile: supplyGetMillProfileByRow_(rowNum) };
-    }
-    return { rowNum: 0, profile: null };
-  }
-
   async function supplyCommitDraftRowToMill_(batch, draftRow, data) {
     const payload = supplyPrepareMillSavePayload_(data, batch, draftRow);
     supplyValidateMillPayloadForSubmit_(payload);
     supplyCopyModalIntoDraftRow_(draftRow, payload, batch);
+    supplyEnsureDraftPeriodOnRows_([draftRow], batch);
 
-    const target = supplyResolveTargetMillRow_(draftRow, batch);
-    const millRow = target.rowNum;
-    if (!millRow || !target.profile) {
-      throw new Error('Profil mill tidak ditemukan. Re-match batch dulu — tidak menambah baris baru.');
+    const company = String(draftRow['COMPANY NAME'] || '').trim();
+    if (!supplyFindMillReferenceProfile_(company) && draftRow.match_status !== 'new') {
+      throw new Error('Profil mill tidak ditemukan. Re-match batch dulu.');
     }
-    const patch = supplyBuildEmptyOnlyMillPatch_(target.profile, payload);
-    if (Object.keys(patch).length) {
-      await apiPost({ action: 'update', sheet: 'mill', row: millRow, data: patch });
+
+    const res = await apiPost({ action: 'submitSupplyDraft', batch_id: batch.batch_id, rows: [draftRow] });
+    if (res && res.errors && res.errors.length && !res.submitted) {
+      throw new Error(res.errors.slice(0, 3).join('; '));
     }
-    draftRow.match_status = 'matched';
-    draftRow.target_mill_row = millRow;
-    draftRow._mill_row = millRow;
+    draftRow.match_status = draftRow.match_status || 'matched';
     draftRow._submitted = true;
     draftRow.status = 'submitted';
     draftRow._profile_draft_saved = false;
     draftRow.profile_draft_saved = '';
     supplyNormalizeBatchSubmittedState_(batch);
-    const res = await apiPost({ action: 'saveSupplyDraft', batch_id: batch.batch_id, rows: [draftRow], meta: {} });
+    await apiPost({ action: 'saveSupplyDraft', batch_id: batch.batch_id, rows: [draftRow], meta: {} });
     return res;
   }
 
@@ -25154,7 +25138,7 @@ function initDashboardApp() {
       });
       if (!matchedRows.length) { alert('No matched rows pending submission.'); return; }
       const kind = String(batch.supply_type || (matchedRows[0] && matchedRows[0].supply_type) || 'CPO').toUpperCase();
-      const confirmMsg = 'Isi kolom kosong di ' + matchedRows.length + ' baris Mill Profile yang sudah match? (Tidak menambah baris baru; rumus sheet tetap di baris yang sama)';
+      const confirmMsg = 'Tambah ' + matchedRows.length + ' baris baru di paling bawah Mill Onboarding? (Data lama tidak diubah; kolom rumus otomatis dari sheet)';
       if (!confirm(confirmMsg)) return;
       supplyEnsureDraftPeriodOnRows_(batch.rows || [], batch);
       supplyEnsureDraftPeriodOnRows_(matchedRows, batch);
@@ -25176,7 +25160,7 @@ function initDashboardApp() {
             : (typeof loadMillData === 'function' ? loadMillData({ force: true }) : Promise.resolve())
           ).then(function() {
             btn.textContent = '✓ Submit Matched'; btn.disabled = false;
-            alert('✓ ' + submittedN + ' baris Mill Profile di-update (kolom kosong saja).' + errNote);
+            alert('✓ ' + submittedN + ' baris baru ditambahkan di paling bawah Mill Onboarding.' + errNote);
           });
         })
         .catch(function(err) {

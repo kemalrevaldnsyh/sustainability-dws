@@ -5317,33 +5317,95 @@ function findMillRowsByCompanyGs_(millData, millHeaders, companyName) {
 
 /** Profil referensi untuk salin identitas — bukan posisi insert (selalu append di paling bawah list). */
 function findMillReferenceProfileGs_(millData, millHeaders, row) {
-  var hit = findMillTargetForSupplyUpdateGs_(millData, millHeaders, row);
-  return hit ? hit.obj : null;
+  return findMillReferenceForSupplyGs_(millData, millHeaders, row);
 }
 
-/** Baris Mill Onboarding yang akan di-update (bukan insert baru). */
-function findMillTargetForSupplyUpdateGs_(millData, millHeaders, row) {
+/** Profil referensi (baris pertama) — untuk salin identitas, bukan baris yang di-update. */
+function findMillReferenceForSupplyGs_(millData, millHeaders, row) {
   var company = String(row['COMPANY NAME'] || '').trim();
   var matches = findMillRowsByCompanyGs_(millData, millHeaders, company);
-  if (matches.length) {
-    var last = matches[matches.length - 1];
-    var belowSheetRow = last.sheetRow + 1;
-    if (belowSheetRow <= millData.length) {
-      var belowObj = millRowToObjectGs_(millData[belowSheetRow - 1], millHeaders);
-      if (millRowIsEmptySlotGs_(belowObj)) {
-        return { sheetRow: belowSheetRow, obj: belowObj };
-      }
-    }
-    return last;
-  }
+  if (matches.length) return matches[0].obj;
   var targetRef = Number(row.target_mill_row || row._mill_row || 0);
   if (targetRef >= 2 && targetRef <= millData.length) {
-    return {
-      sheetRow: targetRef,
-      obj: millRowToObjectGs_(millData[targetRef - 1], millHeaders),
-    };
+    return millRowToObjectGs_(millData[targetRef - 1], millHeaders);
   }
   return null;
+}
+
+function millStripFormulaFromPatchGs_(patch) {
+  var out = {};
+  Object.keys(patch || {}).forEach(function(k) {
+    if (!k || millIsFormulaColumnGs_(k)) return;
+    var v = patch[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') out[k] = v;
+  });
+  return out;
+}
+
+function mergeReferenceIdentityIntoPatchGs_(patch, refObj) {
+  if (!refObj) return patch || {};
+  var out = {};
+  var k;
+  for (k in patch) {
+    if (patch.hasOwnProperty(k)) out[k] = patch[k];
+  }
+  var identityKeys = [
+    'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID', 'COMPANY CODE',
+    'ADDRESS', 'PROVINCE', 'COORDINATES', 'MILL CATEGORY', 'MILL CAPACITY (TON/HOUR)',
+    'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN', 'NDPE', 'HRDD', 'LEGALITY',
+    'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH', 'MILL LOC', 'CERTIFICATION', 'SOURCE TYPE',
+  ];
+  identityKeys.forEach(function(key) {
+    if (millIsFormulaColumnGs_(key)) return;
+    if (out[key] !== undefined && out[key] !== null && String(out[key]).trim() !== '') return;
+    var v = refObj[key];
+    if (v !== undefined && v !== null && String(v).trim() !== '') out[key] = v;
+  });
+  return out;
+}
+
+/**
+ * Tambah baris supply di paling bawah zona aktif — tidak mengubah baris profil lama.
+ * Jika baris di bawah company terakhir masih slot kosong (hanya rumus), isi baris itu.
+ * Jika sudah terisi, insert baris baru (rumus menyalin dari baris di atasnya).
+ */
+function millAppendSupplyRowGs_(millSheet, millHeaders, row, millData) {
+  var ref = findMillReferenceForSupplyGs_(millData, millHeaders, row);
+  if (!ref && !String(row['COMPANY NAME'] || '').trim()) {
+    throw new Error('profil mill tidak ditemukan');
+  }
+  var patch = mergeReferenceIdentityIntoPatchGs_(
+    Object.assign({}, buildSupplyIdentityPatchFromDraftGs_(row), buildSupplyPatchFromDraftGs_(row)),
+    ref
+  );
+  patch = millStripFormulaFromPatchGs_(patch);
+  if (!Object.keys(patch).length) return 0;
+
+  var activeLast = millFindActiveZoneLastRow_(millSheet, millHeaders);
+  var targetRow = activeLast + 1;
+  var lastRow = millSheet.getLastRow();
+  var needInsert = true;
+
+  if (targetRow <= lastRow && millData[targetRow - 1]) {
+    var belowObj = millRowToObjectGs_(millData[targetRow - 1], millHeaders);
+    if (millRowIsEmptySlotGs_(belowObj)) needInsert = false;
+  }
+
+  if (needInsert) {
+    var insertAfter = Math.min(Math.max(activeLast, 1), Math.max(lastRow, 1));
+    millSheet.insertRowAfter(insertAfter);
+    targetRow = insertAfter + 1;
+  }
+
+  updateRow('mill', targetRow, patch);
+  return targetRow;
+}
+
+/** @deprecated jangan update baris profil lama — gunakan millAppendSupplyRowGs_ */
+function findMillTargetForSupplyUpdateGs_(millData, millHeaders, row) {
+  var ref = findMillReferenceForSupplyGs_(millData, millHeaders, row);
+  if (!ref) return null;
+  return { sheetRow: 0, obj: ref, appendOnly: true };
 }
 
 function millCellIsEmptyGs_(v) {
@@ -5541,26 +5603,17 @@ function submitSupplyDraft_(batchId, rows) {
       return;
     }
 
-    var patch = Object.assign({}, buildSupplyIdentityPatchFromDraftGs_(row), buildSupplyPatchFromDraftGs_(row));
-    var target = findMillTargetForSupplyUpdateGs_(millData, millHeaders, row);
+    var ref = findMillReferenceForSupplyGs_(millData, millHeaders, row);
 
     try {
-      if (!target || !target.sheetRow) {
-        throw new Error('profil mill tidak ditemukan — match dulu, jangan insert baris baru');
+      if (!ref && !String(row['COMPANY NAME'] || '').trim()) {
+        throw new Error('profil mill tidak ditemukan — match dulu');
       }
-      var emptyPatch = millBuildEmptyOnlyPatchGs_(target.obj, patch);
-      if (Object.keys(emptyPatch).length) {
-        updateRow('mill', target.sheetRow, emptyPatch);
-        var merged = {};
-        var mk;
-        for (mk in target.obj) {
-          if (target.obj.hasOwnProperty(mk)) merged[mk] = target.obj[mk];
-        }
-        for (mk in emptyPatch) {
-          if (emptyPatch.hasOwnProperty(mk)) merged[mk] = emptyPatch[mk];
-        }
-        millData[target.sheetRow - 1] = millObjectToRowArrGs_(merged, millHeaders);
+      var newSheetRow = millAppendSupplyRowGs_(millSheet, millHeaders, row, millData);
+      if (!newSheetRow) {
+        throw new Error('tidak ada data untuk ditulis');
       }
+      millData = millSheet.getDataRange().getValues();
     } catch (err) {
       errors.push((row['COMPANY NAME'] || '') + ': ' + err.message);
       return;
