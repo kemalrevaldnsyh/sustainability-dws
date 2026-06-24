@@ -855,14 +855,30 @@ var MILL_IDENTITY_HEADERS_ = [
 
 var MILL_IDENTITY_PLACEHOLDERS_ = { 'NO DATA': true, '-': true, '—': true, 'N/A': true, 'NA': true };
 
-/** Kolom formula/default (SUPPLY %, dll.) tidak menentukan zona aktif vs kosong. */
+/** Kolom formula/default (SUPPLY %, score, dll.) tidak menentukan zona aktif vs kosong. */
 var MILL_NON_IDENTITY_HEADERS_ = {
   'MONTH': true, 'QUARTER': true, 'YEAR': true, 'SOURCE TYPE': true, 'TRADER NAME': true,
   'SUPPLY CPO': true, 'SUPPLY PK': true, 'PRODUCT SUPPLY': true,
-  'PERCENTAGE SUPPLY CPO': true, 'PERCENTAGE SUPPLY PK': true,
-  'PERCENTAGE': true, 'SUPPLY': true, 'SCORE': true, 'TOTAL SCORE': true,
-  'PRIORITY ENGAGEMENT': true, 'SIGN': true, 'DATE IMPORTED': true, 'IMPORTED BY': true,
+  'PERCENTAGE SUPPLY CPO': true, 'PERCENTAGE SUPPLY PK': true, 'PERCENTAGE SUPPLY CPKO': true,
+  'PERCENTAGE': true, 'SUPPLY': true, 'SCORE': true, 'TOTAL SCORE': true, 'TOTAL SCORE SPATIAL': true,
+  'DEFORESTATION SCORE': true, 'BURN AREA SCORE': true, 'PEAT SCORE': true,
+  'COMPLIMENT/NOT COMPLIMENT': true,
+  'TOTAL GRIEVANCES': true, 'TOTAL POLICY': true, 'TOTAL CERTIFICATION': true,
+  'RISK LEVEL': true, 'BUYER NO BUY LIST': true, 'RESULT RISK LEVEL': true,
+  'PRIORITY ENGAGEMENT': true, 'SUPPLIER STATUS': true, 'SIGN': true,
+  'CPO': true, 'PK': true, 'STATUS SUPPLY CPO': true, 'STATUS SUPPLY PK': true,
+  'DATE IMPORTED': true, 'IMPORTED BY': true,
+  'FACILITY NAME CPO': true, 'FACILITY NAME PK': true,
+  'DEFORESTATION WIDTH': true, 'BURN AREA WIDTH': true, 'PEAT WIDTH': true,
+  'VOLUME SUPPLY STATUS': true, 'RECOMMENDATION LEVEL': true, 'SUPPLIER LEVEL': true,
 };
+
+function millCompanyNameColIndex_(headers) {
+  for (var i = 0; i < (headers || []).length; i++) {
+    if (String(headers[i] || '').trim().toUpperCase() === 'COMPANY NAME') return i;
+  }
+  return -1;
+}
 
 function millIdentityColumnIndices_(headers) {
   var out = [];
@@ -911,28 +927,100 @@ function millRowValuesHaveContent_(rowValues, keyColIndices) {
  *   - Active (atas): baris dengan MILL/COMPANY/GROUP/UML terisi + slot kosong berikutnya
  *   - Archive (bawah): blok copy/manual jauh di bawah — tidak disentuh insert web
  *
- * Baris yang hanya punya formula SUPPLY % / PERCENTAGE (0%, 0.0) dianggap KOSONG
- * untuk penentuan row insert — supaya web masuk ke row 258, bukan row ujung sheet.
+ * Baris yang hanya punya rumus (SUPPLY %, score, dll.) dianggap KOSONG.
+ * Zona aktif berakhir di baris COMPANY NAME terakhir yang terisi; insert web = baris kosong berikutnya.
  */
 var MILL_ARCHIVE_GAP_ROWS = 10;
+
+/** Kolom berisi rumus sheet — supply submit tidak boleh menulis ke sini. */
+var MILL_FORMULA_HEADERS_ = {
+  'COMPLIMENT/NOT COMPLIMENT': true,
+  'DEFORESTATION SCORE': true,
+  'BURN AREA SCORE': true,
+  'PEAT SCORE': true,
+  'TOTAL SCORE SPATIAL': true,
+  'TOTAL GRIEVANCES': true,
+  'TOTAL POLICY': true,
+  'TOTAL CERTIFICATION': true,
+  'TOTAL SCORE': true,
+  'RISK LEVEL': true,
+  'BUYER NO BUY LIST': true,
+  'RESULT RISK LEVEL': true,
+  'PRIORITY ENGAGEMENT': true,
+  'SUPPLIER STATUS': true,
+  'PRODUCT SUPPLY': true,
+  'PERCENTAGE SUPPLY CPO': true,
+  'PERCENTAGE SUPPLY PK': true,
+  'PERCENTAGE SUPPLY CPKO': true,
+  'CPO': true,
+  'STATUS SUPPLY CPO': true,
+  'PK': true,
+  'STATUS SUPPLY PK': true,
+};
+
+function millIsFormulaColumnGs_(header) {
+  return MILL_FORMULA_HEADERS_[String(header || '').trim().toUpperCase()] === true;
+}
+
+function millObjectHasIdentityGs_(obj) {
+  if (!obj) return false;
+  for (var i = 0; i < MILL_IDENTITY_HEADERS_.length; i++) {
+    if (!millIsPlaceholderIdentity_(obj[MILL_IDENTITY_HEADERS_[i]])) return true;
+  }
+  return false;
+}
+
+/** Baris tanpa identitas mill (slot kosong di bawah company — hanya rumus/default). */
+function millRowIsEmptySlotGs_(obj) {
+  return !millObjectHasIdentityGs_(obj);
+}
 
 function millFindActiveZoneLastRow_(sheet, headers) {
   var headerRow = 1;
   var lastRow = sheet.getLastRow();
   if (lastRow <= headerRow) return headerRow;
 
-  var numCols = Math.max(headers.length, sheet.getLastColumn());
+  var coCol = millCompanyNameColIndex_(headers);
   var rowCount = lastRow - headerRow;
   if (rowCount <= 0) return headerRow;
 
-  var allData = sheet.getRange(headerRow + 1, 1, rowCount, numCols).getValues();
-  var idCols = millIdentityColumnIndices_(headers);
   var lastDataRow = headerRow;
   var emptyStreak = 0;
 
-  for (var i = 0; i < allData.length; i++) {
-    if (millRowHasIdentityContent_(allData[i], idCols)) {
-      lastDataRow = headerRow + 1 + i;
+  if (coCol >= 0) {
+    var colNum = coCol + 1;
+    var chunkSize = 500;
+    var startRow = headerRow + 1;
+
+    while (startRow <= lastRow) {
+      var numRows = Math.min(chunkSize, lastRow - startRow + 1);
+      var coValues = sheet.getRange(startRow, colNum, numRows, 1).getValues();
+      for (var i = 0; i < coValues.length; i++) {
+        if (!millIsPlaceholderIdentity_(coValues[i][0])) {
+          lastDataRow = startRow + i;
+          emptyStreak = 0;
+        } else {
+          emptyStreak++;
+          if (emptyStreak >= MILL_ARCHIVE_GAP_ROWS && lastDataRow > headerRow) {
+            return lastDataRow;
+          }
+        }
+      }
+      if (emptyStreak >= MILL_ARCHIVE_GAP_ROWS && lastDataRow > headerRow) {
+        return lastDataRow;
+      }
+      startRow += numRows;
+    }
+    return lastDataRow;
+  }
+
+  var numCols = Math.max(headers.length, sheet.getLastColumn());
+  var allData = sheet.getRange(headerRow + 1, 1, rowCount, numCols).getValues();
+  var idCols = millIdentityColumnIndices_(headers);
+
+  for (var j = 0; j < allData.length; j++) {
+    if (millRowHasIdentityContent_(allData[j], idCols)) {
+      lastDataRow = headerRow + 1 + j;
       emptyStreak = 0;
     } else {
       emptyStreak++;
@@ -5053,8 +5141,24 @@ function saveSupplyDraft_(rows, batchId, meta) {
   var now  = nowIso_();
   var user = callerEmail_();
   var saved = 0;
+  meta = meta || {};
+  var metaMonth = String(meta.month || meta.quarter || '').trim();
+  var metaYear = String(meta.year || '').trim();
+  var metaType = String(meta.supply_type || '').trim();
 
   rows.forEach(function(row) {
+    if (metaMonth) {
+      row.month = metaMonth;
+      row.MONTH = row['MONTH'] = metaMonth;
+    }
+    if (metaYear) {
+      row.year = metaYear;
+      row.YEAR = row['YEAR'] = metaYear;
+    }
+    if (metaType && !row.supply_type) {
+      row.supply_type = metaType;
+      row.SUPPLY_TYPE = metaType;
+    }
     var draftId = String(row.draft_id || '').trim();
     if (!draftId) return;
     var existingSheetRow = -1;
@@ -5190,16 +5294,9 @@ function millRowSupplyKindGs_(obj) {
 
 function supplySubmitKindFromDraftGs_(row) {
   var st = String(row.supply_type || row.SUPPLY_TYPE || 'CPO').trim().toUpperCase();
-  var pctCpo = row['PERCENTAGE SUPPLY CPO'];
-  var pctPk = row['PERCENTAGE SUPPLY PK'];
-  var hasCpo = st.indexOf('CPO') >= 0 || (pctCpo !== undefined && pctCpo !== null && String(pctCpo).trim() !== '');
-  var hasPk = st.indexOf('PK') >= 0 || (pctPk !== undefined && pctPk !== null && String(pctPk).trim() !== '');
-  var qtyCpo = row['SUPPLY CPO'];
-  var qtyPk = row['SUPPLY PK'];
-  if (!hasCpo && qtyCpo !== undefined && qtyCpo !== null && String(qtyCpo).trim() !== '') hasCpo = true;
-  if (!hasPk && qtyPk !== undefined && qtyPk !== null && String(qtyPk).trim() !== '') hasPk = true;
-  if (hasCpo && hasPk) return 'BOTH';
-  if (hasPk) return 'PK';
+  if (st === 'PK') return 'PK';
+  if (st === 'CPO') return 'CPO';
+  if (st.indexOf('CPO') >= 0 && st.indexOf('PK') >= 0) return 'BOTH';
   return 'CPO';
 }
 
@@ -5218,17 +5315,65 @@ function findMillRowsByCompanyGs_(millData, millHeaders, companyName) {
   return out;
 }
 
-/** Always insert below an existing company row — never update in place. */
-function findMillRowForSupplyInsertGs_(millData, millHeaders, row) {
-  var matches = findMillRowsByCompanyGs_(millData, millHeaders, row['COMPANY NAME']);
-  var targetRef = Number(row.target_mill_row || row._mill_row || 0);
-  var insertAfter = 0;
-  if (targetRef >= 2) {
-    insertAfter = targetRef;
-  } else if (matches.length) {
-    insertAfter = matches[matches.length - 1].sheetRow;
+/** Profil referensi untuk salin identitas — bukan posisi insert (selalu append di paling bawah list). */
+function findMillReferenceProfileGs_(millData, millHeaders, row) {
+  var hit = findMillTargetForSupplyUpdateGs_(millData, millHeaders, row);
+  return hit ? hit.obj : null;
+}
+
+/** Baris Mill Onboarding yang akan di-update (bukan insert baru). */
+function findMillTargetForSupplyUpdateGs_(millData, millHeaders, row) {
+  var company = String(row['COMPANY NAME'] || '').trim();
+  var matches = findMillRowsByCompanyGs_(millData, millHeaders, company);
+  if (matches.length) {
+    var last = matches[matches.length - 1];
+    var belowSheetRow = last.sheetRow + 1;
+    if (belowSheetRow <= millData.length) {
+      var belowObj = millRowToObjectGs_(millData[belowSheetRow - 1], millHeaders);
+      if (millRowIsEmptySlotGs_(belowObj)) {
+        return { sheetRow: belowSheetRow, obj: belowObj };
+      }
+    }
+    return last;
   }
-  return { insertAfter: insertAfter };
+  var targetRef = Number(row.target_mill_row || row._mill_row || 0);
+  if (targetRef >= 2 && targetRef <= millData.length) {
+    return {
+      sheetRow: targetRef,
+      obj: millRowToObjectGs_(millData[targetRef - 1], millHeaders),
+    };
+  }
+  return null;
+}
+
+function millCellIsEmptyGs_(v) {
+  var t = String(v === null || v === undefined ? '' : v).trim();
+  return !t || millIsPlaceholderIdentity_(t);
+}
+
+/** Hanya isi kolom yang masih kosong — jangan timpa nilai/rumus yang sudah ada. */
+function millBuildEmptyOnlyPatchGs_(currentObj, patch, forceKeys) {
+  var out = {};
+  if (!patch || !currentObj) return out;
+  var force = {};
+  (forceKeys || ['MONTH', 'YEAR']).forEach(function(k) {
+    force[String(k || '').trim().toUpperCase()] = true;
+  });
+  Object.keys(patch).forEach(function(k) {
+    if (!k || millIsFormulaColumnGs_(k)) return;
+    var nv = patch[k];
+    if (nv === undefined || nv === null || String(nv).trim() === '') return;
+    var kUp = String(k).trim().toUpperCase();
+    if (force[kUp] || millCellIsEmptyGs_(currentObj[k])) out[k] = nv;
+  });
+  return out;
+}
+
+/**
+ * @deprecated selalu append di paling bawah — gunakan findMillReferenceProfileGs_
+ */
+function findMillRowForSupplyInsertGs_(millData, millHeaders, row) {
+  return { insertAfter: 0, reference: findMillReferenceProfileGs_(millData, millHeaders, row) };
 }
 
 function buildMillRowFromSupplyDraftGs_(row, patch, submitKind, millHeaders) {
@@ -5277,78 +5422,61 @@ function supplyFacilityFromDraftGs_(row, field, submitKind) {
   return '';
 }
 
+function buildSupplyIdentityPatchFromDraftGs_(row) {
+  var kind = supplySubmitKindFromDraftGs_(row);
+  var fillKeys = [
+    'MONTH', 'YEAR', 'QUARTER', 'SOURCE TYPE', 'GROUP NAME', 'COMPANY NAME', 'MILL NAME',
+    'UML ID', 'COMPANY CODE', 'ADDRESS', 'PROVINCE', 'COORDINATES', 'MILL CATEGORY',
+    'MILL CAPACITY (TON/HOUR)', 'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN',
+    'NDPE', 'HRDD', 'LEGALITY', 'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH',
+    'MILL LOC', 'CERTIFICATION',
+  ];
+  var patch = {};
+  fillKeys.forEach(function(k) {
+    if (millIsFormulaColumnGs_(k)) return;
+    var v = row[k];
+    if (v !== undefined && v !== null && String(v).trim() !== '') patch[k] = v;
+  });
+  if (kind === 'CPO' || kind === 'BOTH') {
+    if (row['FACILITY NAME CPO']) patch['FACILITY NAME CPO'] = row['FACILITY NAME CPO'];
+    if (row['SUPPLY CPO'] != null && String(row['SUPPLY CPO']).trim() !== '') patch['SUPPLY CPO'] = row['SUPPLY CPO'];
+  }
+  if (kind === 'PK' || kind === 'BOTH') {
+    if (row['FACILITY NAME PK']) patch['FACILITY NAME PK'] = row['FACILITY NAME PK'];
+    if (row['SUPPLY PK'] != null && String(row['SUPPLY PK']).trim() !== '') patch['SUPPLY PK'] = row['SUPPLY PK'];
+  }
+  return patch;
+}
+
 function buildSupplyPatchFromDraftGs_(row) {
   var submitKind = supplySubmitKindFromDraftGs_(row);
-  var supplyType = String(row.supply_type || row.SUPPLY_TYPE || 'CPO').trim().toUpperCase();
-  var pctCpo = row['PERCENTAGE SUPPLY CPO'];
-  var pctPk  = row['PERCENTAGE SUPPLY PK'];
-  var hasCpo = pctCpo !== undefined && pctCpo !== null && String(pctCpo).trim() !== '';
-  var hasPk  = pctPk !== undefined && pctPk !== null && String(pctPk).trim() !== '';
-  if (!hasCpo && supplyType.indexOf('CPO') >= 0) {
-    pctCpo = row.SUPPLY_PERCENTAGE || '';
-    hasCpo = String(pctCpo).trim() !== '';
-  }
-  if (!hasPk && supplyType.indexOf('PK') >= 0) {
-    pctPk = row.SUPPLY_PERCENTAGE || '';
-    hasPk = String(pctPk).trim() !== '';
-  }
-
   var patch = {};
+
   if (submitKind === 'CPO' || submitKind === 'BOTH') {
-    if (hasCpo || submitKind === 'CPO' || submitKind === 'BOTH') {
-      patch['PERCENTAGE SUPPLY CPO'] = hasCpo ? pctCpo : '';
-    }
-    var facCpo = supplyFacilityFromDraftGs_(row, 'FACILITY NAME CPO', submitKind);
+    var facCpo = supplyFacilityFromDraftGs_(row, 'FACILITY NAME CPO', 'CPO');
     if (facCpo) patch['FACILITY NAME CPO'] = facCpo;
+    var qtyCpo = row['SUPPLY CPO'];
+    if ((qtyCpo === undefined || qtyCpo === null || String(qtyCpo).trim() === '') && row.SUPPLY_QTY) {
+      qtyCpo = row.SUPPLY_QTY;
+    }
+    if (qtyCpo !== undefined && qtyCpo !== null && String(qtyCpo).trim() !== '') {
+      patch['SUPPLY CPO'] = qtyCpo;
+    }
   }
   if (submitKind === 'PK' || submitKind === 'BOTH') {
-    if (hasPk || submitKind === 'PK' || submitKind === 'BOTH') {
-      patch['PERCENTAGE SUPPLY PK'] = hasPk ? pctPk : '';
-    }
-    var facPk = supplyFacilityFromDraftGs_(row, 'FACILITY NAME PK', submitKind);
+    var facPk = supplyFacilityFromDraftGs_(row, 'FACILITY NAME PK', 'PK');
     if (facPk) patch['FACILITY NAME PK'] = facPk;
-  }
-  if (!hasCpo && !hasPk && submitKind !== 'BOTH') {
-    var pctField = submitKind === 'PK' ? 'PERCENTAGE SUPPLY PK' : 'PERCENTAGE SUPPLY CPO';
-    var pctVal = row[pctField];
-    if (pctVal === undefined || pctVal === null || String(pctVal).trim() === '') {
-      pctVal = row.SUPPLY_PERCENTAGE || '';
+    var qtyPk = row['SUPPLY PK'];
+    if ((qtyPk === undefined || qtyPk === null || String(qtyPk).trim() === '') && row.SUPPLY_QTY) {
+      qtyPk = row.SUPPLY_QTY;
     }
-    patch[pctField] = pctVal;
-    if (submitKind === 'PK') {
-      var facPkOnly = supplyFacilityFromDraftGs_(row, 'FACILITY NAME PK', submitKind);
-      if (facPkOnly) patch['FACILITY NAME PK'] = facPkOnly;
-    } else {
-      var facCpoOnly = supplyFacilityFromDraftGs_(row, 'FACILITY NAME CPO', submitKind);
-      if (facCpoOnly) patch['FACILITY NAME CPO'] = facCpoOnly;
+    if (qtyPk !== undefined && qtyPk !== null && String(qtyPk).trim() !== '') {
+      patch['SUPPLY PK'] = qtyPk;
     }
   }
 
-  var psTokens = [];
-  if (submitKind === 'CPO' || submitKind === 'BOTH') psTokens.push('CPO');
-  if (submitKind === 'PK' || submitKind === 'BOTH') psTokens.push('PK');
-  if (psTokens.length) {
-    patch['PRODUCT SUPPLY'] = psTokens.length > 1 ? 'CPO, PK' : psTokens[0];
-  } else if (row['PRODUCT SUPPLY']) {
-    patch['PRODUCT SUPPLY'] = row['PRODUCT SUPPLY'];
-  }
-
-  var qtyCpo = row['SUPPLY CPO'];
-  var qtyPk  = row['SUPPLY PK'];
-  if ((qtyCpo === undefined || qtyCpo === null || String(qtyCpo).trim() === '') && row.SUPPLY_QTY && (hasCpo || supplyType.indexOf('CPO') >= 0)) {
-    qtyCpo = row.SUPPLY_QTY;
-  }
-  if ((qtyPk === undefined || qtyPk === null || String(qtyPk).trim() === '') && row.SUPPLY_QTY && (hasPk || supplyType.indexOf('PK') >= 0)) {
-    qtyPk = row.SUPPLY_QTY;
-  }
-  if (qtyCpo !== undefined && qtyCpo !== null && String(qtyCpo).trim() !== '' && (submitKind === 'CPO' || submitKind === 'BOTH')) {
-    patch['SUPPLY CPO'] = qtyCpo;
-  }
-  if (qtyPk !== undefined && qtyPk !== null && String(qtyPk).trim() !== '' && (submitKind === 'PK' || submitKind === 'BOTH')) {
-    patch['SUPPLY PK'] = qtyPk;
-  }
-  var monthTok = String(row['MONTH'] || row['Month'] || row.month || row.quarter || row.QUARTER || '').trim();
-  var yearTok = String(row['YEAR'] || row['Year'] || row.year || '').trim();
+  var monthTok = String(row.month || row['MONTH'] || row['Month'] || row.quarter || row.QUARTER || '').trim();
+  var yearTok = String(row.year || row['YEAR'] || row['Year'] || '').trim();
   if (monthTok) patch['MONTH'] = monthTok;
   if (yearTok) patch['YEAR'] = yearTok;
   return patch;
@@ -5413,20 +5541,25 @@ function submitSupplyDraft_(batchId, rows) {
       return;
     }
 
-    var submitKind = supplySubmitKindFromDraftGs_(row);
-    var patch = buildSupplyPatchFromDraftGs_(row);
-    var plan = findMillRowForSupplyInsertGs_(millData, millHeaders, row);
+    var patch = Object.assign({}, buildSupplyIdentityPatchFromDraftGs_(row), buildSupplyPatchFromDraftGs_(row));
+    var target = findMillTargetForSupplyUpdateGs_(millData, millHeaders, row);
 
     try {
-      if (plan.insertAfter > 0) {
-        var baseObj = millRowToObjectGs_(millData[plan.insertAfter - 1], millHeaders);
-        var newData = mergeMillIdentityWithSupplyPatchGs_(baseObj, patch, submitKind === 'BOTH' ? 'BOTH' : submitKind);
-        addRow('mill', newData, plan.insertAfter);
-        millSpliceInsertedRowGs_(millData, plan.insertAfter, millObjectToRowArrGs_(newData, millHeaders));
-      } else {
-        var newRowData = buildMillRowFromSupplyDraftGs_(row, patch, submitKind, millHeaders);
-        var addResNew = addRow('mill', newRowData);
-        millSpliceInsertedRowGs_(millData, 0, millObjectToRowArrGs_(newRowData, millHeaders));
+      if (!target || !target.sheetRow) {
+        throw new Error('profil mill tidak ditemukan — match dulu, jangan insert baris baru');
+      }
+      var emptyPatch = millBuildEmptyOnlyPatchGs_(target.obj, patch);
+      if (Object.keys(emptyPatch).length) {
+        updateRow('mill', target.sheetRow, emptyPatch);
+        var merged = {};
+        var mk;
+        for (mk in target.obj) {
+          if (target.obj.hasOwnProperty(mk)) merged[mk] = target.obj[mk];
+        }
+        for (mk in emptyPatch) {
+          if (emptyPatch.hasOwnProperty(mk)) merged[mk] = emptyPatch[mk];
+        }
+        millData[target.sheetRow - 1] = millObjectToRowArrGs_(merged, millHeaders);
       }
     } catch (err) {
       errors.push((row['COMPANY NAME'] || '') + ': ' + err.message);
