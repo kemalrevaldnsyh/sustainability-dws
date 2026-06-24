@@ -5320,31 +5320,67 @@ function initDashboardApp() {
   const MILL_SOCIAL_GRIEVANCE = 'SOCIAL GRIEVANCE';
   const MILL_ENVIRONMENT_GRIEVANCE = 'ENVIRONMENT GRIEVANCE';
 
-  const MILL_GRIEVANCE_FLAG_ALIASES_ = {
-    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY', 'Legality'],
-    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHT', 'HUMAN RIGHTS', 'Human Right', 'Human Rights'],
-    [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY', 'Safety'],
-    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL', 'Social'],
-    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT', 'Environment'],
-  };
-
   const MILL_GRIEVANCE_FLAG_FIELDS_ = [
     'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
     MILL_LEGALITY_GRIEVANCE, MILL_HUMAN_RIGHTS_GRIEVANCE, MILL_SAFETY_GRIEVANCE,
     MILL_SOCIAL_GRIEVANCE, MILL_ENVIRONMENT_GRIEVANCE,
   ];
 
+  const MILL_GRIEVANCE_FLAG_ALIASES_ = {
+    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES', 'LEGALITY', 'Legality'],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHT', 'HUMAN RIGHTS', 'Human Right', 'Human Rights'],
+    [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES', 'SAFETY', 'Safety'],
+    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES', 'SOCIAL', 'Social'],
+    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT GRIEVANCES', 'ENVIRONMENT', 'Environment'],
+  };
+
+  const MILL_GRIEVANCE_FUZZY_TOKENS_ = {
+    [MILL_LEGALITY_GRIEVANCE]: ['legality', 'griev'],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['human', 'griev'],
+    [MILL_SAFETY_GRIEVANCE]: ['safety', 'griev'],
+    [MILL_SOCIAL_GRIEVANCE]: ['social', 'griev'],
+    [MILL_ENVIRONMENT_GRIEVANCE]: ['environ', 'griev'],
+    'DEFORESTATION GRIEVANCES': ['deforest', 'griev'],
+    'BURN AREA GRIEVANCES': ['burn', 'griev'],
+  };
+
+  function millNormalizeYesNoSelectVal_(raw) {
+    const s = millProfileFormatYesNo_(raw);
+    if (s === 'Yes' || s === 'No') return s;
+    return '';
+  }
+
   function millGrievanceFlagVal_(row, canonical) {
     if (!row) return '';
     const keys = MILL_GRIEVANCE_FLAG_ALIASES_[canonical] || [canonical];
-    return millPickField_(row, keys) || '';
+    const direct = millPickField_(row, keys);
+    if (direct !== '') return direct;
+    const need = MILL_GRIEVANCE_FUZZY_TOKENS_[canonical];
+    if (!need) return '';
+    return Object.keys(row).reduce(function(found, k) {
+      if (found) return found;
+      if (!k || k === '_row' || k.charAt(0) === '_') return '';
+      const n = String(k).toLowerCase().replace(/\s+/g, ' ');
+      if (!need.every(function(t) { return n.indexOf(t) >= 0; })) return '';
+      const v = row[k];
+      if (v != null && String(v).trim() !== '') return String(v).trim();
+      return '';
+    }, '');
   }
 
   function millNormalizeGrievanceFlagsOnRow_(row) {
     if (!row || typeof row !== 'object') return;
     Object.keys(MILL_GRIEVANCE_FLAG_ALIASES_).forEach(function(canonical) {
       const v = millGrievanceFlagVal_(row, canonical);
-      if (v !== undefined && v !== null && String(v).trim() !== '') row[canonical] = v;
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        row[canonical] = millNormalizeYesNoSelectVal_(v) || v;
+      }
+    });
+    ['DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES'].forEach(function(canonical) {
+      const v = millGrievanceFlagVal_(row, canonical);
+      if (v !== undefined && v !== null && String(v).trim() !== '') {
+        row[canonical] = millNormalizeYesNoSelectVal_(v) || v;
+      }
     });
   }
 
@@ -5722,8 +5758,12 @@ function initDashboardApp() {
       if (!visibleFields.length) return;
       html += `<div class="mill-form-section"><div class="mill-form-section-title">${sec.title}</div><div class="mill-form-grid">`;
       visibleFields.forEach(f => {
-        let val = data ? (data[f] || '') : '';
+        let val = '';
+        if (data && data[f] !== undefined && data[f] !== null) val = String(data[f]).trim();
         if (MILL_GRIEVANCE_FLAG_ALIASES_[f] && data) {
+          val = millGrievanceFlagVal_(data, f) || val;
+        }
+        if (f === 'DEFORESTATION GRIEVANCES' || f === 'BURN AREA GRIEVANCES') {
           val = millGrievanceFlagVal_(data, f) || val;
         }
         if (f === 'SOURCE TYPE' && data) {
@@ -5738,6 +5778,7 @@ function initDashboardApp() {
         const isFull = f === 'ADDRESS' || f === 'COORDINATES';
         const fieldLabel = millGrievanceFieldLabel_(f);
         if (YESNO_FIELDS.includes(f)) {
+          val = millNormalizeYesNoSelectVal_(val) || val;
           html += buildCustomSelect(f, ['Yes','No'], val, true, isFull, fieldLabel);
         } else if (MILL_HA_WIDTH_FIELDS.has(f)) {
           html += buildMillHaWidthField_(f, val);
@@ -24116,6 +24157,10 @@ function initDashboardApp() {
         draftRow[f] = profile[f];
       }
     });
+    MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
+      const gv = millGrievanceFlagVal_(profile, f);
+      if (gv !== '') draftRow[f] = millNormalizeYesNoSelectVal_(gv) || gv;
+    });
     const cap = millCapacityFromRow_(profile);
     if (cap) draftRow['MILL CAPACITY (TON/HOUR)'] = cap;
   }
@@ -24129,6 +24174,10 @@ function initDashboardApp() {
       if (millIsSheetComputedField_(f)) return;
       const v = profile[f];
       if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
+    });
+    MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
+      const gv = millGrievanceFlagVal_(profile, f);
+      if (gv !== '') prefill[f] = millNormalizeYesNoSelectVal_(gv) || gv;
     });
     const cap = millCapacityFromRow_(profile);
     if (cap) prefill['MILL CAPACITY (TON/HOUR)'] = cap;
@@ -24239,6 +24288,10 @@ function initDashboardApp() {
       if (millIsSheetComputedField_(f)) return;
       const v = draftRow[f];
       if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
+    });
+    MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
+      const gv = millGrievanceFlagVal_(draftRow, f);
+      if (gv !== '') prefill[f] = millNormalizeYesNoSelectVal_(gv) || gv;
     });
     ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'SOURCE TYPE', 'PROVINCE'].forEach(function(k) {
       const v = draftRow[k];
