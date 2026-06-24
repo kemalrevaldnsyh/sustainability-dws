@@ -23450,6 +23450,27 @@ function initDashboardApp() {
     return batch;
   }
 
+  function supplyRowPeriodKey_(row, batch) {
+    const month = String(
+      row.month || row.MONTH || row['MONTH']
+        || (batch && (batch.month || batch.quarter)) || ''
+    ).trim();
+    const year = String(
+      row.year || row.YEAR || row['YEAR']
+        || (batch && batch.year) || ''
+    ).trim();
+    return supplyPeriodKey_(month, year);
+  }
+
+  /** Kunci gabung: month + year + company name harus sama persis. */
+  function supplyMergeGroupKey_(row, batch) {
+    const co = supplyCompanyKey_(row['COMPANY NAME']);
+    if (!co) return '';
+    const period = supplyRowPeriodKey_(row, batch);
+    if (!period || period === '|') return '';
+    return period + '||' + co;
+  }
+
   function supplyCompanyKey_(company) {
     return supplyNormKey_(company);
   }
@@ -23499,34 +23520,42 @@ function initDashboardApp() {
     return '';
   }
 
-  /** Semua draft row (belum submit) dengan COMPANY NAME sama di batch periode ini. */
-  function supplyFindDraftRowsForMergeByCompany_(batch, companyName) {
+  /** Semua draft row (belum submit) — company + month + year sama di batch ini. */
+  function supplyFindDraftRowsForMergeByCompany_(batch, companyName, month, year) {
     if (!batch || !batch.rows || !batch.rows.length) return [];
     const wantCo = supplyCompanyKey_(companyName);
     if (!wantCo) return [];
+    const wantPeriod = supplyPeriodKey_(
+      month || (batch && (batch.month || batch.quarter)),
+      year || (batch && batch.year)
+    );
     return batch.rows.filter(function(row) {
-      return !supplyRowIsSubmitted_(row) && supplyCompanyKey_(row['COMPANY NAME']) === wantCo;
+      if (supplyRowIsSubmitted_(row)) return false;
+      if (supplyCompanyKey_(row['COMPANY NAME']) !== wantCo) return false;
+      return supplyRowPeriodKey_(row, batch) === wantPeriod;
     });
   }
 
-  /** Pasangan company dengan baris CPO terpisah + PK (belum submit) — kandidat gabung manual. */
+  /** Pasangan CPO + PK — month, year, company name sama (belum submit). */
   function supplyFindMergeableCpoPkPairs_(batch) {
-    const byCo = {};
+    const byKey = {};
     (batch.rows || []).forEach(function(row, idx) {
       if (supplyRowIsSubmitted_(row) || row._merged_away) return;
-      const co = supplyCompanyKey_(row['COMPANY NAME']);
-      if (!co) return;
-      if (!byCo[co]) byCo[co] = [];
-      byCo[co].push({ row: row, idx: idx });
+      const key = supplyMergeGroupKey_(row, batch);
+      if (!key) return;
+      if (!byKey[key]) byKey[key] = [];
+      byKey[key].push({ row: row, idx: idx });
     });
     const pairs = [];
-    Object.keys(byCo).forEach(function(co) {
-      const list = byCo[co];
+    Object.keys(byKey).forEach(function(key) {
+      const list = byKey[key];
       const cpoRows = list.filter(function(x) { return supplyRowSupplyKindStrict_(x.row) === 'CPO'; });
       const pkRows = list.filter(function(x) { return supplyRowSupplyKindStrict_(x.row) === 'PK'; });
       if (cpoRows.length === 1 && pkRows.length === 1) {
+        const sample = list[0].row;
         pairs.push({
-          company: list[0].row['COMPANY NAME'] || co,
+          company: sample['COMPANY NAME'] || key.split('||')[1] || '',
+          period: supplyRowPeriodKey_(sample, batch),
           cpoIdx: cpoRows[0].idx,
           pkIdx: pkRows[0].idx,
         });
@@ -23535,7 +23564,7 @@ function initDashboardApp() {
     return pairs;
   }
 
-  /** Gabung manual: 1 baris CPO + 1 baris PK (company sama) → satu baris CPO+PK. */
+  /** Gabung manual: 1 baris CPO + 1 baris PK (month/year/company sama) → satu baris CPO+PK. */
   function supplyMergeCpoPkPairsInBatch_(batch) {
     const pairs = supplyFindMergeableCpoPkPairs_(batch);
     if (!pairs.length) return 0;
@@ -25129,7 +25158,7 @@ function initDashboardApp() {
     return '<div class="supply-batch-footer">'
       + '<p class="supply-batch-footer__hint"><strong>Simpan draft</strong> di form Lengkapi menyimpan progress tanpa masuk Mill Onboarding. '
       + '<strong>Submit</strong> (di form atau di baris) baru commit profil + supply data ke sheet. '
-      + 'Import CPO dan PK periode sama tetap <strong>baris terpisah</strong> — gunakan <strong>Gabung CPO+PK</strong> bila ingin satu baris company dengan keduanya.</p>'
+      + 'Import CPO dan PK periode sama tetap <strong>baris terpisah</strong> — gunakan <strong>Gabung CPO+PK</strong> bila month, year, dan company name sama (1 baris CPO + 1 baris PK).</p>'
       + '<div class="supply-batch-footer__actions">'
       + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">Simpan Draft</button>'
       + (mergeableN > 0 ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="merge-cpo-pk" data-batch="' + escHtml(batchId) + '">Gabung CPO+PK (' + mergeableN + ')</button>' : '')
@@ -25184,7 +25213,7 @@ function initDashboardApp() {
         alert('Tidak ada pasangan CPO + PK (company sama) yang bisa digabung.');
         return;
       }
-      if (!confirm('Gabungkan ' + pairs.length + ' pasangan baris (1 CPO + 1 PK per company) jadi satu baris CPO+PK? Baris PK terpisah akan dihapus dari draft.')) return;
+      if (!confirm('Gabungkan ' + pairs.length + ' pasangan (month + year + company name sama: 1 CPO + 1 PK)? Baris PK terpisah akan dihapus dari draft.')) return;
       btn.textContent = '…'; btn.disabled = true;
       const merged = supplyMergeCpoPkPairsInBatch_(batch);
       renderSupplyDraftList_({ expandBatchIds: [bId] });
