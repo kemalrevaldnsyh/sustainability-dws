@@ -5732,6 +5732,9 @@ function initDashboardApp() {
         if (f === 'MILL CAPACITY (TON/HOUR)' && data) {
           val = millCapacityFromRow_(data) || val;
         }
+        if (f === 'MILL CATEGORY' && data) {
+          val = millNormalizeCategoryVal_(millPickField_(data, ['MILL CATEGORY', 'Mill Category']) || val);
+        }
         const isFull = f === 'ADDRESS' || f === 'COORDINATES';
         const fieldLabel = millGrievanceFieldLabel_(f);
         if (YESNO_FIELDS.includes(f)) {
