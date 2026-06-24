@@ -5419,6 +5419,56 @@ function millRestoreFormulaColumnsGs_(sheet, headers, targetRow) {
   });
 }
 
+function millFindCapacityHeaderGs_(headers) {
+  var list = (headers || []).map(function(x) { return String(x || '').trim(); });
+  var aliases = [
+    'MILL CAPACITY (TON/HOUR)', 'Mill Capacity (Ton/Hour)',
+    'MILL CAPACITY', 'Mill Capacity',
+  ];
+  var a;
+  for (a = 0; a < aliases.length; a++) {
+    if (list.indexOf(aliases[a]) >= 0) return aliases[a];
+  }
+  for (var i = 0; i < list.length; i++) {
+    var n = list[i].toLowerCase().replace(/\s+/g, ' ');
+    if (n === 'mill capacity (ton/hour)' || n === 'mill capacity') return list[i];
+  }
+  return null;
+}
+
+function millCapacityFromObjGs_(obj) {
+  if (!obj) return '';
+  var keys = [
+    'MILL CAPACITY (TON/HOUR)', 'Mill Capacity (Ton/Hour)',
+    'MILL CAPACITY', 'Mill Capacity', 'KCP Capacity (Ton/Hour)',
+  ];
+  var i;
+  for (i = 0; i < keys.length; i++) {
+    var v = obj[keys[i]];
+    if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+  }
+  for (var k in obj) {
+    if (!obj.hasOwnProperty(k) || k === '_row') continue;
+    var nk = String(k).trim().toLowerCase().replace(/\s+/g, ' ');
+    if (nk === 'mill capacity (ton/hour)' || nk === 'mill capacity' || nk === 'kcp capacity (ton/hour)') {
+      var v2 = obj[k];
+      if (v2 !== undefined && v2 !== null && String(v2).trim() !== '') return v2;
+    }
+  }
+  return '';
+}
+
+/** Map canonical MILL CAPACITY value onto the exact sheet header name before write. */
+function resolveMillCapacityKeyOnPatch_(patch, headers) {
+  if (!patch || !headers) return;
+  var capCol = millFindCapacityHeaderGs_(headers);
+  if (!capCol) return;
+  var cap = millCapacityFromObjGs_(patch);
+  if (cap !== undefined && cap !== null && String(cap).trim() !== '') {
+    patch[capCol] = cap;
+  }
+}
+
 function mergeReferenceIdentityIntoPatchGs_(patch, refObj) {
   if (!refObj) return patch || {};
   var out = {};
