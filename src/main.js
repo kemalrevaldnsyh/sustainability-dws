@@ -23468,33 +23468,107 @@ function initDashboardApp() {
     return types[0] || 'CPO';
   }
 
+  function supplyRowSupplyKindStrict_(row) {
+    if (!row) return 'CPO';
+    const st = String(row.supply_type || row.SUPPLY_TYPE || '').trim().toUpperCase();
+    if (st === 'PK') return 'PK';
+    if (st === 'CPO') return 'CPO';
+    if (st.indexOf('CPO') >= 0 && st.indexOf('PK') >= 0) return 'CPO+PK';
+    const hasCpoQty = row['SUPPLY CPO'] != null && String(row['SUPPLY CPO']).trim() !== '';
+    const hasPkQty = row['SUPPLY PK'] != null && String(row['SUPPLY PK']).trim() !== '';
+    if (hasCpoQty && hasPkQty) return 'CPO+PK';
+    if (hasPkQty) return 'PK';
+    return 'CPO';
+  }
+
   function supplyRowHasCpo_(row) {
-    if (!row) return false;
-    const st = String(row.supply_type || row.SUPPLY_TYPE || '').toUpperCase();
-    if (st.indexOf('CPO') >= 0) return true;
-    const pct = row[SUPPLY_PCT_COL_CPO];
-    return pct != null && String(pct).trim() !== '';
+    const k = supplyRowSupplyKindStrict_(row);
+    return k === 'CPO' || k === 'CPO+PK';
   }
 
   function supplyRowHasPk_(row) {
-    if (!row) return false;
-    const st = String(row.supply_type || row.SUPPLY_TYPE || '').toUpperCase();
-    if (st.indexOf('PK') >= 0) return true;
-    const pct = row[SUPPLY_PCT_COL_PK];
-    return pct != null && String(pct).trim() !== '';
+    const k = supplyRowSupplyKindStrict_(row);
+    return k === 'PK' || k === 'CPO+PK';
   }
 
   function supplyMergeProductSupplyField_(row) {
-    const types = [];
-    if (supplyRowHasCpo_(row)) types.push('CPO');
-    if (supplyRowHasPk_(row)) types.push('PK');
-    if (types.length === 2) return 'CPO, PK';
-    if (types.length === 1) return types[0];
-    return String(row['PRODUCT SUPPLY'] || '').trim();
+    const k = supplyRowSupplyKindStrict_(row);
+    if (k === 'CPO+PK') return 'CPO, PK';
+    if (k === 'PK') return 'PK';
+    if (k === 'CPO') return 'CPO';
+    return '';
   }
 
   /** Semua draft row (belum submit) dengan COMPANY NAME sama di batch periode ini. */
   function supplyFindDraftRowsForMergeByCompany_(batch, companyName) {
+    if (!batch || !batch.rows || !batch.rows.length) return [];
+    const wantCo = supplyCompanyKey_(companyName);
+    if (!wantCo) return [];
+    return batch.rows.filter(function(row) {
+      return !supplyRowIsSubmitted_(row) && supplyCompanyKey_(row['COMPANY NAME']) === wantCo;
+    });
+  }
+
+  /** Pasangan company dengan baris CPO terpisah + PK (belum submit) — kandidat gabung manual. */
+  function supplyFindMergeableCpoPkPairs_(batch) {
+    const byCo = {};
+    (batch.rows || []).forEach(function(row, idx) {
+      if (supplyRowIsSubmitted_(row) || row._merged_away) return;
+      const co = supplyCompanyKey_(row['COMPANY NAME']);
+      if (!co) return;
+      if (!byCo[co]) byCo[co] = [];
+      byCo[co].push({ row: row, idx: idx });
+    });
+    const pairs = [];
+    Object.keys(byCo).forEach(function(co) {
+      const list = byCo[co];
+      const cpoRows = list.filter(function(x) { return supplyRowSupplyKindStrict_(x.row) === 'CPO'; });
+      const pkRows = list.filter(function(x) { return supplyRowSupplyKindStrict_(x.row) === 'PK'; });
+      if (cpoRows.length === 1 && pkRows.length === 1) {
+        pairs.push({
+          company: list[0].row['COMPANY NAME'] || co,
+          cpoIdx: cpoRows[0].idx,
+          pkIdx: pkRows[0].idx,
+        });
+      }
+    });
+    return pairs;
+  }
+
+  /** Gabung manual: 1 baris CPO + 1 baris PK (company sama) → satu baris CPO+PK. */
+  function supplyMergeCpoPkPairsInBatch_(batch) {
+    const pairs = supplyFindMergeableCpoPkPairs_(batch);
+    if (!pairs.length) return 0;
+    pairs.sort(function(a, b) { return b.pkIdx - a.pkIdx; });
+    pairs.forEach(function(p) {
+      const target = batch.rows[p.cpoIdx];
+      const source = batch.rows[p.pkIdx];
+      if (!target || !source) return;
+      supplyMergeDraftRows_(target, source);
+      target.supply_type = 'CPO+PK';
+      target.SUPPLY_TYPE = 'CPO+PK';
+      target['PRODUCT SUPPLY'] = 'CPO, PK';
+      batch.rows.splice(p.pkIdx, 1);
+    });
+    return pairs.length;
+  }
+
+  function supplyBatchTypeSummaryHtml_(batch) {
+    let cpoN = 0;
+    let pkN = 0;
+    let dualN = 0;
+    (batch.rows || []).forEach(function(r) {
+      const k = supplyRowSupplyKindStrict_(r);
+      if (k === 'CPO+PK') dualN++;
+      else if (k === 'PK') pkN++;
+      else cpoN++;
+    });
+    const parts = [];
+    if (cpoN) parts.push('<span class="supply-badge supply-badge--cpo">' + cpoN + ' CPO</span>');
+    if (pkN) parts.push('<span class="supply-badge supply-badge--pk">' + pkN + ' PK</span>');
+    if (dualN) parts.push('<span class="supply-badge supply-badge--cpopk">' + dualN + ' gabung</span>');
+    return parts.length ? parts.join(' ') : supplyTypeBadgeHtml_('CPO');
+  }
     if (!batch || !batch.rows || !batch.rows.length) return [];
     const wantCo = supplyCompanyKey_(companyName);
     if (!wantCo) return [];
@@ -23604,8 +23678,8 @@ function initDashboardApp() {
       target.SUPPLY_QTY = source.SUPPLY_QTY;
     }
     if (source['SOURCE TYPE'] && !target['SOURCE TYPE']) target['SOURCE TYPE'] = source['SOURCE TYPE'];
-    target.supply_type = supplyCombineSupplyTypes_(target.supply_type, source.supply_type || source.SUPPLY_TYPE);
-    target.SUPPLY_TYPE = target.supply_type;
+    target.supply_type = 'CPO+PK';
+    target.SUPPLY_TYPE = 'CPO+PK';
     target['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(target);
   }
 
@@ -23855,14 +23929,13 @@ function initDashboardApp() {
   }
 
   function supplyResolveKindFromDraft_(draftRow, batch) {
+    const rowKind = String((draftRow && draftRow.supply_type) || (draftRow && draftRow.SUPPLY_TYPE) || '').trim().toUpperCase();
+    if (rowKind === 'CPO+PK' || (rowKind.indexOf('CPO') >= 0 && rowKind.indexOf('PK') >= 0)) return 'CPO+PK';
+    if (rowKind === 'PK') return 'PK';
+    if (rowKind === 'CPO') return 'CPO';
     const batchKind = String((batch && batch.supply_type) || '').trim().toUpperCase();
     if (batchKind === 'PK') return 'PK';
     if (batchKind === 'CPO') return 'CPO';
-    const rowKind = String((draftRow && draftRow.supply_type) || (draftRow && draftRow.SUPPLY_TYPE) || '').trim().toUpperCase();
-    if (rowKind === 'PK') return 'PK';
-    if (rowKind === 'CPO') return 'CPO';
-    if (batchKind.indexOf('CPO') >= 0 && batchKind.indexOf('PK') >= 0) return 'CPO+PK';
-    if (rowKind.indexOf('CPO') >= 0 && rowKind.indexOf('PK') >= 0) return 'CPO+PK';
     return 'CPO';
   }
 
@@ -23889,13 +23962,11 @@ function initDashboardApp() {
       const q = (qtyCpo != null && String(qtyCpo).trim() !== '') ? qtyCpo : legacyQty;
       if (q != null && String(q).trim() !== '') out['SUPPLY CPO'] = q;
       if (plant) out['FACILITY NAME CPO'] = plant;
-    } else {
+    } else if (kind === 'CPO+PK') {
       if (qtyCpo != null && String(qtyCpo).trim() !== '') out['SUPPLY CPO'] = qtyCpo;
       if (qtyPk != null && String(qtyPk).trim() !== '') out['SUPPLY PK'] = qtyPk;
-      if (plant) {
-        if (draftRow && draftRow['FACILITY NAME CPO']) out['FACILITY NAME CPO'] = draftRow['FACILITY NAME CPO'];
-        if (draftRow && draftRow['FACILITY NAME PK']) out['FACILITY NAME PK'] = draftRow['FACILITY NAME PK'];
-      }
+      if (draftRow && draftRow['FACILITY NAME CPO']) out['FACILITY NAME CPO'] = draftRow['FACILITY NAME CPO'];
+      if (draftRow && draftRow['FACILITY NAME PK']) out['FACILITY NAME PK'] = draftRow['FACILITY NAME PK'];
     }
     return out;
   }
@@ -23910,14 +23981,14 @@ function initDashboardApp() {
         if (src[i]._row === draftRow._mill_row) return src[i];
       }
     }
-    const kind = supplyResolveKindFromDraft_(draftRow, batch);
-    const facField = kind === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+    const kind2 = supplyResolveKindFromDraft_(draftRow, batch);
+    const facField = kind2 === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
     const found = supplyFindMillProfileMatch_({
       COMPANY_NAME: draftRow['COMPANY NAME'],
       MILL_NAME: draftRow['MILL NAME'],
       COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
-      PLANT: draftRow[facField] || draftRow['FACILITY NAME CPO'] || draftRow['FACILITY NAME PK'] || draftRow.PLANT || '',
-    }, kind);
+      PLANT: draftRow[facField] || draftRow.PLANT || '',
+    }, kind2);
     if (found.row) {
       draftRow._mill_row = found.row._row;
       draftRow.target_mill_row = found.row._row;
@@ -24908,8 +24979,8 @@ function initDashboardApp() {
       const doneCount   = b.rows ? b.rows.filter(function(r) { return supplyRowIsSubmitted_(r); }).length : 0;
       const isSubmitted = b.status === 'submitted';
       const isPartial   = !isSubmitted && doneCount > 0;
-      const supplyKind  = String(b.supply_type || (b.rows && b.rows[0] && b.rows[0].supply_type) || 'CPO').toUpperCase();
-      const typeBadge   = supplyTypeBadgeHtml_(supplyKind);
+      const typeBadge   = supplyBatchTypeSummaryHtml_(b);
+      const mergeableN  = supplyFindMergeableCpoPkPairs_(b).length;
       const statusBadge = isSubmitted
         ? '<span class="supply-badge supply-badge--submitted">Submitted</span>'
         : (isPartial
@@ -24937,6 +25008,7 @@ function initDashboardApp() {
         + '<div class="supply-batch-actions">'
         + (!isSubmitted ? '<button type="button" class="supply-btn supply-btn--ghost supply-btn--expand" data-batch="' + escHtml(b.batch_id) + '">Lihat / Edit</button>' : '')
         + (!isSubmitted ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="rematch-batch" data-batch="' + escHtml(b.batch_id) + '">↻ Re-match</button>' : '')
+        + (!isSubmitted && mergeableN > 0 ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="merge-cpo-pk" data-batch="' + escHtml(b.batch_id) + '">Gabung CPO+PK (' + mergeableN + ')</button>' : '')
         + '<button type="button" class="supply-btn supply-btn--danger" data-action="delete-batch" data-batch="' + escHtml(b.batch_id) + '">Hapus</button>'
         + '</div>'
         + '</div>'
@@ -25053,11 +25125,14 @@ function initDashboardApp() {
     const matched = batch ? (batch.rows || []).filter(function(r) {
       return r.match_status === 'matched' && !supplyRowIsSubmitted_(r);
     }).length : 0;
+    const mergeableN = batch ? supplyFindMergeableCpoPkPairs_(batch).length : 0;
     return '<div class="supply-batch-footer">'
       + '<p class="supply-batch-footer__hint"><strong>Simpan draft</strong> di form Lengkapi menyimpan progress tanpa masuk Mill Onboarding. '
-      + '<strong>Submit</strong> (di form atau di baris) baru commit profil + supply data ke sheet.</p>'
+      + '<strong>Submit</strong> (di form atau di baris) baru commit profil + supply data ke sheet. '
+      + 'Import CPO dan PK periode sama tetap <strong>baris terpisah</strong> — gunakan <strong>Gabung CPO+PK</strong> bila ingin satu baris company dengan keduanya.</p>'
       + '<div class="supply-batch-footer__actions">'
       + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">Simpan Draft</button>'
+      + (mergeableN > 0 ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="merge-cpo-pk" data-batch="' + escHtml(batchId) + '">Gabung CPO+PK (' + mergeableN + ')</button>' : '')
       + (matched > 0 ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-matched" data-batch="' + escHtml(batchId) + '">Submit Matched (' + matched + ')</button>' : '')
       + '</div>'
       + '</div>';
@@ -25100,6 +25175,28 @@ function initDashboardApp() {
         rematchWork();
         btn.disabled = false;
       }
+      return;
+    }
+
+    if (action === 'merge-cpo-pk') {
+      const pairs = supplyFindMergeableCpoPkPairs_(batch);
+      if (!pairs.length) {
+        alert('Tidak ada pasangan CPO + PK (company sama) yang bisa digabung.');
+        return;
+      }
+      if (!confirm('Gabungkan ' + pairs.length + ' pasangan baris (1 CPO + 1 PK per company) jadi satu baris CPO+PK? Baris PK terpisah akan dihapus dari draft.')) return;
+      btn.textContent = '…'; btn.disabled = true;
+      const merged = supplyMergeCpoPkPairsInBatch_(batch);
+      renderSupplyDraftList_({ expandBatchIds: [bId] });
+      apiPost({ action: 'saveSupplyDraft', batch_id: bId, rows: batch.rows, meta: { month: batch.month, year: batch.year } })
+        .then(function() {
+          btn.disabled = false;
+          alert('✓ ' + merged + ' pasangan digabung. Submit baris gabungan akan isi SUPPLY CPO dan SUPPLY PK sekaligus.');
+        })
+        .catch(function(err) {
+          btn.disabled = false;
+          alert('Gagal simpan: ' + err.message);
+        });
       return;
     }
 

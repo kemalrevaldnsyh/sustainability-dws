@@ -5296,6 +5296,7 @@ function supplySubmitKindFromDraftGs_(row) {
   var st = String(row.supply_type || row.SUPPLY_TYPE || 'CPO').trim().toUpperCase();
   if (st === 'PK') return 'PK';
   if (st === 'CPO') return 'CPO';
+  if (st === 'CPO+PK' || st === 'BOTH') return 'BOTH';
   if (st.indexOf('CPO') >= 0 && st.indexOf('PK') >= 0) return 'BOTH';
   return 'CPO';
 }
@@ -5340,6 +5341,20 @@ function millStripFormulaFromPatchGs_(patch) {
     if (v !== undefined && v !== null && String(v).trim() !== '') out[k] = v;
   });
   return out;
+}
+
+/** Kosongkan kolom supply lawan jenis (sisa copy baris insert) — CPO saja tidak bawa PK. */
+function millClearOppositeSupplyColumnsGs_(sheet, headers, targetRow, kind) {
+  var clearKeys = [];
+  if (kind === 'CPO') clearKeys = ['SUPPLY PK', 'FACILITY NAME PK'];
+  else if (kind === 'PK') clearKeys = ['SUPPLY CPO', 'FACILITY NAME CPO'];
+  else return;
+  clearKeys.forEach(function(k) {
+    if (millIsFormulaColumnGs_(k)) return;
+    var col = headers.indexOf(k);
+    if (col < 0) return;
+    sheet.getRange(targetRow, col + 1).clearContent();
+  });
 }
 
 /** Tulis hanya sel non-rumus — jangan setValues satu baris penuh (itu menghapus rumus). */
@@ -5438,6 +5453,9 @@ function millAppendSupplyRowGs_(millSheet, millHeaders, row, millData) {
   }
 
   millWriteSupplyPatchCellsGs_(millSheet, millHeaders, targetRow, patch);
+  var submitKind = supplySubmitKindFromDraftGs_(row);
+  if (submitKind === 'CPO') millClearOppositeSupplyColumnsGs_(millSheet, millHeaders, targetRow, 'CPO');
+  else if (submitKind === 'PK') millClearOppositeSupplyColumnsGs_(millSheet, millHeaders, targetRow, 'PK');
   millRestoreFormulaColumnsGs_(millSheet, millHeaders, targetRow);
   return targetRow;
 }
