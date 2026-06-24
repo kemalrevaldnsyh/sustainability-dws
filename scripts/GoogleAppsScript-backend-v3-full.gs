@@ -5342,6 +5342,44 @@ function millStripFormulaFromPatchGs_(patch) {
   return out;
 }
 
+/** Tulis hanya sel non-rumus — jangan setValues satu baris penuh (itu menghapus rumus). */
+function millWriteSupplyPatchCellsGs_(sheet, headers, targetRow, patch) {
+  Object.keys(patch || {}).forEach(function(k) {
+    if (!k || millIsFormulaColumnGs_(k)) return;
+    var colIdx = headers.indexOf(k);
+    if (colIdx < 0) return;
+    var v = patch[k];
+    if (v === undefined || v === null) return;
+    var cell = sheet.getRange(targetRow, colIdx + 1);
+    if (COORD_COLUMN_NAMES.indexOf(k) >= 0) {
+      var s = String(v).trim();
+      if (!s) return;
+      cell.setNumberFormat('@');
+      cell.setValue(s);
+      return;
+    }
+    cell.setValue(coerceSheetDateValue_(v));
+  });
+}
+
+/** Salin rumus dari baris tetangga jika sel target belum punya rumus (setelah insert / slot kosong). */
+function millRestoreFormulaColumnsGs_(sheet, headers, targetRow) {
+  var lastRow = sheet.getLastRow();
+  var templateRow = 0;
+  if (targetRow + 1 <= lastRow) templateRow = targetRow + 1;
+  else if (targetRow - 1 >= 2) templateRow = targetRow - 1;
+  if (!templateRow) return;
+  Object.keys(MILL_FORMULA_HEADERS_).forEach(function(header) {
+    var col = headers.indexOf(header);
+    if (col < 0) return;
+    var dst = sheet.getRange(targetRow, col + 1);
+    if (String(dst.getFormula() || '').trim()) return;
+    var src = sheet.getRange(templateRow, col + 1);
+    if (!String(src.getFormula() || '').trim()) return;
+    src.copyTo(dst, SpreadsheetApp.CopyPasteType.PASTE_FORMULA, false);
+  });
+}
+
 function mergeReferenceIdentityIntoPatchGs_(patch, refObj) {
   if (!refObj) return patch || {};
   var out = {};
@@ -5391,13 +5429,16 @@ function millAppendSupplyRowGs_(millSheet, millHeaders, row, millData) {
     if (millRowIsEmptySlotGs_(belowObj)) needInsert = false;
   }
 
+  var templateRow = activeLast;
   if (needInsert) {
     var insertAfter = Math.min(Math.max(activeLast, 1), Math.max(lastRow, 1));
     millSheet.insertRowAfter(insertAfter);
     targetRow = insertAfter + 1;
+    templateRow = insertAfter;
   }
 
-  updateRow('mill', targetRow, patch);
+  millWriteSupplyPatchCellsGs_(millSheet, millHeaders, targetRow, patch);
+  millRestoreFormulaColumnsGs_(millSheet, millHeaders, targetRow);
   return targetRow;
 }
 
