@@ -3944,8 +3944,8 @@ import {
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbxl2s4MWrTOnIZ0Y-fKNZNd7RlRjbjmqI1t1kS3kFY5BtN8wvUq1xkjCaY7yq6WZBJH_Q/exec';
-var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbx9K1McLrYR3DuNejG-JTC_cCGNmfjkmZQHL3Q2HBuSVDxkcZIjGlIhVGkzJIp7D2DYLA';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwIYBvBvS6prk2HsHYWnzIAYnywGkeavCPEnZ9VHdWaLoCpbZSehHJs3cAvhEbhU2UDsQ/exec';
+var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbwIYBvBvS6prk2HsHYWnzIAYnywGkeavCPEnZ9VHdWaLoCpbZSehHJs3cAvhEbhU2UDsQ';
 
 function normalizeSddWebAppUrl_(raw) {
   var u = String(raw || '').trim();
