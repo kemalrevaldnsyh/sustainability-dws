@@ -24563,7 +24563,7 @@ function initDashboardApp() {
     if (kind.indexOf('CPO') >= 0 && kind.indexOf('PK') >= 0) {
       hintEl.textContent = 'Draft ' + mLabel + ' ' + y + ' sudah ada (' + rowCount + ' baris, CPO+PK). Import ini menambah baris baru (tidak mengganti baris yang sudah ada).';
     } else if ((kind === 'CPO' && importKind === 'PK') || (kind === 'PK' && importKind === 'CPO')) {
-      hintEl.textContent = 'Draft ' + mLabel + ' ' + y + ' sudah ada (' + rowCount + ' baris ' + kind + '). Import ' + importKind + ' menambah baris terpisah per company — submit ke sheet juga baris baru di bawah.';
+      hintEl.textContent = 'Draft ' + mLabel + ' ' + y + ' sudah ada (' + rowCount + ' baris ' + kind + '). Import ' + importKind + ' akan <strong>menggabung</strong> ke baris company yang sama (isi SUPPLY/FACILITY ' + importKind + ').';
     } else {
       hintEl.textContent = 'Draft ' + mLabel + ' ' + y + ' sudah ada (' + rowCount + ' baris). Baris baru akan ditambahkan atau diperbarui.';
     }
