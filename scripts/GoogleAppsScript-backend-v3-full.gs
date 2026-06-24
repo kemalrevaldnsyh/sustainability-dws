@@ -181,7 +181,7 @@ const SUPPLY_DRAFT_HEADERS = [
   'SUPPLIER LEVEL', 'BUYER NO BUY LIST', 'VOLUME SUPPLY STATUS',
   'RECOMMENDATION LEVEL', 'PRIORITY ENGAGEMENT', 'SIGN', 'SUPPLIER STATUS', 'RISK LEVEL',
   'RESULT RISK LEVEL', 'FACILITY NAME CPO', 'FACILITY NAME PK',
-  'PLANT', 'PRODUCT SUPPLY', 'SUPPLY CPO', 'SUPPLY PK',
+  'PLANT', 'PRODUCT SUPPLY',
 ];
 
 const NBL_HEADERS = [
@@ -5132,6 +5132,21 @@ function ensureSupplyDraftHeaders_() {
   return sheet;
 }
 
+function supplyNormalizeHaWidthValGs_(raw) {
+  if (raw === undefined || raw === null || raw === '') return '';
+  if (typeof raw === 'number' && isFinite(raw)) return raw;
+  var s = String(raw).trim();
+  if (!s) return '';
+  if (/^(yes|no|y|n|true|false|low|medium|high|ada|tidak)$/i.test(s)) return '';
+  var n = parseFloat(s.replace(/[^\d.,-]/g, '').replace(',', '.'));
+  return isNaN(n) ? '' : n;
+}
+
+function supplyIsHaWidthHeaderGs_(h) {
+  var u = String(h || '').trim().toUpperCase();
+  return u === 'DEFORESTATION WIDTH' || u === 'BURN AREA WIDTH' || u === 'PEAT WIDTH';
+}
+
 function saveSupplyDraft_(rows, batchId, meta) {
   ensureSupplyDraftHeaders_();
   var sheet   = getSheet('supplyDraft');
@@ -5139,6 +5154,9 @@ function saveSupplyDraft_(rows, batchId, meta) {
   var headers = data[0].map(function(h) { return String(h || '').trim(); });
   var draftIdCol = headers.indexOf('draft_id');
   var statusCol = headers.indexOf('status');
+  if (draftIdCol < 0) {
+    throw new Error('Supply Import Draft sheet missing draft_id column. Open the spreadsheet once via dashboard or redeploy Apps Script.');
+  }
   var now  = nowIso_();
   var user = callerEmail_();
   var saved = 0;
@@ -5167,7 +5185,10 @@ function saveSupplyDraft_(rows, batchId, meta) {
       row.SUPPLY_TYPE = metaType;
     }
     var draftId = String(row.draft_id || '').trim();
-    if (!draftId) return;
+    if (!draftId) {
+      draftId = String(batchId || 'batch') + '_auto_' + Date.now() + '_' + saved;
+      row.draft_id = draftId;
+    }
     var existingIdx = draftIndex[draftId];
     var rowArr = headers.map(function(h) {
       if (h === 'updated_at') return now;
@@ -5184,6 +5205,7 @@ function saveSupplyDraft_(rows, batchId, meta) {
         if (!row[h]) return 'draft';
       }
       var v = row[h];
+      if (supplyIsHaWidthHeaderGs_(h)) return supplyNormalizeHaWidthValGs_(v);
       return (v !== undefined && v !== null) ? v : '';
     });
     if (existingIdx != null) {
