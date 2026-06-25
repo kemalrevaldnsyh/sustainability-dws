@@ -9,7 +9,7 @@ import {
 
 const GAS_URL =
   process.env.GAS_WEBAPP_URL ||
-  'https://script.google.com/macros/s/AKfycbwdvihaJ_qke9zueOixEdBsrXGhNy40KnOVunllpbZ_xk3eZwJWzKOOSRq4WFhWRjKeiA/exec';
+  'https://script.google.com/macros/s/AKfycbzz81q205hEquF3gqm4KfDQC1BuBzI6X09ELSpg6rafr7QAbDGVWSfPUE9yZwKul4vqOA/exec';
 
 async function gasGet(sheet) {
   const url = GAS_URL + '?' + new URLSearchParams({ action: 'getAll', sheet }).toString();
