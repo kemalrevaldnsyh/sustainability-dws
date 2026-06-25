@@ -5664,7 +5664,7 @@ function supplyFillAllGrievanceFromRefsGs_(patch, row, refObj) {
     ['DEFORESTATION GRIEVANCES', []],
     ['BURN AREA GRIEVANCES', []],
     ['LEGALITY GRIEVANCE', ['LEGALITY']],
-    ['HUMAN RIGHTS GRIEVANCE', ['HUMAN RIGHT', 'HUMAN RIGHTS', 'HUMAN RIGHTS GRIEVANCES']],
+    ['HUMAN RIGHTS GRIEVANCE', ['HUMAN RIGHT']],
     ['SAFETY GRIEVANCE', ['SAFETY']],
     ['SOCIAL GRIEVANCE', ['SOCIAL']],
     ['ENVIRONMENT GRIEVANCE', ['ENVIRONMENT']],
@@ -5707,14 +5707,50 @@ function resolveGrievanceKeysOnPatchGs_(patch, headers) {
   });
 }
 
+function supplyGrievanceNamedKeysGs_(canonical) {
+  if (canonical === 'DEFORESTATION GRIEVANCES') return ['DEFORESTATION GRIEVANCES'];
+  if (canonical === 'BURN AREA GRIEVANCES') return ['BURN AREA GRIEVANCES'];
+  if (canonical === 'LEGALITY GRIEVANCE') return ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES'];
+  if (canonical === 'HUMAN RIGHTS GRIEVANCE') return ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHTS'];
+  if (canonical === 'SAFETY GRIEVANCE') return ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES'];
+  if (canonical === 'SOCIAL GRIEVANCE') return ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES'];
+  if (canonical === 'ENVIRONMENT GRIEVANCE') return ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT GRIEVANCES'];
+  return [canonical];
+}
+
+function supplyObjHasGrievanceColGs_(obj, canonical) {
+  if (!obj) return false;
+  return Object.keys(obj).some(function(k) {
+    var n = String(k || '').toLowerCase().replace(/\s+/g, ' ');
+    if (n.indexOf('griev') < 0) return false;
+    if (canonical === 'DEFORESTATION GRIEVANCES') return n.indexOf('deforest') >= 0;
+    if (canonical === 'BURN AREA GRIEVANCES') return n.indexOf('burn') >= 0;
+    if (canonical === 'LEGALITY GRIEVANCE') return n.indexOf('legality') >= 0;
+    if (canonical === 'HUMAN RIGHTS GRIEVANCE') return n.indexOf('human') >= 0;
+    if (canonical === 'SAFETY GRIEVANCE') return n.indexOf('safety') >= 0;
+    if (canonical === 'SOCIAL GRIEVANCE') return n.indexOf('social') >= 0;
+    if (canonical === 'ENVIRONMENT GRIEVANCE') return n.indexOf('environment') >= 0 || n.indexOf('environ') >= 0;
+    return true;
+  });
+}
+
 function supplyGrievanceValFromObjsGs_(objs, canonical, legacyKeys) {
-  var keys = [canonical].concat(legacyKeys || []);
-  for (var oi = 0; oi < objs.length; oi++) {
-    var obj = objs[oi];
+  var grievKeys = supplyGrievanceNamedKeysGs_(canonical);
+  var oi, ki, obj, v, li, lv;
+  for (oi = 0; oi < objs.length; oi++) {
+    obj = objs[oi];
     if (!obj) continue;
-    for (var ki = 0; ki < keys.length; ki++) {
-      var v = obj[keys[ki]];
+    for (ki = 0; ki < grievKeys.length; ki++) {
+      v = obj[grievKeys[ki]];
       if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+    }
+  }
+  for (oi = 0; oi < objs.length; oi++) {
+    obj = objs[oi];
+    if (!obj || supplyObjHasGrievanceColGs_(obj, canonical)) continue;
+    for (li = 0; li < (legacyKeys || []).length; li++) {
+      lv = obj[legacyKeys[li]];
+      if (lv !== undefined && lv !== null && String(lv).trim() !== '') return lv;
     }
   }
   return '';

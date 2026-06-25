@@ -5327,11 +5327,20 @@ function initDashboardApp() {
   ];
 
   const MILL_GRIEVANCE_FLAG_ALIASES_ = {
-    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES', 'LEGALITY', 'Legality'],
-    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHT', 'HUMAN RIGHTS', 'Human Right', 'Human Rights'],
-    [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES', 'SAFETY', 'Safety'],
-    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES', 'SOCIAL', 'Social'],
-    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT GRIEVANCES', 'ENVIRONMENT', 'Environment'],
+    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES'],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHTS', 'Human Rights'],
+    [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES'],
+    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES'],
+    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT GRIEVANCES'],
+  };
+
+  /** Pre-rename sheet headers — only used when no *grievance* column exists for that flag. */
+  const MILL_GRIEVANCE_LEGACY_ALIASES_ = {
+    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY', 'Legality'],
+    [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHT', 'Human Right'],
+    [MILL_SAFETY_GRIEVANCE]: ['SAFETY', 'Safety'],
+    [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL', 'Social'],
+    [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT', 'Environment'],
   };
 
   const MILL_GRIEVANCE_FUZZY_TOKENS_ = {
@@ -5350,37 +5359,66 @@ function initDashboardApp() {
     return '';
   }
 
+  function millRowHasGrievanceNamedColumn_(row, canonical) {
+    if (!row) return false;
+    const need = MILL_GRIEVANCE_FUZZY_TOKENS_[canonical];
+    return Object.keys(row).some(function(k) {
+      if (!k || k === '_row' || k.charAt(0) === '_') return false;
+      const n = String(k).toLowerCase().replace(/\s+/g, ' ');
+      if (n.indexOf('griev') < 0) return false;
+      if (canonical === 'DEFORESTATION GRIEVANCES') {
+        return n.indexOf('deforest') >= 0;
+      }
+      if (canonical === 'BURN AREA GRIEVANCES') {
+        return n.indexOf('burn') >= 0;
+      }
+      if (!need) return true;
+      return need.every(function(t) { return n.indexOf(t) >= 0; });
+    });
+  }
+
   function millGrievanceFlagVal_(row, canonical) {
     if (!row) return '';
     const keys = MILL_GRIEVANCE_FLAG_ALIASES_[canonical] || [canonical];
-    const direct = millPickField_(row, keys);
-    if (direct !== '') return direct;
+    const grievKeys = keys.filter(function(k) { return /griev/i.test(String(k)); });
+    const pickKeys = grievKeys.length ? grievKeys : [canonical];
+    const fromGriev = millPickField_(row, pickKeys);
+    if (fromGriev !== '') return fromGriev;
     const need = MILL_GRIEVANCE_FUZZY_TOKENS_[canonical];
-    if (!need) return '';
-    return Object.keys(row).reduce(function(found, k) {
-      if (found) return found;
-      if (!k || k === '_row' || k.charAt(0) === '_') return '';
-      const n = String(k).toLowerCase().replace(/\s+/g, ' ');
-      if (!need.every(function(t) { return n.indexOf(t) >= 0; })) return '';
-      const v = row[k];
-      if (v != null && String(v).trim() !== '') return String(v).trim();
-      return '';
-    }, '');
+    if (need) {
+      const fuzzy = Object.keys(row).reduce(function(found, k) {
+        if (found) return found;
+        if (!k || k === '_row' || k.charAt(0) === '_') return '';
+        const n = String(k).toLowerCase().replace(/\s+/g, ' ');
+        if (n.indexOf('griev') < 0) return '';
+        if (!need.every(function(t) { return n.indexOf(t) >= 0; })) return '';
+        const v = row[k];
+        if (v != null && String(v).trim() !== '') return String(v).trim();
+        return '';
+      }, '');
+      if (fuzzy !== '') return fuzzy;
+    }
+    if (!millRowHasGrievanceNamedColumn_(row, canonical)) {
+      const legacy = MILL_GRIEVANCE_LEGACY_ALIASES_[canonical];
+      if (legacy) {
+        const leg = millPickField_(row, legacy);
+        if (leg !== '') return leg;
+      }
+    }
+    return '';
   }
 
   function millNormalizeGrievanceFlagsOnRow_(row) {
     if (!row || typeof row !== 'object') return;
     Object.keys(MILL_GRIEVANCE_FLAG_ALIASES_).forEach(function(canonical) {
       const v = millGrievanceFlagVal_(row, canonical);
-      if (v !== undefined && v !== null && String(v).trim() !== '') {
-        row[canonical] = millNormalizeYesNoSelectVal_(v) || v;
-      }
+      const norm = millNormalizeYesNoSelectVal_(v);
+      if (norm === 'Yes' || norm === 'No') row[canonical] = norm;
     });
     ['DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES'].forEach(function(canonical) {
       const v = millGrievanceFlagVal_(row, canonical);
-      if (v !== undefined && v !== null && String(v).trim() !== '') {
-        row[canonical] = millNormalizeYesNoSelectVal_(v) || v;
-      }
+      const norm = millNormalizeYesNoSelectVal_(v);
+      if (norm === 'Yes' || norm === 'No') row[canonical] = norm;
     });
   }
 
@@ -24370,15 +24408,18 @@ function initDashboardApp() {
   }
 
   function supplyBuildMillPrefillFromDraft_(draftRow, batch) {
-    const prefill = supplyProfilePrefillFromRow_(supplyGetDraftProfileRow_(draftRow, batch));
+    const profileRow = supplyGetDraftProfileRow_(draftRow, batch);
+    const prefill = supplyProfilePrefillFromRow_(profileRow);
     if (batch) {
       if (batch.month) prefill['MONTH'] = String(batch.month);
       else if (batch.quarter) prefill['MONTH'] = String(batch.quarter);
       if (batch.year) prefill['YEAR'] = String(batch.year);
     }
+    const draftSaved = supplyDraftSavedFlag_(draftRow);
     (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
       if (millIsSheetComputedField_(f)) return;
       if (MILL_HA_WIDTH_FIELDS.has(f)) return;
+      if (MILL_GRIEVANCE_FLAG_FIELDS_.indexOf(f) >= 0) return;
       const v = draftRow[f];
       if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
     });
@@ -24389,14 +24430,11 @@ function initDashboardApp() {
       }
     });
     MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
-      const gv = millGrievanceFlagVal_(draftRow, f);
-      const norm = millNormalizeYesNoSelectVal_(gv);
-      if (norm === 'Yes' || norm === 'No') {
-        prefill[f] = norm;
-      } else if (!prefill[f]) {
-        const pv = millGrievanceFlagVal_(prefill, f);
-        const pnorm = millNormalizeYesNoSelectVal_(pv);
-        if (pnorm === 'Yes' || pnorm === 'No') prefill[f] = pnorm;
+      const pnorm = millNormalizeYesNoSelectVal_(millGrievanceFlagVal_(profileRow, f));
+      if (pnorm === 'Yes' || pnorm === 'No') prefill[f] = pnorm;
+      if (draftSaved) {
+        const dnorm = millNormalizeYesNoSelectVal_(millGrievanceFlagVal_(draftRow, f));
+        if (dnorm === 'Yes' || dnorm === 'No') prefill[f] = dnorm;
       }
     });
     ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'SOURCE TYPE', 'PROVINCE'].forEach(function(k) {
