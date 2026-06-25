@@ -24704,8 +24704,11 @@ function initDashboardApp() {
     const row = batch.rows[rowIdx];
     const wrap = document.getElementById('supply-batch-table-' + batchId);
     if (!wrap) return;
-    const tr = wrap.querySelectorAll('tbody tr')[rowIdx];
-    if (!tr) return;
+    const tr = wrap.querySelector('tbody tr[data-row-idx="' + rowIdx + '"]');
+    if (!tr) {
+      supplyRerenderBatchTable_(batchId);
+      return;
+    }
     const companyTd = tr.querySelector('.supply-batch-td--company');
     if (companyTd) {
       const typePills = supplyRowTypePillsHtml_(row);
@@ -25610,6 +25613,72 @@ function initDashboardApp() {
     if (tableCard) tableCard.style.display = 'none';
   }
 
+  function supplyGetBatchRowFilter_(batchId) {
+    if (!window._supplyBatchRowFilters) window._supplyBatchRowFilters = {};
+    return window._supplyBatchRowFilters[batchId] || 'all';
+  }
+
+  function supplySetBatchRowFilter_(batchId, filter) {
+    if (!window._supplyBatchRowFilters) window._supplyBatchRowFilters = {};
+    window._supplyBatchRowFilters[batchId] = filter || 'all';
+  }
+
+  function supplyBatchFilterCounts_(batch) {
+    const rows = batch && batch.rows ? batch.rows : [];
+    return {
+      all: rows.length,
+      matched: rows.filter(function(r) { return r.match_status === 'matched' && !supplyRowIsSubmitted_(r); }).length,
+      draft: rows.filter(function(r) { return supplyDraftSavedFlag_(r) && !supplyRowIsSubmitted_(r); }).length,
+      new: rows.filter(function(r) { return r.match_status === 'new' && !supplyRowIsSubmitted_(r); }).length,
+    };
+  }
+
+  function supplyRowMatchesBatchFilter_(row, filter) {
+    const f = filter || 'all';
+    if (f === 'all') return true;
+    if (f === 'matched') return row.match_status === 'matched' && !supplyRowIsSubmitted_(row);
+    if (f === 'draft') return supplyDraftSavedFlag_(row) && !supplyRowIsSubmitted_(row);
+    if (f === 'new') return row.match_status === 'new' && !supplyRowIsSubmitted_(row);
+    return true;
+  }
+
+  function supplyBatchFilterBarHtml_(batch) {
+    const batchId = batch.batch_id;
+    const active = supplyGetBatchRowFilter_(batchId);
+    const counts = supplyBatchFilterCounts_(batch);
+    const chips = [
+      { id: 'all', label: 'Semua', count: counts.all },
+      { id: 'matched', label: 'Match profil lama', count: counts.matched },
+      { id: 'draft', label: 'Draft saved', count: counts.draft },
+      { id: 'new', label: 'Baru', count: counts.new },
+    ];
+    return '<div class="supply-batch-filter-bar" role="toolbar" aria-label="Filter baris task list">'
+      + '<span class="supply-batch-filter-label">Filter baris</span>'
+      + chips.map(function(c) {
+          return '<button type="button" class="supply-batch-filter-chip'
+            + (active === c.id ? ' supply-batch-filter-chip--active' : '')
+            + '" data-action="filter-rows" data-batch="' + escHtml(batchId) + '" data-filter="' + c.id + '"'
+            + (c.count === 0 && c.id !== 'all' ? ' disabled' : '')
+            + '>' + escHtml(c.label) + ' <span class="supply-batch-filter-count">' + c.count + '</span></button>';
+        }).join('')
+      + '</div>';
+  }
+
+  function supplyBindBatchTableActions_(root) {
+    if (!root) return;
+    root.querySelectorAll('[data-action]').forEach(function(btn) {
+      btn.addEventListener('click', handleSupplyBatchAction_);
+    });
+  }
+
+  function supplyRerenderBatchTable_(batchId) {
+    const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!batch || !wrap) return;
+    wrap.innerHTML = renderSupplyBatchTable_(batch);
+    supplyBindBatchTableActions_(wrap);
+  }
+
   function renderSupplyDraftList_(opts) {
     opts = opts || {};
     const container = document.getElementById('supply-draft-list');
@@ -25721,8 +25790,7 @@ function initDashboardApp() {
     if (opts.highlightRow && opts.highlightRow.batchId != null && opts.highlightRow.rowIdx != null) {
       const wrap = document.getElementById('supply-batch-table-' + opts.highlightRow.batchId);
       if (wrap) {
-        const rows = wrap.querySelectorAll('tbody tr');
-        const rowEl = rows[opts.highlightRow.rowIdx];
+        const rowEl = wrap.querySelector('tbody tr[data-row-idx="' + opts.highlightRow.rowIdx + '"]');
         if (rowEl) dashFlashRow_(rowEl);
       }
     }
@@ -25731,6 +25799,7 @@ function initDashboardApp() {
   function renderSupplyBatchTable_(batch) {
     if (!batch.rows || !batch.rows.length) return '<p style="padding:12px;font-size:12px;color:#9C8080;">No rows.</p>';
     const isSubmitted = batch.status === 'submitted';
+    const rowFilter = supplyGetBatchRowFilter_(batch.batch_id);
     const SHOW_COLS = [
       ['COMPANY NAME',    'Company Name'],
       ['MILL NAME',       'Mill Name'],
@@ -25749,7 +25818,16 @@ function initDashboardApp() {
       + '<th class="supply-batch-th--action">Aksi</th>'
       + '</tr>';
 
-    const body = batch.rows.map(function(row, i) {
+    const visibleRows = batch.rows.map(function(row, i) {
+      return { row: row, i: i };
+    }).filter(function(entry) {
+      return supplyRowMatchesBatchFilter_(entry.row, rowFilter);
+    });
+
+    const body = visibleRows.length
+      ? visibleRows.map(function(entry) {
+      const row = entry.row;
+      const i = entry.i;
       const isMatched  = row.match_status === 'matched';
       const isGroupWarn = row.match_status === 'group_mismatch';
       const isRowDone  = supplyRowIsSubmitted_(row);
@@ -25778,14 +25856,16 @@ function initDashboardApp() {
 
       let rowAction = supplyRenderRowActions_(batch, row, i, isSubmitted, isRowDone, isMatched, isGroupWarn);
 
-      return '<tr class="' + (isRowDone ? 'supply-batch-row--done' : '') + (isDual ? ' supply-batch-row--dual' : '') + '">'
+      return '<tr data-row-idx="' + i + '" class="' + (isRowDone ? 'supply-batch-row--done' : '') + (isDual ? ' supply-batch-row--dual' : '') + '">'
         + (isSubmitted ? '' : '<td><input type="checkbox" class="supply-row-check" data-batch="' + escHtml(batch.batch_id) + '" data-row="' + i + '"' + (isRowDone ? ' disabled' : ' checked') + ' aria-label="Select row"></td>')
         + cells
         + '<td class="supply-batch-td--action">' + rowAction + '</td>'
         + '</tr>';
-    }).join('');
+    }).join('')
+      : '<tr class="supply-batch-filter-empty-row"><td colspan="' + (SHOW_COLS.length + (isSubmitted ? 0 : 1) + 1) + '">Tidak ada baris untuk filter ini.</td></tr>';
 
-    return '<div class="supply-batch-table-scroll"><table class="supply-batch-table">'
+    return supplyBatchFilterBarHtml_(batch)
+      + '<div class="supply-batch-table-scroll"><table class="supply-batch-table">'
       + '<thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>'
       + (!isSubmitted ? supplyBatchFooterHtml_(batch.batch_id) : '');
   }
@@ -25849,6 +25929,14 @@ function initDashboardApp() {
 
     const bId    = btn.dataset.batch;
     const batch  = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === bId; });
+
+    if (action === 'filter-rows') {
+      if (!batch) return;
+      supplySetBatchRowFilter_(bId, btn.dataset.filter || 'all');
+      supplyRerenderBatchTable_(bId);
+      return;
+    }
+
     if (!batch) return;
 
     if (action === 'rematch-batch') {
