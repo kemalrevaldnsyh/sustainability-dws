@@ -5813,6 +5813,14 @@ function initDashboardApp() {
     grid.className = 'modal-form-grid cols-1';
     if (data) millNormalizeGrievanceFlagsOnRow_(data);
     let html = '';
+    if (data && window._supplyModalContext && data._supplyProfilePeriod) {
+      html += '<div class="supply-modal-period-hint" style="margin-bottom:12px;padding:12px 14px;background:#eef6fc;border:1px solid #b8d9f0;border-radius:10px;font-size:13px;line-height:1.55;color:#1a4a6e;">'
+        + '<div><strong>Data profil Mill Onboarding:</strong> ' + escHtml(data._supplyProfilePeriod) + '</div>'
+        + (data._supplyImportPeriod
+          ? '<div style="margin-top:6px;font-size:12px;color:#3d6a8a;"><strong>Periode import Task List (disubmit):</strong> ' + escHtml(data._supplyImportPeriod) + '</div>'
+          : '')
+        + '</div>';
+    }
     FIELD_SECTIONS.forEach(sec => {
       const visibleFields = sec.fields.filter(f => !millIsSheetComputedField_(f));
       if (!visibleFields.length) return;
@@ -23788,6 +23796,35 @@ function initDashboardApp() {
     return meta;
   }
 
+  const SUPPLY_MONTH_ID_ = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+
+  function supplyMonthLabelId_(n) {
+    return (n >= 1 && n <= 12) ? SUPPLY_MONTH_ID_[n - 1] : String(n || '');
+  }
+
+  function supplyFormatPeriodLabel_(month, year) {
+    const y = String(year == null ? '' : year).trim();
+    if (!y) return '';
+    const mRaw = String(month == null ? '' : month).trim();
+    const mNum = parseInt(mRaw, 10);
+    const mLabel = (mNum >= 1 && mNum <= 12) ? supplyMonthLabelId_(mNum) : mRaw;
+    return (mLabel ? mLabel + ' ' : '') + y;
+  }
+
+  function supplyMillProfilePeriodFromRow_(row) {
+    if (!row) return '';
+    const month = pickMillMonthDirect_(row) || millMonthVal(row) || millQuarterVal(row);
+    const year = millYearVal(row);
+    return supplyFormatPeriodLabel_(month, year);
+  }
+
+  function supplyProfilePeriodPillHtml_(draftRow, batch) {
+    if (!draftRow || draftRow.match_status !== 'matched') return '';
+    const label = supplyMillProfilePeriodFromRow_(supplyGetDraftProfileRow_(draftRow, batch));
+    if (!label) return '';
+    return '<span class="supply-match-pill supply-match-pill--profile-period" title="Periode data di Mill Onboarding">Profil: ' + escHtml(label) + '</span>';
+  }
+
   function supplyEnsureDraftIdsOnRows_(rows, batchId) {
     (rows || []).forEach(function(row, idx) {
       if (!row) return;
@@ -24436,6 +24473,11 @@ function initDashboardApp() {
       if (batch.month) prefill['MONTH'] = String(batch.month);
       else if (batch.quarter) prefill['MONTH'] = String(batch.quarter);
       if (batch.year) prefill['YEAR'] = String(batch.year);
+      prefill._supplyImportPeriod = supplyFormatPeriodLabel_(batch.month || batch.quarter, batch.year);
+    }
+    if (profileRow && draftRow.match_status === 'matched') {
+      const profilePeriod = supplyMillProfilePeriodFromRow_(profileRow);
+      if (profilePeriod) prefill._supplyProfilePeriod = profilePeriod;
     }
     const draftSaved = supplyDraftSavedFlag_(draftRow);
     (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
@@ -25588,6 +25630,7 @@ function initDashboardApp() {
       const isRowDone  = supplyRowIsSubmitted_(row);
       const isDual     = supplyRowHasCpo_(row) && supplyRowHasPk_(row);
       const matchBadge = supplyMatchBadgeHtml_(row.match_status, row._profile_group_hint)
+        + supplyProfilePeriodPillHtml_(row, batch)
         + (isRowDone ? '<span class="supply-match-pill supply-match-pill--submitted">✓ Submitted</span>' : '')
         + (!isRowDone && supplyDraftSavedFlag_(row) ? '<span class="supply-match-pill supply-match-pill--draft">Draft saved</span>' : '');
       const typePills  = supplyRowTypePillsHtml_(row);

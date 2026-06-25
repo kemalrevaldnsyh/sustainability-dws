@@ -5600,6 +5600,11 @@ body.supply-import-open {
   color: #1b5e20;
   border: 1px solid rgba(46, 125, 50, 0.25);
 }
+.supply-match-pill--profile-period {
+  background: rgba(21, 101, 192, 0.1);
+  color: #1565c0;
+  border: 1px solid rgba(21, 101, 192, 0.18);
+}
 .supply-stat-chip {
   display: inline-flex;
   align-items: center;
