@@ -5663,7 +5663,7 @@ function supplyFillAllGrievanceFromRefsGs_(patch, row, refObj) {
   [
     ['DEFORESTATION GRIEVANCES', []],
     ['BURN AREA GRIEVANCES', []],
-    ['LEGALITY GRIEVANCE', ['LEGALITY']],
+    ['LEGALITY GRIEVANCE', []],
     ['HUMAN RIGHTS GRIEVANCE', ['HUMAN RIGHT']],
     ['SAFETY GRIEVANCE', ['SAFETY']],
     ['SOCIAL GRIEVANCE', ['SOCIAL']],
@@ -5710,7 +5710,7 @@ function resolveGrievanceKeysOnPatchGs_(patch, headers) {
 function supplyGrievanceNamedKeysGs_(canonical) {
   if (canonical === 'DEFORESTATION GRIEVANCES') return ['DEFORESTATION GRIEVANCES'];
   if (canonical === 'BURN AREA GRIEVANCES') return ['BURN AREA GRIEVANCES'];
-  if (canonical === 'LEGALITY GRIEVANCE') return ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES'];
+  if (canonical === 'LEGALITY GRIEVANCE') return ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES', 'LEGALITY', 'Legality'];
   if (canonical === 'HUMAN RIGHTS GRIEVANCE') return ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHTS'];
   if (canonical === 'SAFETY GRIEVANCE') return ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES'];
   if (canonical === 'SOCIAL GRIEVANCE') return ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES'];
@@ -5734,23 +5734,32 @@ function supplyObjHasGrievanceColGs_(obj, canonical) {
   });
 }
 
+function supplyNormalizeGrievanceYesNoGs_(raw) {
+  if (raw === undefined || raw === null || raw === '') return '';
+  var s = String(raw).trim().toLowerCase();
+  if (s === 'yes' || s === 'y' || s === '1' || s === 'true' || s === 'ada') return 'Yes';
+  if (s === 'no' || s === 'n' || s === '0' || s === 'false' || s === 'tidak') return 'No';
+  return '';
+}
+
 function supplyGrievanceValFromObjsGs_(objs, canonical, legacyKeys) {
   var grievKeys = supplyGrievanceNamedKeysGs_(canonical);
-  var oi, ki, obj, v, li, lv;
+  var oi, ki, obj, v, li, lv, norm;
   for (oi = 0; oi < objs.length; oi++) {
     obj = objs[oi];
     if (!obj) continue;
     for (ki = 0; ki < grievKeys.length; ki++) {
       v = obj[grievKeys[ki]];
-      if (v !== undefined && v !== null && String(v).trim() !== '') return v;
+      norm = supplyNormalizeGrievanceYesNoGs_(v);
+      if (norm === 'Yes' || norm === 'No') return norm;
     }
   }
   for (oi = 0; oi < objs.length; oi++) {
     obj = objs[oi];
     if (!obj || supplyObjHasGrievanceColGs_(obj, canonical)) continue;
     for (li = 0; li < (legacyKeys || []).length; li++) {
-      lv = obj[legacyKeys[li]];
-      if (lv !== undefined && lv !== null && String(lv).trim() !== '') return lv;
+      norm = supplyNormalizeGrievanceYesNoGs_(obj[legacyKeys[li]]);
+      if (norm === 'Yes' || norm === 'No') return norm;
     }
   }
   return '';

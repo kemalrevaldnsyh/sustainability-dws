@@ -5327,16 +5327,15 @@ function initDashboardApp() {
   ];
 
   const MILL_GRIEVANCE_FLAG_ALIASES_ = {
-    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES'],
+    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY GRIEVANCE', 'LEGALITY GRIEVANCES', 'LEGALITY', 'Legality'],
     [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHTS GRIEVANCE', 'HUMAN RIGHTS GRIEVANCES', 'HUMAN RIGHTS', 'Human Rights'],
     [MILL_SAFETY_GRIEVANCE]: ['SAFETY GRIEVANCE', 'SAFETY GRIEVANCES'],
     [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL GRIEVANCE', 'SOCIAL GRIEVANCES'],
     [MILL_ENVIRONMENT_GRIEVANCE]: ['ENVIRONMENT GRIEVANCE', 'ENVIRONMENT GRIEVANCES'],
   };
 
-  /** Pre-rename sheet headers — only used when no *grievance* column exists for that flag. */
+  /** Pre-rename sheet headers (non-LEGALITY) — only when no *grievance* column exists. */
   const MILL_GRIEVANCE_LEGACY_ALIASES_ = {
-    [MILL_LEGALITY_GRIEVANCE]: ['LEGALITY', 'Legality'],
     [MILL_HUMAN_RIGHTS_GRIEVANCE]: ['HUMAN RIGHT', 'Human Right'],
     [MILL_SAFETY_GRIEVANCE]: ['SAFETY', 'Safety'],
     [MILL_SOCIAL_GRIEVANCE]: ['SOCIAL', 'Social'],
@@ -5377,13 +5376,38 @@ function initDashboardApp() {
     });
   }
 
+  function millGrievanceYesNoFromRow_(row, keys) {
+    if (!row) return '';
+    const list = Array.isArray(keys) ? keys : [keys];
+    for (let i = 0; i < list.length; i++) {
+      const v = row[list[i]];
+      if (v == null || String(v).trim() === '') continue;
+      const norm = millNormalizeYesNoSelectVal_(v);
+      if (norm === 'Yes' || norm === 'No') return norm;
+    }
+    const wanted = list.map(function(n) { return millHeaderNorm_(n); });
+    return Object.keys(row).reduce(function(found, k) {
+      if (found) return found;
+      if (!k || k === '_row' || k.charAt(0) === '_') return '';
+      if (wanted.indexOf(millHeaderNorm_(k)) === -1) return '';
+      const v = row[k];
+      if (v == null || String(v).trim() === '') return '';
+      const norm = millNormalizeYesNoSelectVal_(v);
+      if (norm === 'Yes' || norm === 'No') return norm;
+      return '';
+    }, '');
+  }
+
   function millGrievanceFlagVal_(row, canonical) {
     if (!row) return '';
     const keys = MILL_GRIEVANCE_FLAG_ALIASES_[canonical] || [canonical];
-    const grievKeys = keys.filter(function(k) { return /griev/i.test(String(k)); });
-    const pickKeys = grievKeys.length ? grievKeys : [canonical];
-    const fromGriev = millPickField_(row, pickKeys);
-    if (fromGriev !== '') return fromGriev;
+    if (canonical === 'DEFORESTATION GRIEVANCES' || canonical === 'BURN AREA GRIEVANCES') {
+      const direct = millGrievanceYesNoFromRow_(row, [canonical]);
+      if (direct !== '') return direct;
+    } else {
+      const fromNamed = millGrievanceYesNoFromRow_(row, keys);
+      if (fromNamed !== '') return fromNamed;
+    }
     const need = MILL_GRIEVANCE_FUZZY_TOKENS_[canonical];
     if (need) {
       const fuzzy = Object.keys(row).reduce(function(found, k) {
@@ -5392,18 +5416,16 @@ function initDashboardApp() {
         const n = String(k).toLowerCase().replace(/\s+/g, ' ');
         if (n.indexOf('griev') < 0) return '';
         if (!need.every(function(t) { return n.indexOf(t) >= 0; })) return '';
-        const v = row[k];
-        if (v != null && String(v).trim() !== '') return String(v).trim();
+        const norm = millNormalizeYesNoSelectVal_(row[k]);
+        if (norm === 'Yes' || norm === 'No') return norm;
         return '';
       }, '');
       if (fuzzy !== '') return fuzzy;
     }
     if (!millRowHasGrievanceNamedColumn_(row, canonical)) {
       const legacy = MILL_GRIEVANCE_LEGACY_ALIASES_[canonical];
-      if (legacy) {
-        const leg = millPickField_(row, legacy);
-        if (leg !== '') return leg;
-      }
+      const fromLegacy = millGrievanceYesNoFromRow_(row, legacy);
+      if (fromLegacy !== '') return fromLegacy;
     }
     return '';
   }
