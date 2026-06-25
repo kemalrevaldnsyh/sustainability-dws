@@ -5856,10 +5856,15 @@ function initDashboardApp() {
           html += buildMillHaWidthField_(f, val);
         } else if (DROPDOWN_FIELDS[f]) {
           html += buildCustomSelect(f, DROPDOWN_FIELDS[f], val, false, isFull);
+        } else if (f === 'CERTIFICATION' || f === 'ADDRESS') {
+          html += '<div class="form-field full">'
+            + '<label>' + escHtml(f) + '</label>'
+            + '<textarea data-field="' + escHtml(f) + '" rows="' + (f === 'CERTIFICATION' ? '4' : '3') + '" placeholder="' + escHtml(f) + '">'
+            + escHtml(val) + '</textarea></div>';
         } else {
           html += `<div class="form-field${isFull ? ' full' : ''}">
-            <label>${f}</label>
-            <input type="text" data-field="${f}" value="${val}" placeholder="${f}"></div>`;
+            <label>${escHtml(f)}</label>
+            <input type="text" data-field="${escHtml(f)}" value="${escHtml(val)}" placeholder="${escHtml(f)}"></div>`;
         }
       });
       if (sec.totalField) {
@@ -23820,9 +23825,85 @@ function initDashboardApp() {
 
   function supplyProfilePeriodPillHtml_(draftRow, batch) {
     if (!draftRow || draftRow.match_status !== 'matched') return '';
-    const label = supplyMillProfilePeriodFromRow_(supplyGetDraftProfileRow_(draftRow, batch));
+    const label = supplyMillProfilePeriodFromRow_(supplyLookupMillProfileForDraft_(draftRow, batch));
     if (!label) return '';
     return '<span class="supply-match-pill supply-match-pill--profile-period" title="Periode data di Mill Onboarding">Profil: ' + escHtml(label) + '</span>';
+  }
+
+  function supplyIndexLocalDraftRows_() {
+    const map = {};
+    (window._supplyDraftBatches || []).forEach(function(b) {
+      (b.rows || []).forEach(function(r) {
+        const id = String(r && r.draft_id || '').trim();
+        if (id) map[id] = r;
+      });
+    });
+    return map;
+  }
+
+  function supplyDraftRowUpdatedTs_(row) {
+    if (!row) return 0;
+    if (row._local_saved_at) return Number(row._local_saved_at) || 0;
+    const raw = row.updated_at || row.UPDATED_AT || '';
+    const t = raw ? new Date(String(raw)).getTime() : 0;
+    return isNaN(t) ? 0 : t;
+  }
+
+  function supplyMergeLocalDraftFieldsIntoRow_(target, local) {
+    if (!target || !local) return;
+    (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
+      if (millIsSheetComputedField_(f)) return;
+      const lv = local[f];
+      if (lv !== undefined && lv !== null && String(lv).trim() !== '') target[f] = lv;
+    });
+    MILL_HA_WIDTH_FIELDS.forEach(function(f) {
+      if (supplyIsValidHaWidthDraftVal_(local[f])) target[f] = supplyNormalizeHaWidthField_(local[f]);
+    });
+    MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
+      const dnorm = millNormalizeYesNoSelectVal_(millGrievanceFlagVal_(local, f));
+      if (dnorm === 'Yes' || dnorm === 'No') target[f] = dnorm;
+    });
+    if (supplyDraftSavedFlag_(local)) {
+      target.profile_draft_saved = 'true';
+      target._profile_draft_saved = true;
+      if (local._local_saved_at) target._local_saved_at = local._local_saved_at;
+    }
+  }
+
+  function supplyApplyLocalDraftMergeOnLoad_(serverRows) {
+    const localIdx = supplyIndexLocalDraftRows_();
+    (serverRows || []).forEach(function(row) {
+      const id = String(row.draft_id || '').trim();
+      const local = id && localIdx[id];
+      if (!local) return;
+      const localTs = supplyDraftRowUpdatedTs_(local);
+      const serverTs = supplyDraftRowUpdatedTs_(row);
+      if (supplyDraftSavedFlag_(local) && (localTs >= serverTs || !supplyDraftSavedFlag_(row))) {
+        supplyMergeLocalDraftFieldsIntoRow_(row, local);
+      }
+    });
+  }
+
+  function supplyPauseDraftAutoSync_(ms) {
+    window._supplyDraftSyncPausedUntil = Date.now() + (ms || 90000);
+  }
+
+  /** Read Mill Onboarding profile for a draft row without mutating the draft. */
+  function supplyLookupMillProfileForDraft_(draftRow, batch) {
+    if (!draftRow) return null;
+    if (draftRow._mill_row != null) {
+      const cached = supplyGetMillProfileByRow_(draftRow._mill_row);
+      if (cached) return cached;
+    }
+    const kind2 = supplyResolveKindFromDraft_(draftRow, batch);
+    const facField = kind2 === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
+    const found = supplyFindMillProfileMatch_({
+      COMPANY_NAME: draftRow['COMPANY NAME'],
+      MILL_NAME: draftRow['MILL NAME'],
+      COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
+      PLANT: draftRow[facField] || draftRow.PLANT || '',
+    }, kind2);
+    return found.row || null;
   }
 
   function supplyEnsureDraftIdsOnRows_(rows, batchId) {
@@ -24432,30 +24513,12 @@ function initDashboardApp() {
     return out;
   }
 
-  /** Resolve matched Mill Onboarding row for a supply draft line. */
-  function supplyGetDraftProfileRow_(draftRow, batch) {
+  /** Resolve matched Mill Onboarding row; optionally re-match and copy profile into draft. */
+  function supplyGetDraftProfileRow_(draftRow, batch, opts) {
     if (!draftRow) return null;
-    if (batch) supplyRematchDraftRow_(draftRow, batch);
-    if (draftRow._mill_row != null) {
-      const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
-      for (let i = 0; i < src.length; i++) {
-        if (src[i]._row === draftRow._mill_row) return src[i];
-      }
-    }
-    const kind2 = supplyResolveKindFromDraft_(draftRow, batch);
-    const facField = kind2 === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
-    const found = supplyFindMillProfileMatch_({
-      COMPANY_NAME: draftRow['COMPANY NAME'],
-      MILL_NAME: draftRow['MILL NAME'],
-      COMPANY_GROUP_NAME: draftRow['GROUP NAME'],
-      PLANT: draftRow[facField] || draftRow.PLANT || '',
-    }, kind2);
-    if (found.row) {
-      draftRow._mill_row = found.row._row;
-      draftRow.target_mill_row = found.row._row;
-      draftRow.match_status = found.status;
-    }
-    return found.row || null;
+    opts = opts || {};
+    if (opts.rematch !== false && batch) supplyRematchDraftRow_(draftRow, batch, opts);
+    return supplyLookupMillProfileForDraft_(draftRow, batch);
   }
 
   /** Prefill add-mill form from matched profile (all editable fields); month/year from import batch. */
@@ -24482,8 +24545,11 @@ function initDashboardApp() {
     millNormalizeGrievanceFlagsOnRow_(draftRow);
   }
 
-  function supplyBuildMillPrefillFromDraft_(draftRow, batch) {
-    const profileRow = supplyGetDraftProfileRow_(draftRow, batch);
+  function supplyBuildMillPrefillFromDraft_(draftRow, batch, opts) {
+    opts = opts || {};
+    const profileRow = opts.rematch === false
+      ? supplyLookupMillProfileForDraft_(draftRow, batch)
+      : supplyGetDraftProfileRow_(draftRow, batch, opts);
     const prefill = supplyProfilePrefillFromRow_(profileRow);
     if (batch) {
       if (batch.month) prefill['MONTH'] = String(batch.month);
@@ -24612,7 +24678,7 @@ function initDashboardApp() {
 
   function supplyCopyModalIntoDraftRow_(draftRow, data, batch) {
     if (!draftRow || !data) return;
-    const payload = supplyPrepareMillSavePayload_(data, batch);
+    const payload = supplyPrepareMillSavePayload_(data, batch, draftRow);
     MILL_HA_WIDTH_FIELDS.forEach(function(f) {
       payload[f] = supplyNormalizeHaWidthField_(data[f]);
     });
@@ -24632,6 +24698,39 @@ function initDashboardApp() {
     }
   }
 
+  function supplyPatchDraftRowChrome_(batchId, rowIdx) {
+    const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
+    if (!batch || !batch.rows[rowIdx]) return;
+    const row = batch.rows[rowIdx];
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap) return;
+    const tr = wrap.querySelectorAll('tbody tr')[rowIdx];
+    if (!tr) return;
+    const companyTd = tr.querySelector('.supply-batch-td--company');
+    if (companyTd) {
+      const typePills = supplyRowTypePillsHtml_(row);
+      const matchBadge = supplyMatchBadgeHtml_(row.match_status, row._profile_group_hint)
+        + supplyProfilePeriodPillHtml_(row, batch)
+        + (supplyRowIsSubmitted_(row) ? '<span class="supply-match-pill supply-match-pill--submitted">✓ Submitted</span>' : '')
+        + (!supplyRowIsSubmitted_(row) && supplyDraftSavedFlag_(row) ? '<span class="supply-match-pill supply-match-pill--draft">Draft saved</span>' : '');
+      const company = row['COMPANY NAME'] != null ? row['COMPANY NAME'] : '';
+      companyTd.innerHTML = escHtml(String(company || '—')) + typePills + matchBadge;
+    }
+    const actionTd = tr.querySelector('.supply-batch-td--action');
+    if (actionTd) {
+      actionTd.innerHTML = supplyRenderRowActions_(
+        batch, row, rowIdx,
+        batch.status === 'submitted',
+        supplyRowIsSubmitted_(row),
+        row.match_status === 'matched',
+        row.match_status === 'group_mismatch'
+      );
+      actionTd.querySelectorAll('[data-action]').forEach(function(btn) {
+        btn.addEventListener('click', handleSupplyBatchAction_);
+      });
+    }
+  }
+
   async function supplySaveDraftFromModal_(ctx, data) {
     const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === ctx.batchId; });
     if (!batch || !batch.rows[ctx.rowIdx]) throw new Error('Supply draft row not found.');
@@ -24639,14 +24738,17 @@ function initDashboardApp() {
     supplyCopyModalIntoDraftRow_(draftRow, data, batch);
     draftRow._profile_draft_saved = true;
     draftRow.profile_draft_saved = 'true';
+    draftRow._local_saved_at = Date.now();
     if (!supplyRowIsSubmitted_(draftRow)) draftRow.status = 'draft';
     supplyEnsureDraftIdsOnRows_([draftRow], ctx.batchId);
+    supplyPauseDraftAutoSync_(90000);
     await apiPost({ action: 'saveSupplyDraft', batch_id: ctx.batchId, rows: [draftRow], meta: supplyBatchMetaForApi_(batch) });
-    renderSupplyDraftList_({
-      expandBatchIds: [ctx.batchId],
-      scrollToBatchId: ctx.batchId,
-      highlightRow: { batchId: ctx.batchId, rowIdx: ctx.rowIdx },
-    });
+    const wrap = document.getElementById('supply-batch-table-' + ctx.batchId);
+    if (wrap && !wrap.hidden) {
+      supplyPatchDraftRowChrome_(ctx.batchId, ctx.rowIdx);
+    } else {
+      renderSupplyDraftList_({ expandBatchIds: [ctx.batchId] });
+    }
   }
 
   function supplyGetMillProfileByRow_(rowNum) {
@@ -25244,7 +25346,9 @@ function initDashboardApp() {
     }
     document.addEventListener('visibilitychange', function() {
       if (document.visibilityState === 'visible' && supplyDraftPanelVisible_()) {
-        loadSupplyDraftsFromServer_();
+        if (!window._supplyDraftSyncPausedUntil || Date.now() >= window._supplyDraftSyncPausedUntil) {
+          loadSupplyDraftsFromServer_();
+        }
       }
     });
     startSupplyDraftAutoSync_();
@@ -25710,7 +25814,7 @@ function initDashboardApp() {
       await loadMillData();
     }
 
-    const prefill = supplyBuildMillPrefillFromDraft_(draftRow, batch);
+    const prefill = supplyBuildMillPrefillFromDraft_(draftRow, batch, { rematch: !supplyDraftSavedFlag_(draftRow) });
     modalTaskKey = '';
     modalTaskLineId = '';
     window._supplyModalContext = { batchId: bId, rowIdx: rowIdx };
@@ -25986,9 +26090,13 @@ function initDashboardApp() {
         return loadSupplyDraftsFromServer_();
       });
     }
+    if (window._supplyDraftSyncPausedUntil && Date.now() < window._supplyDraftSyncPausedUntil) {
+      return Promise.resolve();
+    }
     return apiGet('supplyDraft')
       .then(function(data) {
         window._supplyDraftLoadError = '';
+        supplyApplyLocalDraftMergeOnLoad_(data);
         if (!Array.isArray(data) || !data.length) {
           window._supplyDraftBatches = supplyConsolidateBatchesByPeriod_(window._supplyDraftBatches || []);
           renderSupplyDraftList_();
@@ -26021,7 +26129,8 @@ function initDashboardApp() {
           supplyApplyDraftRowStatus_(row);
           supplyApplyPlantToDraftFacility_(row, row.PLANT, row.supply_type || row.SUPPLY_TYPE);
           supplyNormalizeHaWidthFieldsOnRow_(row);
-          row._profile_draft_saved = String(row.profile_draft_saved || '').toLowerCase() === 'true';
+          row._profile_draft_saved = String(row.profile_draft_saved || '').toLowerCase() === 'true'
+            || row._profile_draft_saved === true;
         });
         window._supplyDraftBatches = supplyConsolidateBatchesByPeriod_(Object.values(batches).map(function(b) {
           supplyNormalizeBatchPeriod_(b);
