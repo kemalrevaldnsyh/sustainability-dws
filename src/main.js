@@ -6010,7 +6010,10 @@ function initDashboardApp() {
         const scrollSnap = window._supplyLastScrollSnap;
         window._supplyLastScrollSnap = null;
         closeModal();
-        if (scrollSnap) supplyRestoreTaskListScroll_(scrollSnap);
+        if (scrollSnap) {
+          supplyRestoreTaskListScroll_(scrollSnap);
+          setTimeout(function() { supplyRestoreTaskListScroll_(scrollSnap); }, 120);
+        }
         if (typeof window.showSddToast === 'function') {
           window.showSddToast(
             isSupplySubmit ? 'Mill profile submitted to Mill Onboarding.' : 'Draft saved — you can continue later.',
@@ -25038,8 +25041,15 @@ function initDashboardApp() {
     const wrap = document.getElementById('supply-batch-table-' + batchId);
     if (!wrap) return;
     const tr = wrap.querySelector('tbody tr[data-row-idx="' + rowIdx + '"]');
+    const rowFilter = supplyGetBatchRowFilter_(batchId);
+    if (!supplyRowMatchesBatchFilter_(row, rowFilter)) {
+      if (tr) tr.remove();
+      return;
+    }
     if (!tr) {
+      const snap = window._supplyLastScrollSnap || supplyCaptureTaskListScroll_();
       supplyRerenderBatchTable_(batchId);
+      supplyRestoreTaskListScroll_(snap);
       return;
     }
     const companyTd = tr.querySelector('.supply-batch-td--company');
@@ -25052,6 +25062,12 @@ function initDashboardApp() {
       const company = row['COMPANY NAME'] != null ? row['COMPANY NAME'] : '';
       companyTd.innerHTML = escHtml(String(company || '—')) + typePills + matchBadge;
     }
+    tr.querySelectorAll('.supply-inline-input').forEach(function(input) {
+      const field = input.dataset.field;
+      if (!field) return;
+      const val = row[field];
+      if (val !== undefined && val !== null) input.value = String(val);
+    });
     const actionTd = tr.querySelector('.supply-batch-td--action');
     if (actionTd) {
       actionTd.innerHTML = supplyRenderRowActions_(
@@ -25065,6 +25081,32 @@ function initDashboardApp() {
         btn.addEventListener('click', handleSupplyBatchAction_);
       });
     }
+  }
+
+  function supplyPatchBatchFooter_(batchId) {
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap) return;
+    const footer = wrap.querySelector('.supply-batch-footer');
+    if (!footer) return;
+    const tmp = document.createElement('div');
+    tmp.innerHTML = supplyBatchFooterHtml_(batchId);
+    const nextFooter = tmp.firstElementChild;
+    if (nextFooter) {
+      footer.replaceWith(nextFooter);
+      supplyBindBatchTableActions_(wrap);
+    }
+  }
+
+  function supplyRefreshDraftRowsAfterSave_(batchId, rowIndexes) {
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap || wrap.hidden) {
+      renderSupplyDraftList_({ expandBatchIds: [batchId], preserveScroll: true });
+      return;
+    }
+    (rowIndexes || []).forEach(function(idx) {
+      supplyPatchDraftRowChrome_(batchId, idx);
+    });
+    supplyPatchBatchFooter_(batchId);
   }
 
   async function supplySaveDraftFromModal_(ctx, data) {
@@ -25083,14 +25125,14 @@ function initDashboardApp() {
     supplyCacheSavedDraftRows_(rowsToSave);
     const activeFilter = supplyGetBatchRowFilter_(ctx.batchId);
     const scrollSnap = window._supplyLastScrollSnap || supplyCaptureTaskListScroll_();
-    const wrap = document.getElementById('supply-batch-table-' + ctx.batchId);
-    if (wrap && !wrap.hidden) {
-      supplyRerenderBatchTable_(ctx.batchId);
-    } else {
-      renderSupplyDraftList_({ expandBatchIds: [ctx.batchId], preserveScroll: true });
-    }
-    supplyRestoreTaskListScroll_(scrollSnap);
+    const rowIndexes = [ctx.rowIdx];
+    siblingRows.forEach(function(sr) {
+      const idx = batch.rows.indexOf(sr);
+      if (idx >= 0 && rowIndexes.indexOf(idx) === -1) rowIndexes.push(idx);
+    });
+    supplyRefreshDraftRowsAfterSave_(ctx.batchId, rowIndexes);
     window._supplyLastScrollSnap = scrollSnap;
+    supplyRestoreTaskListScroll_(scrollSnap);
     if (typeof window.showSddToast === 'function') {
       if (activeFilter === 'matched' || activeFilter === 'new') {
         window.showSddToast('Draft tersimpan — lihat di filter «Draft saved».', 'success');
@@ -26013,6 +26055,7 @@ function initDashboardApp() {
 
   function supplyCaptureTaskListScroll_() {
     const main = document.querySelector('.main-content');
+    const panel = document.getElementById('panel-mill-onboarding');
     const container = document.getElementById('supply-draft-list');
     const batchScrollTops = {};
     document.querySelectorAll('.supply-batch-table-wrap').forEach(function(wrap) {
@@ -26022,6 +26065,8 @@ function initDashboardApp() {
     });
     return {
       mainTop: main ? main.scrollTop : 0,
+      panelTop: panel ? panel.scrollTop : 0,
+      winY: window.scrollY || document.documentElement.scrollTop || 0,
       listTop: container ? container.scrollTop : 0,
       batchScrollTops: batchScrollTops,
     };
@@ -26031,8 +26076,11 @@ function initDashboardApp() {
     if (!snap) return;
     const apply = function() {
       const main = document.querySelector('.main-content');
+      const panel = document.getElementById('panel-mill-onboarding');
       const container = document.getElementById('supply-draft-list');
       if (main) main.scrollTop = snap.mainTop;
+      if (panel) panel.scrollTop = snap.panelTop;
+      if (snap.winY != null) window.scrollTo(0, snap.winY);
       if (container) container.scrollTop = snap.listTop;
       Object.keys(snap.batchScrollTops || {}).forEach(function(batchId) {
         const wrap = document.getElementById('supply-batch-table-' + batchId);
@@ -26042,6 +26090,9 @@ function initDashboardApp() {
     };
     apply();
     requestAnimationFrame(apply);
+    requestAnimationFrame(function() { requestAnimationFrame(apply); });
+    setTimeout(apply, 0);
+    setTimeout(apply, 80);
   }
 
   function supplyRerenderBatchTable_(batchId, opts) {
@@ -26063,10 +26114,16 @@ function initDashboardApp() {
     if (!container) return;
 
     const preserveScroll = !!opts.preserveScroll;
-    const savedListScrollTop = preserveScroll ? container.scrollTop : 0;
     const savedMainScrollTop = preserveScroll
       ? ((document.querySelector('.main-content') || {}).scrollTop || 0)
       : 0;
+    const savedPanelScrollTop = preserveScroll
+      ? ((document.getElementById('panel-mill-onboarding') || {}).scrollTop || 0)
+      : 0;
+    const savedWinY = preserveScroll
+      ? (window.scrollY || document.documentElement.scrollTop || 0)
+      : 0;
+    const savedListScrollTop = preserveScroll ? container.scrollTop : 0;
     const savedBatchScrollTops = {};
     if (preserveScroll) {
       container.querySelectorAll('.supply-batch-table-wrap').forEach(function(wrap) {
@@ -26188,7 +26245,10 @@ function initDashboardApp() {
 
     if (preserveScroll) {
       const main = document.querySelector('.main-content');
+      const panel = document.getElementById('panel-mill-onboarding');
       if (main) main.scrollTop = savedMainScrollTop;
+      if (panel) panel.scrollTop = savedPanelScrollTop;
+      window.scrollTo(0, savedWinY);
       container.scrollTop = savedListScrollTop;
       Object.keys(savedBatchScrollTops).forEach(function(batchId) {
         const wrap = document.getElementById('supply-batch-table-' + batchId);
@@ -26197,7 +26257,10 @@ function initDashboardApp() {
       });
       requestAnimationFrame(function() {
         const main2 = document.querySelector('.main-content');
+        const panel2 = document.getElementById('panel-mill-onboarding');
         if (main2) main2.scrollTop = savedMainScrollTop;
+        if (panel2) panel2.scrollTop = savedPanelScrollTop;
+        window.scrollTo(0, savedWinY);
         container.scrollTop = savedListScrollTop;
         Object.keys(savedBatchScrollTops).forEach(function(batchId) {
           const wrap = document.getElementById('supply-batch-table-' + batchId);
@@ -26314,6 +26377,11 @@ function initDashboardApp() {
     openModal('mill', MILL_FIELDS, 'add', prefill);
     syncSupplyModalChrome_(true);
     supplyApplyPrefillToMillModal_(prefill);
+    requestAnimationFrame(function() {
+      if (window._supplyLastScrollSnap) {
+        supplyRestoreTaskListScroll_(window._supplyLastScrollSnap);
+      }
+    });
   }
 
   function handleSupplyBatchAction_(e) {
