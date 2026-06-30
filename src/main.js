@@ -5929,6 +5929,7 @@ function initDashboardApp() {
   function closeModal() {
     if (modalSheet === 'ttp') ttpModalAddContext = null;
     if (window._supplyModalContext) window._supplyModalContext = null;
+    if (window._supplyLastScrollSnap) window._supplyLastScrollSnap = null;
     syncSupplyModalChrome_(false);
     document.getElementById('modalOverlay')?.classList.remove('active');
   }
@@ -6006,7 +6007,10 @@ function initDashboardApp() {
           await supplySaveDraftFromModal_(supplyCtx, data);
           ensureMillTaskListPanelOpen_();
         }
+        const scrollSnap = window._supplyLastScrollSnap;
+        window._supplyLastScrollSnap = null;
         closeModal();
+        if (scrollSnap) supplyRestoreTaskListScroll_(scrollSnap);
         if (typeof window.showSddToast === 'function') {
           window.showSddToast(
             isSupplySubmit ? 'Mill profile submitted to Mill Onboarding.' : 'Draft saved — you can continue later.',
@@ -25078,12 +25082,15 @@ function initDashboardApp() {
     await apiPost({ action: 'saveSupplyDraft', batch_id: ctx.batchId, rows: rowsToSave, meta: supplyBatchMetaForApi_(batch) });
     supplyCacheSavedDraftRows_(rowsToSave);
     const activeFilter = supplyGetBatchRowFilter_(ctx.batchId);
+    const scrollSnap = window._supplyLastScrollSnap || supplyCaptureTaskListScroll_();
     const wrap = document.getElementById('supply-batch-table-' + ctx.batchId);
     if (wrap && !wrap.hidden) {
       supplyRerenderBatchTable_(ctx.batchId);
     } else {
-      renderSupplyDraftList_({ expandBatchIds: [ctx.batchId] });
+      renderSupplyDraftList_({ expandBatchIds: [ctx.batchId], preserveScroll: true });
     }
+    supplyRestoreTaskListScroll_(scrollSnap);
+    window._supplyLastScrollSnap = scrollSnap;
     if (typeof window.showSddToast === 'function') {
       if (activeFilter === 'matched' || activeFilter === 'new') {
         window.showSddToast('Draft tersimpan — lihat di filter «Draft saved».', 'success');
@@ -26004,12 +26011,49 @@ function initDashboardApp() {
     });
   }
 
-  function supplyRerenderBatchTable_(batchId) {
+  function supplyCaptureTaskListScroll_() {
+    const main = document.querySelector('.main-content');
+    const container = document.getElementById('supply-draft-list');
+    const batchScrollTops = {};
+    document.querySelectorAll('.supply-batch-table-wrap').forEach(function(wrap) {
+      const batchId = String(wrap.id || '').replace(/^supply-batch-table-/, '');
+      const scrollEl = wrap.querySelector('.supply-batch-table-scroll');
+      if (batchId && scrollEl) batchScrollTops[batchId] = scrollEl.scrollTop;
+    });
+    return {
+      mainTop: main ? main.scrollTop : 0,
+      listTop: container ? container.scrollTop : 0,
+      batchScrollTops: batchScrollTops,
+    };
+  }
+
+  function supplyRestoreTaskListScroll_(snap) {
+    if (!snap) return;
+    const apply = function() {
+      const main = document.querySelector('.main-content');
+      const container = document.getElementById('supply-draft-list');
+      if (main) main.scrollTop = snap.mainTop;
+      if (container) container.scrollTop = snap.listTop;
+      Object.keys(snap.batchScrollTops || {}).forEach(function(batchId) {
+        const wrap = document.getElementById('supply-batch-table-' + batchId);
+        const scrollEl = wrap && wrap.querySelector('.supply-batch-table-scroll');
+        if (scrollEl) scrollEl.scrollTop = snap.batchScrollTops[batchId];
+      });
+    };
+    apply();
+    requestAnimationFrame(apply);
+  }
+
+  function supplyRerenderBatchTable_(batchId, opts) {
+    opts = opts || {};
+    const preserveScroll = opts.preserveScroll !== false;
+    const snap = preserveScroll ? supplyCaptureTaskListScroll_() : null;
     const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
     const wrap = document.getElementById('supply-batch-table-' + batchId);
     if (!batch || !wrap) return;
     wrap.innerHTML = renderSupplyBatchTable_(batch);
     supplyBindBatchTableActions_(wrap);
+    if (snap) supplyRestoreTaskListScroll_(snap);
   }
 
   function renderSupplyDraftList_(opts) {
@@ -26020,11 +26064,15 @@ function initDashboardApp() {
 
     const preserveScroll = !!opts.preserveScroll;
     const savedListScrollTop = preserveScroll ? container.scrollTop : 0;
+    const savedMainScrollTop = preserveScroll
+      ? ((document.querySelector('.main-content') || {}).scrollTop || 0)
+      : 0;
     const savedBatchScrollTops = {};
     if (preserveScroll) {
       container.querySelectorAll('.supply-batch-table-wrap').forEach(function(wrap) {
         const batchId = String(wrap.id || '').replace(/^supply-batch-table-/, '');
-        if (batchId) savedBatchScrollTops[batchId] = wrap.scrollTop;
+        const scrollEl = wrap.querySelector('.supply-batch-table-scroll');
+        if (batchId && scrollEl) savedBatchScrollTops[batchId] = scrollEl.scrollTop;
       });
     }
 
@@ -26139,10 +26187,23 @@ function initDashboardApp() {
     }
 
     if (preserveScroll) {
+      const main = document.querySelector('.main-content');
+      if (main) main.scrollTop = savedMainScrollTop;
       container.scrollTop = savedListScrollTop;
       Object.keys(savedBatchScrollTops).forEach(function(batchId) {
         const wrap = document.getElementById('supply-batch-table-' + batchId);
-        if (wrap) wrap.scrollTop = savedBatchScrollTops[batchId];
+        const scrollEl = wrap && wrap.querySelector('.supply-batch-table-scroll');
+        if (scrollEl) scrollEl.scrollTop = savedBatchScrollTops[batchId];
+      });
+      requestAnimationFrame(function() {
+        const main2 = document.querySelector('.main-content');
+        if (main2) main2.scrollTop = savedMainScrollTop;
+        container.scrollTop = savedListScrollTop;
+        Object.keys(savedBatchScrollTops).forEach(function(batchId) {
+          const wrap = document.getElementById('supply-batch-table-' + batchId);
+          const scrollEl = wrap && wrap.querySelector('.supply-batch-table-scroll');
+          if (scrollEl) scrollEl.scrollTop = savedBatchScrollTops[batchId];
+        });
       });
     }
   }
@@ -26249,6 +26310,7 @@ function initDashboardApp() {
     modalTaskKey = '';
     modalTaskLineId = '';
     window._supplyModalContext = { batchId: bId, rowIdx: rowIdx };
+    window._supplyLastScrollSnap = supplyCaptureTaskListScroll_();
     openModal('mill', MILL_FIELDS, 'add', prefill);
     syncSupplyModalChrome_(true);
     supplyApplyPrefillToMillModal_(prefill);
