@@ -1,7 +1,7 @@
 import './login-shell.css';
 import { BRAND_TAGLINE } from './brand.js';
 
-const HUB_PORTAL_URL = 'https://sustainability-hub-portal.vercel.app/';
+const HUB_PORTAL_URL = 'https://sustainability-hub-portal-eight.vercel.app/';
 
 function el(tag, className, props = {}) {
   const n = document.createElement(tag);
