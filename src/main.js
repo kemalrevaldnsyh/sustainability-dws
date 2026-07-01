@@ -24990,9 +24990,13 @@ function initDashboardApp() {
     else if (done > 0 && batch.status === 'submitted') batch.status = 'draft';
   }
 
+  function supplyNormMatchStatus_(row) {
+    return String(row && row.match_status || '').trim().toLowerCase();
+  }
+
   function supplyRowReadyForSubmit_(row) {
     if (!row || supplyRowIsSubmitted_(row)) return false;
-    if (row.match_status === 'matched') {
+    if (supplyNormMatchStatus_(row) === 'matched') {
       return !!(String(row['COMPANY NAME'] || '').trim() && String(row['MILL NAME'] || '').trim());
     }
     if (supplyDraftSavedFlag_(row)) {
@@ -25008,7 +25012,7 @@ function initDashboardApp() {
   function supplyPrepareRowForBulkSubmit_(row, batch) {
     if (!row || supplyRowIsSubmitted_(row)) return;
     supplyEnsureDraftPeriodOnRows_([row], batch);
-    if (!supplyDraftSavedFlag_(row) && row.match_status === 'matched') {
+    if (!supplyDraftSavedFlag_(row) && supplyNormMatchStatus_(row) === 'matched') {
       supplyMergeProfilePrefillIntoDraftRow_(row, batch);
     }
     if (supplyDraftSavedFlag_(row) && String(row.match_status || '').toLowerCase() !== 'matched') {
@@ -25310,11 +25314,12 @@ function initDashboardApp() {
     const readyN = batch ? supplyCountCheckedPendingSubmit_(batchId, batch) : 0;
     btn.dataset.action = 'submit-selected';
     btn.textContent = 'Submit Terpilih (' + checkedN + ')';
-    btn.disabled = checkedN === 0 || readyN === 0;
+    btn.disabled = checkedN === 0;
     btn.title = checkedN === 0
       ? 'Centang baris yang akan di-submit'
       : (readyN + ' siap submit dari ' + checkedN + ' tercentang'
-        + (readyN < checkedN ? ' — baris «Baru» perlu Lengkapi + Simpan draft dulu' : ''));
+        + (readyN < checkedN ? ' — baris «Baru» perlu Lengkapi + Simpan draft dulu' : '')
+        + (readyN === 0 ? ' — klik untuk lihat detail' : ''));
   }
 
   function supplyPatchBatchFooter_(batchId) {
@@ -26614,10 +26619,12 @@ function initDashboardApp() {
     const readyN = batch ? supplyCountCheckedPendingSubmit_(batchId, batch) : 0;
     const hasOpenRows = batch ? (batch.rows || []).some(function(r) { return !supplyRowIsSubmitted_(r); }) : false;
     const mergeableN = batch ? supplyFindMergeableCpoPkPairs_(batch).length : 0;
-    const btnDisabled = checkedN === 0 || readyN === 0;
+    const btnDisabled = checkedN === 0;
     const btnTitle = checkedN === 0
       ? 'Centang baris yang akan di-submit'
-      : (readyN + ' siap submit dari ' + checkedN + ' tercentang');
+      : (readyN + ' siap submit dari ' + checkedN + ' tercentang'
+        + (readyN < checkedN ? ' — baris «Baru» perlu Lengkapi + Simpan draft' : '')
+        + (readyN === 0 ? ' — klik untuk lihat detail' : ''));
     return '<div class="supply-batch-footer">'
       + '<p class="supply-batch-footer__hint"><strong>Simpan draft</strong> di form Lengkapi menyimpan progress tanpa masuk Mill Onboarding. '
       + '<strong>Submit Terpilih</strong> (centang baris di kiri) commit profil + supply data ke Mill Onboarding. '
@@ -26779,7 +26786,12 @@ function initDashboardApp() {
       const pending = checkedRows.filter(supplyRowReadyForSubmit_);
       const notReady = checkedRows.filter(function(r) { return !supplyRowReadyForSubmit_(r); });
       if (!pending.length) {
-        alert('Baris tercentang belum siap submit. Lengkapi profil (Lengkapi → Simpan draft) dulu.');
+        alert(
+          'Dari ' + checkedRows.length + ' baris tercentang, belum ada yang siap di-submit.\n\n'
+          + '• Baris Match profil: centang lalu submit langsung\n'
+          + '• Baris Baru: buka Lengkapi → isi Group, Company, Mill, UML ID → Simpan draft dulu'
+          + (notReady.length ? '\n\n(' + notReady.length + ' baris tercentang belum memenuhi syarat.)' : '')
+        );
         return;
       }
       let confirmMsg = 'Tambah ' + pending.length + ' baris terpilih ke paling bawah Mill Onboarding? (Data lama tidak diubah; kolom rumus otomatis dari sheet)';
