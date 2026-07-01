@@ -5793,8 +5793,20 @@ body.supply-import-open {
   box-shadow: 0 1px 0 rgba(139, 26, 26, 0.08);
 }
 .supply-batch-table thead th.supply-batch-th--check {
-  width: 28px;
-  min-width: 28px;
+  width: 36px;
+  text-align: center;
+  padding: 8px 6px;
+}
+.supply-batch-table thead th.supply-batch-th--check input,
+.supply-batch-table tbody td input.supply-row-check {
+  width: 15px;
+  height: 15px;
+  cursor: pointer;
+  accent-color: #8B1A1A;
+}
+.supply-btn--primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 .supply-batch-table thead th.supply-batch-th--action {
   width: 1%;
