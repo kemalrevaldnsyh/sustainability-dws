@@ -25034,14 +25034,20 @@ function initDashboardApp() {
   }
 
   function supplyGetCheckedRowIndexes_(batchId) {
-    const container = document.getElementById('supply-draft-list');
-    if (!container) return [];
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap) return [];
     const indexes = [];
-    container.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:checked').forEach(function(cb) {
+    wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:checked:not(:disabled)').forEach(function(cb) {
       const idx = parseInt(cb.dataset.row, 10);
       if (!isNaN(idx)) indexes.push(idx);
     });
     return indexes;
+  }
+
+  function supplyCountCheckedRows_(batchId) {
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap) return 0;
+    return wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:checked:not(:disabled)').length;
   }
 
   function supplyRowsFromIndexes_(batch, indexes) {
@@ -25060,13 +25066,46 @@ function initDashboardApp() {
   }
 
   function supplyCountFooterSubmit_(batchId) {
-    const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
-    if (!batch) return 0;
     const wrap = document.getElementById('supply-batch-table-' + batchId);
     if (wrap && wrap.querySelector('.supply-row-check')) {
-      return supplyCountCheckedPendingSubmit_(batchId, batch);
+      return supplyCountCheckedRows_(batchId);
     }
-    return supplyCountPendingSubmit_(batch);
+    const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
+    return batch ? supplyCountPendingSubmit_(batch) : 0;
+  }
+
+  function supplyOnBatchCheckboxChange_(cb, batchId) {
+    const wrap = document.getElementById('supply-batch-table-' + batchId);
+    if (!wrap) return;
+    if (cb.classList.contains('supply-batch-check-all')) {
+      wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled)').forEach(function(rowCb) {
+        rowCb.checked = cb.checked;
+      });
+    } else if (cb.classList.contains('supply-row-check')) {
+      const allCb = wrap.querySelector('.supply-batch-check-all[data-batch="' + batchId + '"]');
+      if (allCb) {
+        const rowCbs = wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled)');
+        const checkedN = wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled):checked').length;
+        allCb.checked = rowCbs.length > 0 && checkedN === rowCbs.length;
+        allCb.indeterminate = checkedN > 0 && checkedN < rowCbs.length;
+      }
+    }
+    supplyPatchBatchFooterSubmitCount_(batchId);
+  }
+
+  function ensureSupplyDraftCheckboxDelegation_() {
+    if (window._supplyCheckboxDelegationBound) return;
+    window._supplyCheckboxDelegationBound = true;
+    document.addEventListener('change', function(e) {
+      const cb = e.target;
+      if (!cb || cb.type !== 'checkbox') return;
+      if (!cb.classList.contains('supply-row-check') && !cb.classList.contains('supply-batch-check-all')) return;
+      const batchId = cb.dataset.batch;
+      if (!batchId) return;
+      const wrap = document.getElementById('supply-batch-table-' + batchId);
+      if (!wrap || !wrap.contains(cb)) return;
+      supplyOnBatchCheckboxChange_(cb, batchId);
+    }, true);
   }
 
   function supplyShowMillOnboardingList_() {
@@ -25266,10 +25305,16 @@ function initDashboardApp() {
     if (!wrap) return;
     const btn = wrap.querySelector('[data-action="submit-selected"], [data-action="submit-all-pending"], [data-action="submit-matched"]');
     if (!btn) return;
-    const n = supplyCountFooterSubmit_(batchId);
+    const batch = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
+    const checkedN = supplyCountCheckedRows_(batchId);
+    const readyN = batch ? supplyCountCheckedPendingSubmit_(batchId, batch) : 0;
     btn.dataset.action = 'submit-selected';
-    btn.textContent = 'Submit Terpilih (' + n + ')';
-    btn.disabled = n === 0;
+    btn.textContent = 'Submit Terpilih (' + checkedN + ')';
+    btn.disabled = checkedN === 0 || readyN === 0;
+    btn.title = checkedN === 0
+      ? 'Centang baris yang akan di-submit'
+      : (readyN + ' siap submit dari ' + checkedN + ' tercentang'
+        + (readyN < checkedN ? ' — baris «Baru» perlu Lengkapi + Simpan draft dulu' : ''));
   }
 
   function supplyPatchBatchFooter_(batchId) {
@@ -25935,31 +25980,8 @@ function initDashboardApp() {
           stopPropagation: function() {},
         });
       });
-      supplyDraftListEl.addEventListener('change', function(e) {
-        const cb = e.target;
-        if (!cb || cb.type !== 'checkbox' || !supplyDraftListEl.contains(cb)) return;
-        const batchId = cb.dataset.batch;
-        if (!batchId) return;
-        if (cb.classList.contains('supply-batch-check-all')) {
-          const wrap = document.getElementById('supply-batch-table-' + batchId);
-          if (wrap) {
-            wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled)').forEach(function(rowCb) {
-              rowCb.checked = cb.checked;
-            });
-          }
-        } else if (cb.classList.contains('supply-row-check')) {
-          const wrap = document.getElementById('supply-batch-table-' + batchId);
-          const allCb = wrap && wrap.querySelector('.supply-batch-check-all[data-batch="' + batchId + '"]');
-          if (allCb) {
-            const rowCbs = wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled)');
-            const checkedN = wrap.querySelectorAll('.supply-row-check[data-batch="' + batchId + '"]:not(:disabled):checked').length;
-            allCb.checked = rowCbs.length > 0 && checkedN === rowCbs.length;
-            allCb.indeterminate = checkedN > 0 && checkedN < rowCbs.length;
-          }
-        }
-        supplyPatchBatchFooterSubmitCount_(batchId);
-      });
     }
+    ensureSupplyDraftCheckboxDelegation_();
 
     // ── Load existing drafts on panel open ────────────────────────────────────
     loadSupplyDraftsFromServer_();
@@ -26336,6 +26358,8 @@ function initDashboardApp() {
     if (!batch || !wrap) return;
     wrap.innerHTML = renderSupplyBatchTable_(batch);
     supplyBindBatchTableActions_(wrap);
+    ensureSupplyDraftCheckboxDelegation_();
+    supplyPatchBatchFooterSubmitCount_(batchId);
     if (snap) supplyRestoreTaskListScroll_(snap);
   }
 
@@ -26503,6 +26527,11 @@ function initDashboardApp() {
         });
       });
     }
+
+    ensureSupplyDraftCheckboxDelegation_();
+    (window._supplyDraftBatches || []).forEach(function(b) {
+      supplyPatchBatchFooterSubmitCount_(b.batch_id);
+    });
   }
 
   function renderSupplyBatchTable_(batch) {
@@ -26581,17 +26610,22 @@ function initDashboardApp() {
 
   function supplyBatchFooterHtml_(batchId) {
     const batch   = (window._supplyDraftBatches || []).find(function(b) { return b.batch_id === batchId; });
-    const selectedN = supplyCountFooterSubmit_(batchId);
+    const checkedN = supplyCountFooterSubmit_(batchId);
+    const readyN = batch ? supplyCountCheckedPendingSubmit_(batchId, batch) : 0;
     const hasOpenRows = batch ? (batch.rows || []).some(function(r) { return !supplyRowIsSubmitted_(r); }) : false;
     const mergeableN = batch ? supplyFindMergeableCpoPkPairs_(batch).length : 0;
+    const btnDisabled = checkedN === 0 || readyN === 0;
+    const btnTitle = checkedN === 0
+      ? 'Centang baris yang akan di-submit'
+      : (readyN + ' siap submit dari ' + checkedN + ' tercentang');
     return '<div class="supply-batch-footer">'
       + '<p class="supply-batch-footer__hint"><strong>Simpan draft</strong> di form Lengkapi menyimpan progress tanpa masuk Mill Onboarding. '
       + '<strong>Submit Terpilih</strong> (centang baris di kiri) commit profil + supply data ke Mill Onboarding. '
-      + 'Import CPO lalu PK (month, year, company sama) otomatis <strong>digabung</strong> di Task List — hanya melengkapi SUPPLY/FACILITY PK atau CPO di baris yang sama.</p>'
+      + 'Angka di tombol = jumlah baris tercentang. Import CPO lalu PK (month, year, company sama) otomatis <strong>digabung</strong> di Task List.</p>'
       + '<div class="supply-batch-footer__actions">'
       + '<button type="button" class="supply-btn supply-btn--ghost" data-action="save-draft" data-batch="' + escHtml(batchId) + '">Simpan Draft</button>'
       + (mergeableN > 0 ? '<button type="button" class="supply-btn supply-btn--ghost" data-action="merge-cpo-pk" data-batch="' + escHtml(batchId) + '">Gabung CPO+PK (' + mergeableN + ')</button>' : '')
-      + (hasOpenRows ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-selected" data-batch="' + escHtml(batchId) + '"' + (selectedN > 0 ? '' : ' disabled') + '>Submit Terpilih (' + selectedN + ')</button>' : '')
+      + (hasOpenRows ? '<button type="button" class="supply-btn supply-btn--primary" data-action="submit-selected" data-batch="' + escHtml(batchId) + '" title="' + escHtml(btnTitle) + '"' + (btnDisabled ? ' disabled' : '') + '>Submit Terpilih (' + checkedN + ')</button>' : '')
       + '</div>'
       + '</div>';
   }
