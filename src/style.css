@@ -2743,6 +2743,53 @@
      position: relative;
      z-index: 35;
    }
+   #panel-mill-onboarding .mill-period-mode {
+     display: inline-flex;
+     align-items: center;
+     gap: 4px;
+     height: 36px;
+     box-sizing: border-box;
+     padding: 3px;
+     background: rgba(255, 255, 255, 0.85);
+     border-radius: 8px;
+     border: 1px solid rgba(139, 26, 26, 0.14);
+   }
+   #panel-mill-onboarding .mill-period-mode-btn {
+     border: none;
+     background: transparent;
+     color: #6a3a3a;
+     font-size: 12px;
+     font-weight: 600;
+     height: 100%;
+     min-height: 28px;
+     padding: 0 12px;
+     border-radius: 6px;
+     cursor: pointer;
+     transition: background 120ms ease, color 120ms ease;
+     white-space: nowrap;
+   }
+   #panel-mill-onboarding .mill-period-mode-btn:hover {
+     background: rgba(139, 26, 26, 0.08);
+   }
+   #panel-mill-onboarding .mill-period-mode-btn.active {
+     background: #8b1a1a;
+     color: #fff;
+     box-shadow: 0 2px 8px rgba(139, 26, 26, 0.22);
+   }
+   #panel-mill-onboarding .mill-period-pickers {
+     display: flex;
+     align-items: center;
+     gap: 8px;
+     flex-wrap: wrap;
+   }
+   #panel-mill-onboarding .mill-period-toolbar:not(.mill-period-toolbar--custom) .mill-period-pickers {
+     opacity: 0.45;
+     pointer-events: none;
+   }
+   #panel-mill-onboarding .mill-period-toolbar.mill-period-toolbar--custom .mill-period-pickers {
+     opacity: 1;
+     pointer-events: auto;
+   }
    #panel-mill-onboarding .mill-period-toolbar .ttp-dropdown-panel {
      z-index: 12050;
    }

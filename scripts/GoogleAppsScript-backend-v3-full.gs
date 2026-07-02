@@ -5365,13 +5365,39 @@ function buildMillCompanyIndexGs_(millData, millHeaders) {
   return index;
 }
 
-/** Profil referensi (baris pertama) — untuk salin identitas, bukan baris yang di-update. */
+/** Profil referensi (baris period terbaru) — untuk salin identitas, bukan baris pertama di sheet. */
+function millRowPeriodSortKeyGs_(obj) {
+  if (!obj) return 0;
+  var yRaw = String(obj['YEAR'] || obj['Year'] || obj.year || '').trim();
+  var yMatch = yRaw.match(/(19|20)\d{2}/);
+  var y = yMatch ? parseInt(yMatch[0], 10) : (parseInt(yRaw, 10) || 0);
+  if (!y) return 0;
+  var mRaw = String(obj['MONTH'] || obj['Month'] || obj.month || obj['QUARTER'] || obj.quarter || '').trim();
+  var m = parseInt(mRaw, 10);
+  if (isNaN(m) || m < 1 || m > 12) m = 0;
+  return y * 100 + m;
+}
+
+function millPickLatestMatchObjGs_(matches) {
+  if (!matches || !matches.length) return null;
+  var best = matches[0];
+  var bestSk = millRowPeriodSortKeyGs_(best.obj);
+  for (var i = 1; i < matches.length; i++) {
+    var sk = millRowPeriodSortKeyGs_(matches[i].obj);
+    if (sk > bestSk || (sk === bestSk && matches[i].sheetRow > best.sheetRow)) {
+      best = matches[i];
+      bestSk = sk;
+    }
+  }
+  return best.obj;
+}
+
 function findMillReferenceForSupplyGs_(millData, millHeaders, row, companyIndex) {
   var company = String(row['COMPANY NAME'] || '').trim();
   var key = supplyNormKey_(company);
   var matches = (companyIndex && companyIndex[key]) ? companyIndex[key] : [];
   if (!matches.length) matches = findMillRowsByCompanyGs_(millData, millHeaders, company);
-  if (matches.length) return matches[0].obj;
+  if (matches.length) return millPickLatestMatchObjGs_(matches);
   var targetRef = Number(row.target_mill_row || row._mill_row || 0);
   if (targetRef >= 2 && targetRef <= millData.length) {
     return millRowToObjectGs_(millData[targetRef - 1], millHeaders);

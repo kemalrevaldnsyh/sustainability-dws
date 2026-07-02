@@ -3947,7 +3947,7 @@ const AUTH_GATE_ENABLED = import.meta.env.VITE_AUTH_ENABLED === 'true';
   }
 
 /** Fallback web app URL — override with window.SDD_WEBAPP_URL (full …/exec URL). */
-var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbzz81q205hEquF3gqm4KfDQC1BuBzI6X09ELSpg6rafr7QAbDGVWSfPUE9yZwKul4vqOA/exec';
+var SDD_DEFAULT_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbyLhVFo2hfxwYrBnn_AYQCqUa4_g9etKtvS5p3xYsDMa4IRo2LJuibr0FKO394KUGLA/exec';
 var SDD_WEBAPP_DEPLOYMENT_ID = 'AKfycbzz81q205hEquF3gqm4KfDQC1BuBzI6X09ELSpg6rafr7QAbDGVWSfPUE9yZwKul4vqOA';
 
 function normalizeSddWebAppUrl_(raw) {
@@ -6482,9 +6482,29 @@ function initDashboardApp() {
     return true;
   }
 
+  /** Gabung kolom supply saat beberapa baris sheet punya company + period sama (mis. CPO + PK terpisah). */
+  function millMergeRegistrySupplyRows_(base, incoming) {
+    if (!base) return incoming;
+    if (!incoming) return base;
+    const merged = Object.assign({}, base);
+    merged['FACILITY NAME CPO'] = millJoinUniqueSplitValues_([base, incoming], 'FACILITY NAME CPO');
+    merged['FACILITY NAME PK'] = millJoinUniqueSplitValues_([base, incoming], 'FACILITY NAME PK');
+    merged['PRODUCT SUPPLY'] = millJoinUniqueSplitValues_([base, incoming], 'PRODUCT SUPPLY');
+    const prefer = (incoming._row || 0) >= (base._row || 0) ? incoming : base;
+    ['GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID', 'COMPANY CODE', 'SOURCE TYPE',
+      'ADDRESS', 'PROVINCE', 'COORDINATES', 'CERTIFICATION', 'SUPPLIER STATUS'].forEach(function(k) {
+      const v = prefer[k];
+      if (v !== undefined && v !== null && String(v).trim() !== '') merged[k] = v;
+    });
+    merged._row = Math.max(base._row || 0, incoming._row || 0);
+    merged._millRegistryMerged = true;
+    return merged;
+  }
+
   /**
    * One row per company — keep highest Year/Month within the active period filter.
    * e.g. filter Mar 2025 → Jan row still shown if no Mar update; Mar replaces Jan when present.
+   * Baris period sama (mis. CPO + PK terpisah) digabung facility/product-nya.
    */
   function millPickLatestPerCompany_(rows, pf) {
     pf = pf || millSelectedPeriodFilter_();
@@ -6500,15 +6520,78 @@ function initDashboardApp() {
         return;
       }
       const skOld = millRowPeriodSortKey_(existing);
-      if (sk > skOld || (sk === skOld && (r._row || 0) > (existing._row || 0))) {
+      if (sk > skOld) {
         byCo.set(ck, r);
+      } else if (sk === skOld) {
+        byCo.set(ck, millMergeRegistrySupplyRows_(existing, r));
       }
     });
     return Array.from(byCo.values());
   }
 
   function millApplyRegistryPeriodView_(rows) {
-    return millPickLatestPerCompany_(rows, millSelectedPeriodFilter_());
+    const pf = millPeriodMode === 'period'
+      ? millSelectedPeriodFilter_()
+      : { hasYear: false, hasMonth: false, years: new Set(), maxMonth: 0, hasEmptyMonth: false };
+    return millPickLatestPerCompany_(rows, pf);
+  }
+
+  function millPeriodFilterHintText_() {
+    const pf = millSelectedPeriodFilter_();
+    if (!pf.hasYear && !pf.hasMonth) {
+      return 'Pilih month & year untuk snapshot as-of';
+    }
+    const parts = [];
+    if (pf.hasMonth && pf.maxMonth > 0) {
+      parts.push('s/d ' + millMonthLabel_(pf.maxMonth));
+    }
+    if (pf.hasYear && pf.years.size) {
+      const yrs = Array.from(pf.years).sort(function(a, b) { return a - b; });
+      parts.push(yrs.join(', '));
+    }
+    return parts.length ? ('Snapshot as-of · ' + parts.join(' · ')) : 'Pilih month & year untuk snapshot as-of';
+  }
+
+  function millSyncPeriodModeUi_() {
+    const toolbar = document.getElementById('millPeriodToolbar');
+    if (toolbar) {
+      toolbar.classList.toggle('mill-period-toolbar--custom', millPeriodMode === 'period');
+    }
+    document.querySelectorAll('[data-mill-period-mode]').forEach(function(btn) {
+      btn.classList.toggle('active', btn.getAttribute('data-mill-period-mode') === millPeriodMode);
+    });
+    const hint = document.getElementById('millPeriodHint');
+    if (hint) {
+      hint.textContent = millPeriodMode === 'newest'
+        ? 'Snapshot terbaru per company (period paling baru di data)'
+        : millPeriodFilterHintText_();
+    }
+  }
+
+  function setMillPeriodMode_(mode) {
+    millPeriodMode = mode === 'period' ? 'period' : 'newest';
+    millSyncPeriodModeUi_();
+    scheduleRenderMillTable();
+  }
+
+  function updateMillStatsCards_() {
+    const totalEl = document.getElementById('stat-total');
+    const groupsEl = document.getElementById('stat-groups');
+    const highEl = document.getElementById('stat-high-risk');
+    const nblEl = document.getElementById('stat-nbl');
+    if (!totalEl || !groupsEl || !highEl || !nblEl) return;
+    const data = millRowsAfterRegistryDimFilters();
+    totalEl.textContent = String(data.length);
+    groupsEl.textContent = String(new Set(data.map(function(d) {
+      return pickMillGroupName_(d);
+    }).filter(Boolean)).size);
+    highEl.textContent = String(data.filter(function(d) {
+      return (millResolvedRiskLevelForStats_(d) || '').toLowerCase().includes('high');
+    }).length);
+    nblEl.textContent = String(data.filter(function(d) {
+      const v = String(d['BUYER NO BUY LIST'] || '').toLowerCase();
+      return v === 'yes' || v.includes('nbl');
+    }).length);
   }
 
   function parseMillQuarterSort(v) {
@@ -6730,6 +6813,8 @@ function initDashboardApp() {
     province: new Set(),
   };
   let millPdfDimOptions = { month: [], year: [], group: [], province: [] };
+  /** 'newest' = latest snapshot per company; 'period' = as-of month/year filter. */
+  let millPeriodMode = 'newest';
 
   function millPdfEscHtml(s) {
     return String(s === undefined || s === null ? '' : s)
@@ -7151,6 +7236,7 @@ function initDashboardApp() {
     if (millPdfDimFilters[dim]) millPdfDimFilters[dim].clear();
     document.querySelectorAll('.mill-dim-filter-surface input[data-mill-pdf-dim="' + dim + '"][data-mill-pdf-val]').forEach(function(cb) { cb.checked = false; });
     updateMillPdfExportScope();
+    millSyncPeriodModeUi_();
     scheduleRenderMillTable();
   }
 
@@ -7158,6 +7244,7 @@ function initDashboardApp() {
     millPdfDimFilters = { month: new Set(), year: new Set(), group: new Set(), province: new Set() };
     document.querySelectorAll('.mill-dim-filter-surface input[data-mill-pdf-val]').forEach(function(cb) { cb.checked = false; });
     updateMillPdfExportScope();
+    millSyncPeriodModeUi_();
     scheduleRenderMillTable();
   }
 
@@ -7321,6 +7408,7 @@ function initDashboardApp() {
         if (t.checked) millPdfDimFilters[dim].add(tok);
         else millPdfDimFilters[dim].delete(tok);
         updateMillPdfExportScope();
+        millSyncPeriodModeUi_();
         scheduleRenderMillTable();
       });
       surface.querySelectorAll('[data-mill-pdf-dim-reset]').forEach(function(b) {
@@ -7369,6 +7457,13 @@ function initDashboardApp() {
     btnPdf.addEventListener('click', function() { millExportToPdf(); });
     millPdfRenderColPanel();
     updateMillPdfExportScope();
+    document.querySelectorAll('[data-mill-period-mode]').forEach(function(btn) {
+      btn.addEventListener('click', function(e) {
+        e.stopPropagation();
+        setMillPeriodMode_(btn.getAttribute('data-mill-period-mode'));
+      });
+    });
+    millSyncPeriodModeUi_();
   })();
 
   const scheduleRenderMillTable = makeRafScheduler(function() {
@@ -7453,15 +7548,17 @@ function initDashboardApp() {
         top5Card.style.display = 'none';
       }
 
-      document.getElementById('stat-total').textContent = allData.length;
-      document.getElementById('stat-groups').textContent = new Set(allData.map(d => d['GROUP NAME']).filter(Boolean)).size;
-      document.getElementById('stat-high-risk').textContent = allData.filter(d => (millResolvedRiskLevelForStats_(d) || '').toLowerCase().includes('high')).length;
-      document.getElementById('stat-nbl').textContent = allData.filter(d => (d['BUYER NO BUY LIST']||'').toLowerCase() === 'yes' || (d['BUYER NO BUY LIST']||'').toLowerCase().includes('nbl')).length;
+      document.getElementById('stat-total').textContent = '—';
+      document.getElementById('stat-groups').textContent = '—';
+      document.getElementById('stat-high-risk').textContent = '—';
+      document.getElementById('stat-nbl').textContent = '—';
       if (!soft) {
         loading.style.display = 'none';
         table.style.display = 'table';
         millPdfDimFilters = { month: new Set(), year: new Set(), group: new Set(), province: new Set() };
+        millPeriodMode = 'newest';
         millPdfRebuildDimPanels();
+        millSyncPeriodModeUi_();
       }
       millDataLoaded = true;
       scheduleRenderMillTable();
@@ -7503,10 +7600,13 @@ function initDashboardApp() {
     const scrollEl = document.querySelector('#panel-mill-onboarding .table-scroll');
     const savedScrollTop = scrollEl ? scrollEl.scrollTop : 0;
     const savedFilters = cloneMillPdfDimFilters_();
+    const savedPeriodMode = millPeriodMode;
     try {
       await loadMillDataImpl({ soft: true });
       millPdfDimFilters = savedFilters;
+      millPeriodMode = savedPeriodMode;
       millPdfRebuildDimPanels();
+      millSyncPeriodModeUi_();
       scheduleRenderMillTable();
       if (!millScrollToKey_ && scrollEl) {
         requestAnimationFrame(function() { scrollEl.scrollTop = savedScrollTop; });
@@ -7657,6 +7757,7 @@ function initDashboardApp() {
     const displayRows = millCollapseRowsForTableDisplay_(sorted);
     millFilteredRows = displayRows;
     updateMillPdfExportScope();
+    updateMillStatsCards_();
 
     const theadRow = document.querySelector('#millTable thead tr');
     if (millSortKey && theadRow && !theadRow.querySelector('[data-mill-sort="' + millSortKey + '"]')) {
@@ -24114,6 +24215,8 @@ function initDashboardApp() {
       const cached = supplyGetMillProfileByRow_(draftRow._mill_row);
       if (cached) return cached;
     }
+    const latest = supplyPickLatestMillProfileForCompany_(draftRow['COMPANY NAME']);
+    if (latest) return latest;
     const kind2 = supplyResolveKindFromDraft_(draftRow, batch);
     const facField = kind2 === 'PK' ? 'FACILITY NAME PK' : 'FACILITY NAME CPO';
     const found = supplyFindMillProfileMatch_({
@@ -24345,10 +24448,16 @@ function initDashboardApp() {
   function supplyApplyPlantToDraftFacility_(draft, plant, kind) {
     if (!draft) return;
     const k = String(kind || draft.supply_type || draft.SUPPLY_TYPE || 'CPO').toUpperCase();
-    const routeKind = (k === 'PK' || (k.indexOf('PK') >= 0 && k.indexOf('CPO') < 0)) ? 'PK' : 'CPO';
     const p = supplyNormalizePlantValue_(plant != null ? plant : draft.PLANT || '');
     if (!p) return;
     draft.PLANT = p;
+    const isDual = k === 'CPO+PK' || k === 'BOTH' || (k.indexOf('CPO') >= 0 && k.indexOf('PK') >= 0);
+    if (isDual) {
+      if (!String(draft['FACILITY NAME CPO'] || '').trim()) draft['FACILITY NAME CPO'] = p;
+      if (!String(draft['FACILITY NAME PK'] || '').trim()) draft['FACILITY NAME PK'] = p;
+      return;
+    }
+    const routeKind = (k === 'PK' || (k.indexOf('PK') >= 0 && k.indexOf('CPO') < 0)) ? 'PK' : 'CPO';
     draft[supplyFacilityFieldForKind_(routeKind)] = p;
   }
 
@@ -24533,18 +24642,27 @@ function initDashboardApp() {
   }
 
   /**
-   * Profil referensi (baris pertama dengan COMPANY NAME sama) — hanya untuk prefill, tidak untuk update.
+   * Profil referensi — baris period terbaru dengan COMPANY NAME sama (bukan baris pertama di sheet).
    */
-  function supplyFindMillReferenceProfile_(company) {
+  function supplyPickLatestMillProfileForCompany_(company) {
     const src = (allDataRaw && allDataRaw.length) ? allDataRaw : (allData || []);
     const want = String(company || '').trim();
     if (!want) return null;
-    let first = null;
+    let best = null;
+    let bestSk = 0;
     src.forEach(function(d) {
       if (!supplyCompanyMatchesProfile_(want, d)) return;
-      if (!first || (d._row || 0) < (first._row || 0)) first = d;
+      const sk = millRowPeriodSortKey_(d);
+      if (!best || sk > bestSk || (sk === bestSk && (d._row || 0) > (best._row || 0))) {
+        best = d;
+        bestSk = sk;
+      }
     });
-    return first;
+    return best;
+  }
+
+  function supplyFindMillReferenceProfile_(company) {
+    return supplyPickLatestMillProfileForCompany_(company);
   }
 
   function supplyMillRowIsEmptySlot_(profile) {
@@ -24774,6 +24892,111 @@ function initDashboardApp() {
   }
 
   /** Build modal prefill object from a matched Mill Onboarding profile row. */
+  /** Kolom identitas mill yang boleh disalin dari profil lama saat submit supply baru. */
+  function supplyProfileIdentityFields_() {
+    return [
+      'GROUP NAME', 'COMPANY NAME', 'MILL NAME', 'UML ID', 'COMPANY CODE', 'SOURCE TYPE',
+      'ADDRESS', 'PROVINCE', 'COORDINATES', 'MILL CATEGORY', 'MILL CAPACITY (TON/HOUR)',
+      'HGU/HGB', 'IZIN LOKASI', 'IUP', 'IZIN LINGKUNGAN',
+      'NDPE', 'HRDD',
+      'DEFORESTATION WIDTH', 'BURN AREA WIDTH', 'PEAT WIDTH',
+      'MILL LOC', 'CERTIFICATION',
+      'DEFORESTATION GRIEVANCES', 'BURN AREA GRIEVANCES',
+      'LEGALITY GRIEVANCE', 'HUMAN RIGHTS GRIEVANCE', 'SAFETY GRIEVANCE', 'SOCIAL GRIEVANCE', 'ENVIRONMENT GRIEVANCE',
+    ];
+  }
+
+  function supplyProfileIdentityPrefillFromRow_(profile) {
+    const prefill = {};
+    if (!profile) return prefill;
+    const src = Object.assign({}, profile);
+    millNormalizeGrievanceFlagsOnRow_(src);
+    supplyProfileIdentityFields_().forEach(function(f) {
+      if (millIsSheetComputedField_(f)) return;
+      const v = src[f];
+      if (v !== undefined && v !== null && String(v).trim() !== '') prefill[f] = v;
+    });
+    MILL_HA_WIDTH_FIELDS.forEach(function(f) {
+      const w = supplyHaWidthFromProfile_(src, f);
+      if (w !== '') prefill[f] = w;
+    });
+    MILL_GRIEVANCE_FLAG_FIELDS_.forEach(function(f) {
+      const gv = millGrievanceFlagVal_(src, f);
+      if (gv !== '') prefill[f] = millNormalizeYesNoSelectVal_(gv) || gv;
+    });
+    const cap = millCapacityFromRow_(src);
+    if (cap) prefill['MILL CAPACITY (TON/HOUR)'] = cap;
+    return prefill;
+  }
+
+  function supplySubmitFillFields_() {
+    const s = new Set(supplyProfileIdentityFields_());
+    ['MONTH', 'YEAR', 'QUARTER', 'SUPPLY CPO', 'SUPPLY PK', 'FACILITY NAME CPO', 'FACILITY NAME PK',
+      'PRODUCT SUPPLY', 'PLANT', 'GROUP NAME', 'COMPANY NAME', 'MILL NAME'].forEach(function(k) { s.add(k); });
+    return s;
+  }
+
+  /** Payload bersih untuk submit — tanpa score/risk/NBL dari profil lama. */
+  function supplyRowPayloadForSubmit_(row, batch) {
+    const out = {};
+    if (!row) return out;
+    supplyApplyTypedQtyAndFacility_(out, row, batch);
+    supplySubmitFillFields_().forEach(function(k) {
+      if (millIsSheetComputedField_(k)) return;
+      const v = row[k];
+      if (v !== undefined && v !== null && String(v).trim() !== '') out[k] = v;
+    });
+    MILL_HA_WIDTH_FIELDS.forEach(function(f) {
+      if (supplyIsValidHaWidthDraftVal_(row[f])) out[f] = supplyNormalizeHaWidthField_(row[f]);
+    });
+    supplyApplyBatchPeriodToPayload_(out, batch, row);
+    if (row.draft_id) out.draft_id = row.draft_id;
+    if (row.batch_id) out.batch_id = row.batch_id;
+    if (row.match_status) out.match_status = row.match_status;
+    if (row.target_mill_row) out.target_mill_row = row.target_mill_row;
+    const st = row.supply_type || row.SUPPLY_TYPE;
+    if (st) {
+      out.supply_type = st;
+      out.SUPPLY_TYPE = st;
+    }
+    if (!out['PRODUCT SUPPLY']) out['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(row);
+    return out;
+  }
+
+  /** Gabung baris CPO + PK (company & periode sama) jadi satu submit CPO+PK. */
+  function supplyCoalesceSubmitRowsByCompanyPeriod_(rows, batch) {
+    const groups = new Map();
+    (rows || []).forEach(function(r) {
+      const co = supplyCompanyKey_(r['COMPANY NAME']);
+      if (!co) return;
+      const pk = co + '\u0001' + String((batch && batch.month) || r.MONTH || r.month || '') + '\u0001' + String((batch && batch.year) || r.YEAR || r.year || '');
+      if (!groups.has(pk)) groups.set(pk, []);
+      groups.get(pk).push(r);
+    });
+    const out = [];
+    groups.forEach(function(list) {
+      if (list.length === 1) {
+        out.push(list[0]);
+        return;
+      }
+      const dual = list.filter(function(r) { return supplyRowSupplyKindStrict_(r) === 'CPO+PK'; });
+      if (dual.length) {
+        out.push(dual[0]);
+        return;
+      }
+      const cpoRows = list.filter(function(r) { return supplyRowSupplyKindStrict_(r) === 'CPO'; });
+      const pkRows = list.filter(function(r) { return supplyRowSupplyKindStrict_(r) === 'PK'; });
+      if (cpoRows.length === 1 && pkRows.length === 1 && list.length === 2) {
+        supplyMergeDraftRows_(cpoRows[0], pkRows[0]);
+        out.push(cpoRows[0]);
+        return;
+      }
+      out.push.apply(out, list);
+    });
+    return out;
+  }
+
+  /** Build modal prefill object from a matched Mill Onboarding profile row (UI / draft edit). */
   function supplyProfilePrefillFromRow_(profile) {
     const prefill = {};
     if (!profile) return prefill;
@@ -24858,7 +25081,9 @@ function initDashboardApp() {
   function supplyMergeProfilePrefillIntoDraftRow_(draftRow, batch) {
     if (!draftRow || draftRow.match_status !== 'matched') return;
     if (supplyDraftSavedFlag_(draftRow)) return;
-    const merged = supplyBuildMillPrefillFromDraft_(draftRow, batch);
+    const profileRow = supplyPickLatestMillProfileForCompany_(draftRow['COMPANY NAME'])
+      || supplyLookupMillProfileForDraft_(draftRow, batch);
+    const merged = supplyProfileIdentityPrefillFromRow_(profileRow);
     const skip = supplyDraftProfileSkipFields_(draftRow, batch);
     Object.keys(merged).forEach(function(k) {
       if (!k || millIsSheetComputedField_(k)) return;
@@ -24871,6 +25096,10 @@ function initDashboardApp() {
       }
       if (String(mv).trim() !== '') draftRow[k] = mv;
     });
+    if (profileRow && profileRow._row) {
+      draftRow.target_mill_row = profileRow._row;
+      draftRow._mill_row = profileRow._row;
+    }
     millNormalizeGrievanceFlagsOnRow_(draftRow);
   }
 
@@ -25018,12 +25247,13 @@ function initDashboardApp() {
 
     if (!supplyDraftSavedFlag_(row) && supplyNormMatchStatus_(row) === 'matched') {
       supplyMergeProfilePrefillIntoDraftRow_(row, batch);
-    } else if (profile) {
+    } else if (profile && supplyDraftSavedFlag_(row)) {
       supplyCopyProfileIntoDraft_(row, profile, batch, { forceProfileCopy: false });
     }
 
     const prefill = supplyBuildMillPrefillFromDraft_(row, batch, { rematch: false });
-    (window.MILL_FIELDS_LIST || MILL_FIELDS).forEach(function(f) {
+    const fillKeys = supplySubmitFillFields_();
+    fillKeys.forEach(function(f) {
       if (millIsSheetComputedField_(f)) return;
       const cur = row[f];
       const pv = prefill[f];
@@ -25033,6 +25263,7 @@ function initDashboardApp() {
       }
     });
     MILL_HA_WIDTH_FIELDS.forEach(function(f) {
+      if (!fillKeys.has(f)) return;
       if (!supplyIsValidHaWidthDraftVal_(row[f]) && prefill[f] != null && supplyIsValidHaWidthDraftVal_(prefill[f])) {
         row[f] = supplyNormalizeHaWidthField_(prefill[f]);
       }
@@ -25044,7 +25275,10 @@ function initDashboardApp() {
     if (String(row['COMPANY NAME'] || '').trim()) {
       row.match_status = 'matched';
     }
+    const kind = supplyResolveKindFromDraft_(row, batch);
+    supplyApplyPlantToDraftFacility_(row, row.PLANT, kind);
     supplyApplyTypedQtyAndFacility_(row, row, batch);
+    row['PRODUCT SUPPLY'] = supplyMergeProductSupplyField_(row);
   }
 
   const SUPPLY_SUBMIT_CHUNK_SIZE_ = 40;
@@ -25195,10 +25429,13 @@ function initDashboardApp() {
     });
     if (!valid.length) throw new Error(errors.slice(0, 5).join('; ') || 'Tidak ada baris valid untuk di-submit.');
 
+    const toSubmit = supplyCoalesceSubmitRowsByCompanyPeriod_(valid, batch);
+    const submitPayloads = toSubmit.map(function(r) { return supplyRowPayloadForSubmit_(r, batch); });
+
     let submittedN = 0;
-    const total = valid.length;
-    for (let i = 0; i < valid.length; i += SUPPLY_SUBMIT_CHUNK_SIZE_) {
-      const chunk = valid.slice(i, i + SUPPLY_SUBMIT_CHUNK_SIZE_);
+    const total = submitPayloads.length;
+    for (let i = 0; i < submitPayloads.length; i += SUPPLY_SUBMIT_CHUNK_SIZE_) {
+      const chunk = submitPayloads.slice(i, i + SUPPLY_SUBMIT_CHUNK_SIZE_);
       if (typeof progressCb === 'function') {
         progressCb(Math.min(i + chunk.length, total), total);
       }
@@ -25214,7 +25451,12 @@ function initDashboardApp() {
           errors.push.apply(errors, res.errors);
         }
         if (okN > 0) {
-          supplyMarkRowsSubmitted_(chunk.slice(0, Math.min(okN, chunk.length)));
+          const submittedCos = new Set(chunk.map(function(p) {
+            return supplyCompanyKey_(p['COMPANY NAME']);
+          }));
+          supplyMarkRowsSubmitted_(valid.filter(function(r) {
+            return submittedCos.has(supplyCompanyKey_(r['COMPANY NAME']));
+          }));
           submittedN += okN;
         }
       } catch (err) {

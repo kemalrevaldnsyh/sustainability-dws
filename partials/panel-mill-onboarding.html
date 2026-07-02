@@ -51,9 +51,14 @@
   <section class="mill-period-card" aria-label="Period filter Mill Registry">
     <div class="mill-period-card__head">
       <span class="mill-period-card__title">Period</span>
-      <span class="mill-period-card__hint">Filter registry by month &amp; year</span>
+      <span class="mill-period-card__hint" id="millPeriodHint">Snapshot terbaru per company</span>
     </div>
-    <div class="ttp-toolbar mill-period-toolbar">
+    <div class="ttp-toolbar mill-period-toolbar" id="millPeriodToolbar">
+      <div class="mill-period-mode" role="group" aria-label="Period view mode">
+        <button type="button" class="mill-period-mode-btn active" data-mill-period-mode="newest">Newest</button>
+        <button type="button" class="mill-period-mode-btn" data-mill-period-mode="period">By Month / Year</button>
+      </div>
+      <div class="mill-period-pickers" id="millPeriodPickers">
       <div class="ttp-dropdown-wrap mill-period-filter-wrap" id="millMonthFilterWrap">
         <button type="button" class="ttp-btn-filter" id="millBtnFilterMonth" aria-expanded="false" aria-controls="millMonthFilterPanel">
           <span class="ttp-btn-icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
@@ -85,6 +90,7 @@
           </div>
           <div class="ttp-dropdown-list mill-pdf-dim-list" id="millPdfDimListYear"></div>
         </div>
+      </div>
       </div>
     </div>
   </section>
